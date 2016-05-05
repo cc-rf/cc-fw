@@ -1,0 +1,1 @@
+set(FW_CPU_NAME mk66f18 CACHE STRING "Firmware CPU")
