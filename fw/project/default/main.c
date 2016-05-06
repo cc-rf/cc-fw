@@ -203,6 +203,7 @@ static void main_task(void *param)
     //vcom_init();
 
     printf("<main task>\r\n");
+    
 
     /*
     u8 freq2 = cc_get(CC1200_FREQ2);
@@ -238,13 +239,13 @@ static void main_task(void *param)
         mac_tx((u8 *)&tx_data, sizeof(tx_data));
         //printf("tx: chan=%u,%u duration=%luus count=%lu\r\n", chan, chan_cur_id, xsec, tx_data.seq);
         if (!(++tx_data.seq % 10)) LED_B_TOGGLE();
-        while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 8000) mac_task();
+        while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 8333) mac_task();
         //vTaskDelay((8 - (xsec > 8000 ? 8000 : xsec)/1000) / portTICK_PERIOD_MS);
     }
 
 #elif MODE == MODE_RX
 
-    //printf("rx: f=%lu sr=%lu t=%luus\r\n", cc_get_freq(DEVICE),  cc_get_symbol_rate(DEVICE), (u32)(cc_get_rx_timeout(DEVICE)/1000));
+    //printf("rx: f=%lusr=%lut=%luus\r\n", cc_get_freq(DEVICE),  cc_get_symbol_rate(DEVICE), (u32)(cc_get_rx_timeout(DEVICE)/1000));
 
     mac_rx_enable();
 
@@ -320,7 +321,7 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
     }*/
 
     //rx_data->filler[23] = 0;
-    //printf("rx: id=%u seq=%lu filler=%s\n", rx_data->id, rx_data->seq, rx_data->filler);
+    //printf("rx: id=%u seq=%lufiller=%s\n", rx_data->id, rx_data->seq, rx_data->filler);
     //uart_puts(rx_data->filler);
     //uart_write(buf, len);
     //LED_A_TOGGLE();

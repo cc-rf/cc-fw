@@ -173,6 +173,49 @@ const clock_config_t g_defaultClockConfigHsrun = {
     .coreClock = 180000000U, /* Core clock frequency */
 };
 
+/* Configuration for HSRUN mode. Core clock = 180MHz. */
+const clock_config_t g_defaultClockConfigOchsrun = {
+    .mcgConfig =
+        {
+            .mcgMode = kMCG_ModePEE,                   /* Work in PEE mode. */
+            .irclkEnableMode = kMCG_IrclkEnableInStop, /* MCGIRCLK enable. */
+            .ircs = kMCG_IrcFast,                      /* Select IRC32k.*/
+            .fcrdiv = 0U,                              /* FCRDIV is 0. */
+
+            .frdiv = 4U,
+            .drs = kMCG_DrsHigh,        /* High frequency range. */
+            .dmx32 = kMCG_Dmx32Fine,    /* DCO has a default range of 25%. */
+            .oscsel = kMCG_OscselOsc,   /* Select OSC. */
+
+            .pll0Config =
+                {
+                        /**
+                         * 234MHz: enableMode = 1u  prdiv = 0x00u  vdiv = 0x17u
+                         */
+                    .enableMode = 1U, .prdiv = /*0x00U*/0x00U, .vdiv = 0x16U,
+                },
+            .pllcs = kMCG_PllClkSelPll0,
+        },
+    .simConfig =
+        {
+            .pllFllSel = 1U,        /* PLLFLLSEL select PLL. */
+            .er32kSrc = 2U,         /* ERCLK32K selection, use RTC. */
+            .clkdiv1 = 0x01160000U, /* SIM_CLKDIV1. */
+        },
+    .oscConfig = {.freq = BOARD_XTAL0_CLK_HZ,
+                  .capLoad = 0,
+                  .workMode = kOSC_ModeOscLowPower,
+                  .oscerConfig =
+                      {
+                          .enableMode = kOSC_ErClkEnable,
+#if (defined(FSL_FEATURE_OSC_HAS_EXT_REF_CLOCK_DIVIDER) && FSL_FEATURE_OSC_HAS_EXT_REF_CLOCK_DIVIDER)
+                          .erclkDiv = 0U,
+#endif
+                      }},
+    .coreClock = 192000000U, /* Core clock frequency */
+};
+
+
 /*******************************************************************************
  * Code
  ******************************************************************************/
@@ -270,4 +313,31 @@ void BOARD_BootClockHSRUN(void)
     CLOCK_SetSimConfig(&g_defaultClockConfigHsrun.simConfig);
 
     SystemCoreClock = g_defaultClockConfigHsrun.coreClock;
+}
+
+void BOARD_BootClockOCHSRUN(void)
+{
+    SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
+    SMC_SetPowerModeHsrun(SMC);
+    while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateHsrun)
+    {
+    }
+
+    CLOCK_SetSimSafeDivs();
+
+    // Phillip
+    CLOCK_SetXtal32Freq(BOARD_XTAL32K_CLK_HZ);
+
+    CLOCK_InitOsc0(&g_defaultClockConfigOchsrun.oscConfig);
+    CLOCK_SetXtal0Freq(BOARD_XTAL0_CLK_HZ);
+
+    CLOCK_BootToPeeMode(g_defaultClockConfigOchsrun.mcgConfig.oscsel, kMCG_PllClkSelPll0,
+                        &g_defaultClockConfigOchsrun.mcgConfig.pll0Config);
+
+    CLOCK_SetInternalRefClkConfig(g_defaultClockConfigOchsrun.mcgConfig.irclkEnableMode,
+                                  g_defaultClockConfigOchsrun.mcgConfig.ircs, g_defaultClockConfigOchsrun.mcgConfig.fcrdiv);
+
+    CLOCK_SetSimConfig(&g_defaultClockConfigOchsrun.simConfig);
+
+    SystemCoreClock = g_defaultClockConfigOchsrun.coreClock;
 }
