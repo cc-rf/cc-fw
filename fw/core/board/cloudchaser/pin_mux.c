@@ -73,8 +73,8 @@ void BOARD_InitPins(void)
     /* UART0 */
     PORT_SetPinMux(PORTA, 14u, kPORT_MuxAlt3);      // UART0_TX
     PORT_SetPinMux(PORTA, 15u, kPORT_MuxAlt3);      // UART0_RX
-    //PORT_SetPinMux(PORTA, 16u, kPORT_MuxAlt3);      // UART0_RTS_b
-    //PORT_SetPinMux(PORTA, 17u, kPORT_MuxAlt3);      // UART0_CTS_b
+    PORT_SetPinMux(PORTA, 16u, kPORT_MuxAlt3);      // UART0_RTS_b
+    PORT_SetPinMux(PORTA, 17u, kPORT_MuxAlt3);      // UART0_CTS_b
     //PORT_SetPinMux(PORTB, 2u, kPORT_MuxAlt3);       // UART0_RTS_b
     //PORT_SetPinMux(PORTB, 3u, kPORT_MuxAlt3);       // UART0_CTS_b
 

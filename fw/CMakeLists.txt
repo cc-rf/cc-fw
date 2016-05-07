@@ -7,6 +7,7 @@ include(armgcc)
 set(CFLAGS_STD "-std=gnu11 -Wall")
 set(CFLAGS_STD_DEBUG "-O0 -g3 -D_DEBUG=1 -DDEBUG")
 set(CFLAGS_STD_RELEASE "-Os -g0 -D_DEBUG=0")
+set(CFLAGS_FW "-flto")
 
 set(CFLAGS_KINETIS "-fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections" )
 set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16" )
@@ -15,7 +16,7 @@ set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16"
 # NOTE: what about rdpmon? and redboot?
 #set(SPECS "-specs=rdimon.specs -specs=nano.specs")
 set(SPECS "-specs=nosys.specs -specs=nano.specs")
-set(LFLAGS_FW "-Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,-z,muldefs -Wl,--no-wchar-size-warning ${SPECS}")
+set(LFLAGS_FW "-Wl,-flto -flto -Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,-z,muldefs -Wl,--no-wchar-size-warning ${SPECS}")
 
 set(CFLAGS "${CFLAGS_STD} ${CFLAGS_KINETIS} ${CFLAGS_CPU_CM4F}")
 

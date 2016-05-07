@@ -46,7 +46,7 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 
 static bool phy_setup(cc_dev_t dev);
 static void isr_mcu_wake(cc_dev_t dev);
-static void phy_rx_tmr(tmr_t tmr, void *param);
+static void phy_rx_tmr_kick(cc_dev_t dev);
 static void phy_rx_tmr_check(cc_dev_t dev);
 static void handle_rx(cc_dev_t dev, u8 *buf, u8 len);
 static inline void rx_resume(cc_dev_t dev);
@@ -55,15 +55,16 @@ static void cca_disable(cc_dev_t dev);
 
 static struct {
     bool rx_enabled;
-    volatile bool rx_timeout;
     volatile u8 tx_completion_status;
     volatile bool cca_configured;
     volatile u8 cca_saved_sync_thr;
     volatile u8 cca_saved_rx_time;
     phy_cfg_t phy_cfg;
-    tmr_t rx_tmr;
+    pit_tick_t rx_tick;
 
 } phy[CC_NUM_DEVICES];
+
+extern pit_t xsec_timer;
 
 bool phy_init(cc_dev_t dev, phy_cfg_t *cfg)
 {
@@ -73,16 +74,6 @@ bool phy_init(cc_dev_t dev, phy_cfg_t *cfg)
     phy[dev].phy_cfg = *cfg;
     phy[dev].rx_enabled = false;
     phy[dev].tx_completion_status = 0;
-
-    const tmr_cfg_t tmr_cfg = {
-            .handler = phy_rx_tmr,
-            .param = (void *)dev,
-            .period = tmr_nsec_tick(40ul*1000000ul)
-    };
-
-    phy[dev].rx_tmr = tmr_alloc(&tmr_cfg);
-    pit_set_prio((pit_t)phy[dev].rx_tmr, 0);
-
     cc_spi_init(dev);
     if (!cc_isr_init(dev)) return false;
     if (!phy_setup(dev)) return false;
@@ -134,11 +125,14 @@ static void isr_mcu_wake(cc_dev_t dev)
     u8 st, ms1, len;
     bool flag = true;
 
-    st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
     ms1 = cc_get(dev, CC1200_MARC_STATUS1);
 
-
+#if CC_DEBUG_VERBOSE
+    st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
     cc_dbg_v("[%u] st=0x%02X ms1=0x%02X", dev, st, ms1);
+#else
+    (void)st;
+#endif
 
     switch (ms1) {
         case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
@@ -160,7 +154,7 @@ static void isr_mcu_wake(cc_dev_t dev)
             break;
 
         case CC1200_MARC_STATUS1_RX_FINISHED:
-            tmr_stop(phy[dev].rx_tmr);
+            phy_rx_tmr_kick(dev);
             len = cc_get(dev, CC1200_NUM_RXBYTES);
 
             if (len) {
@@ -184,7 +178,7 @@ static void isr_mcu_wake(cc_dev_t dev)
             cc_dbg_v("[%u] rx error: st=0x%02X ms1=0x%02X", dev, st, ms1);
         case CC1200_MARC_STATUS1_RX_TERMINATION:
         case CC1200_MARC_STATUS1_RX_TIMEOUT:
-            tmr_stop(phy[dev].rx_tmr);
+            phy_rx_tmr_kick(dev);
             //if (!(st & CC1200_STATE_IDLE)) cc_strobe(dev, CC1200_SIDLE);
             //cc_strobe(dev, CC1200_SFRX); // TODO: use read flag on SNOP to get rx fifo info bits
 
@@ -207,38 +201,36 @@ static void isr_mcu_wake(cc_dev_t dev)
 
 }
 
-static void phy_rx_tmr(tmr_t tmr, void *param)
+static void phy_rx_tmr_kick(cc_dev_t dev)
 {
-    tmr_stop(tmr);
-    const cc_dev_t dev = (cc_dev_t)param;
-    if (phy[dev].rx_timeout) {
-        itm_puts(0, "<stall: system reset>\n");
-        //NVIC_SystemReset();
-    }
-    phy[dev].rx_timeout = true;
+    phy[dev].rx_tick = pit_get_current(xsec_timer);
 }
 
 static void phy_rx_tmr_check(cc_dev_t dev)
 {
-    if (phy[dev].rx_timeout) {
-        cc_dbg_v("[%u] rx timer triggered", dev);
+    if (phy[dev].rx_enabled) {
+        const pit_tick_t rx_ticks = phy[dev].rx_tick - pit_get_current(xsec_timer);
 
-        //const u8 ms = cc_get(dev, CC1200_MODEM_STATUS1);
-        //const u8 st = cc_strobe(dev, CC1200_ACCESS_READ | CC1200_SNOP);
+        if (rx_ticks >= 20000000) {
+            cc_dbg/*_v*/("[%u] rx timeout", dev);
 
-        // TODO: find ways to combine strobes easily, and measure benefit
+            //const u8 ms = cc_get(dev, CC1200_MODEM_STATUS1);
+            //const u8 st = cc_strobe(dev, CC1200_ACCESS_READ | CC1200_SNOP);
 
-        // TODO: Maybe always strobe sidle in case the isr needs to be triggered?
-        //if (st & CC1200_STATE_RX) {
-        const u8 st = cc_strobe(dev, CC1200_SIDLE | CC1200_ACCESS_READ);
-        //}
+            // TODO: find ways to combine strobes easily, and measure benefit
 
-        if (st & CC1200_STATUS_EXTRA_M) {
-            cc_strobe(dev, CC1200_SFRX);
+            // TODO: Maybe always strobe sidle in case the isr needs to be triggered?
+            //if (st & CC1200_STATE_RX) {
+            const u8 st = cc_strobe(dev, CC1200_SIDLE | CC1200_ACCESS_READ);
+            //}
+
+            if (st & CC1200_STATUS_EXTRA_M) {
+                cc_strobe(dev, CC1200_SFRX);
+            }
+
+            //rx_resume(dev);
+            phy_rx_tmr_kick(dev);
         }
-
-        //rx_resume(dev);
-        phy[dev].rx_timeout = false;
     }
 }
 
@@ -287,8 +279,6 @@ void phy_rx_disable(cc_dev_t dev)
 {
     if (phy[dev].rx_enabled) {
         phy[dev].rx_enabled = false;
-        tmr_stop(phy[dev].rx_tmr);
-
         if (!phy[dev].cca_configured) {
             //u8 mst = cc_get(dev, CC1200_MARCSTATE) & CC1200_MARC_2PIN_STATE_M;
             cc_strobe(dev, CC1200_SIDLE);
@@ -313,16 +303,21 @@ static inline void rx_resume(cc_dev_t dev)
 {
     if (phy[dev].rx_enabled) {
         // TODO: Find a way to use cached state
-        u8 mst = cc_get(dev, CC1200_MARCSTATE) & CC1200_MARC_2PIN_STATE_M;
+        const u8 st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
 
-        if (mst != CC1200_MARC_2PIN_STATE_RX) {
-            cc_strobe(dev, CC1200_SFRX);
-            cc_dbg_v("[%u] SRX", dev);
+        if ((st & CC1200_STATUS_STATE_M) != CC1200_STATE_RX) {
+            if (st & CC1200_STATUS_EXTRA_M) {
+                cc_dbg_v("[%u] SFRX: st=0x%02X", dev, st);
+                cc_strobe(dev, CC1200_SFRX);
+            }
+
+            cc_dbg_v("[%u] SRX: st=0x%02X", dev, st);
             cc_strobe(dev, CC1200_SRX);
-            tmr_start(phy[dev].rx_tmr);
         } else {
-            cc_dbg_v("[%u] mst=0x%02X", dev, mst);
+            cc_dbg_v("[%u] st=0x%02X", dev, st);
         }
+
+        phy_rx_tmr_kick(dev);
     }
 }
 
@@ -331,7 +326,8 @@ void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
     if (!len || len > 120) return; // TODO: support longer packets
 
     if (phy_rx_enabled(dev)) {
-        tmr_stop(phy[dev].rx_tmr);
+        // TODO: Disable RX or add a flag to this or something
+        phy_rx_tmr_kick(dev);
     }
 
     u8 *pkt, st, reg;
@@ -380,11 +376,12 @@ void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
     cc_dbg_v("[%u] STX", dev);
     cc_strobe(dev, CC1200_STX);
 
-    while ((reg = phy[dev].tx_completion_status) == 0xFF) {
+    do {
         //taskYIELD();
         //vTaskDelay(1);
-        phy_task();
-    }
+        //phy_task();
+        __WFI();
+    } while ((reg = phy[dev].tx_completion_status) == 0xFF);
 
     phy[dev].tx_completion_status = 0;
 

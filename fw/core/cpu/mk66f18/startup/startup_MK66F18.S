@@ -40,7 +40,7 @@
     .syntax unified
     .arch armv7-m
 
-    .section .isr_vector/*Phillip: interrupts_ram when using _flash.ld, otherwise isr_vector*/, "a"
+    .section .interrupts_ram/*Phillip: interrupts_ram when using _flash.ld, otherwise isr_vector*/, "a"
     .align 2
     .globl __isr_vector
 __isr_vector:

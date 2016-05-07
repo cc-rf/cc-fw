@@ -26,13 +26,13 @@ const interface_t cc_interface[CC_NUM_DEVICES] = {
             {SYS_PORT_D,  8},
             {SYS_PORT_D,  9},
         }
-    },{
+    }/*,{
         .spi = {SPI1, 1},
         .isr = {
             {SYS_PORT_NONE,  0},
             {SYS_PORT_E,     4},
             {SYS_PORT_NONE,  0},
         }
-}
+    }*/
 #endif
 };

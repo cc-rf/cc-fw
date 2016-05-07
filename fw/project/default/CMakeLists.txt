@@ -38,5 +38,6 @@ target_link_libraries(
         PUBLIC fw_core_middleware_usb
         PUBLIC fw_core_middleware_usb_phy
         PUBLIC fw_core_middleware_usb_device
+        PUBLIC fw_core_middleware_dma_manager
         PUBLIC fw_system_framework_trace
 )

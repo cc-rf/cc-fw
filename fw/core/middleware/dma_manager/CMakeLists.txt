@@ -1,10 +1,8 @@
-set(NAME fw_core_middleware_usb_device)
+set(NAME fw_core_middleware_dma_manager)
 
 add_library(
         ${NAME} STATIC
-        usb_device_dci.c
-        usb_device_ehci.c
-        usb_device_khci.c
+        fsl_dma_manager.c
 )
 
 target_include_directories(
@@ -14,6 +12,5 @@ target_include_directories(
 
 target_link_libraries(
         ${NAME}
-        PUBLIC fw_core_middleware_usb
-        PRIVATE fw_core_cpu
+        PUBLIC fw_core_driver
 )

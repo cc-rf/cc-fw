@@ -30,6 +30,14 @@ static phy_cfg_t phy_cfg = {
 };
 
 static struct {
+    chan_inf_t *chan_cur;
+    u32 chan_cur_pkt_cnt;
+    u8 channel_hop_cycle;
+    u32 rx_timeout;
+
+} mac[MAC_NUM_DEVICES];
+
+static struct {
     chan_grp_t group;
     chan_inf_t chan[MAC_NUM_CHANNELS];
 
@@ -55,11 +63,6 @@ static struct {
                 },
         },
 };
-
-volatile chan_inf_t *chan_cur[MAC_NUM_DEVICES];
-
-extern pit_t xsec_timer;
-static pit_tick_t xsec_last[MAC_NUM_DEVICES];
 
 bool mac_init(mac_cfg_t *cfg)
 {
@@ -97,76 +100,77 @@ static bool mac_setup(cc_dev_t dev)
      * of how long we stay there.
      */
 
-    cc_set_rx_timeout(dev, 10000000);
+    mac[dev].rx_timeout = 5000000;
+    cc_set_rx_timeout(dev, mac[dev].rx_timeout);
 
     chan_grp_init(&channels[dev].group);
     //chan_grp_calibrate(&channels[dev].group);
     chan_select(&channels[dev].group, 0);
-    chan_cur[dev] = &channels[dev].chan[0];
-
-    xsec_last[dev] = pit_get_elapsed(xsec_timer);
+    mac[dev].chan_cur = &channels[dev].chan[0];
+    mac[dev].chan_cur_pkt_cnt = 0;
+    mac[dev].channel_hop_cycle = 0;
     return true;
 }
 
 void mac_task(void)
 {
     phy_task();
-
-    pit_tick_t xsec_cur = pit_get_elapsed(xsec_timer);
-
-    for (cc_dev_t dev = MAC_DEV_MIN; dev <= MAC_DEV_MAX; ++dev) {
-        if (phy_rx_enabled(dev) && ((xsec_cur - xsec_last[dev]) > 100000000ul)) {
-            cc_dbg("force-restarting rx");
-            xsec_last[dev] = xsec_cur;
-            phy_rx_disable(dev);
-            phy_rx_enable(dev);
-        }
-    }
 }
 
 #include <board.h>
 #include <stdio.h>
 
-static u8 channel_hop_cycle[MAC_NUM_DEVICES] = {0};
 
 static inline void next_chan(cc_dev_t dev)
 {
     incr:
 
-    if (!channel_hop_cycle[dev]++) {
+    if (!mac[dev].channel_hop_cycle++) {
         if (!dev) LED_C_TOGGLE();
         else LED_D_TOGGLE();
     } else {
-        if (channel_hop_cycle[dev] >= MAC_NUM_CHANNELS) channel_hop_cycle[dev] = 0;
+        if (mac[dev].channel_hop_cycle >= MAC_NUM_CHANNELS) mac[dev].channel_hop_cycle = 0;
     }
 
     //return;
 
-    chan_cur[dev] = &channels[dev].chan[channel_hop_cycle[dev]];
+    mac[dev].chan_cur = &channels[dev].chan[mac[dev].channel_hop_cycle];
 
 #if MAC_NUM_DEVICES > 1
     for (u8 i = MAC_DEV_MIN; i <= MAC_DEV_MAX; ++i) {
         if (i == dev) continue;
-        if (phy_rx_enabled(i) && chan_cur[dev]->id == chan_cur[i]->id) goto incr;
+        if (phy_rx_enabled(i) && mac[dev].chan_cur->id == mac[i].chan_cur->id) goto incr;
     }
 #endif
 
-    chan_select(&channels[dev].group, channel_hop_cycle[dev]);
+    chan_select(&channels[dev].group, mac[dev].channel_hop_cycle);
 }
 
 //static volatile bool chan_switch_pending = false;
 
 static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
 {
-    xsec_last[dev] = pit_get_elapsed(xsec_timer);
-
     switch (ms1) {
         case CC1200_MARC_STATUS1_NO_FAILURE:
         case CC1200_MARC_STATUS1_RX_TIMEOUT:
         case CC1200_MARC_STATUS1_RX_TERMINATION:
         case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
-            if (param) next_chan(dev);
+            if (mac[dev].chan_cur_pkt_cnt) {
+                mac[dev].chan_cur_pkt_cnt = 0;
+                cc_set_rx_timeout(dev, mac[dev].rx_timeout);
+            }
+
+            if (param) {
+                next_chan(dev);
+                *(bool *)param = true;
+            }
+            break;
+
         case CC1200_MARC_STATUS1_RX_FINISHED:
+            if (!mac[dev].chan_cur_pkt_cnt++) {
+                cc_set_rx_timeout(dev, mac[dev].rx_timeout*100);
+            }
+
             if (param) *(bool *)param = true;
             break;
     }

@@ -11,6 +11,7 @@
 #define NSEC_SEC                UINT64_C(1000000000)
 #define USEC_SEC                UINT32_C(1000000)
 
+// TODO: Check out xTimer FreeRTOS port stuff for reference
 
 typedef struct pit {
     const pit_chnl_t chnl;

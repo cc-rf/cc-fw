@@ -69,7 +69,8 @@ static struct isr_map ISR_MAP[] = {
 
 #define PORT_ISR_TASK(P) \
         if (isr_count_##P) { \
-            --isr_count_##P; \
+            /*--isr_count_##P;*/ \
+            isr_count_##P = 0; \
             isr_common(SYS_PORT_##P, isr_flag_##P); \
         }
 
@@ -144,7 +145,7 @@ enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t is
     if (edge != ISR_EDGE_SETUP) {
         const port_pin_config_t port_pin_config = {
                 kPORT_PullDown,
-                kPORT_FastSlewRate,
+                kPORT_SlowSlewRate,
                 kPORT_PassiveFilterDisable,
                 kPORT_OpenDrainDisable,
                 kPORT_LowDriveStrength,
@@ -157,7 +158,7 @@ enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t is
         PORT_SetPinInterruptConfig(SYS_PORT_PORTN(cfg->port), cfg->pin, EDGE_MAP[edge]);
 
 //#if defined(configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY)
-        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), 5+dev/*configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY-*//*CC_NUM_DEVICES+dev*/);
+        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), 0/*configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY-*//*CC_NUM_DEVICES+dev*/);
 //#endif
 
         EnableIRQ(SYS_PORT_IRQN(cfg->port));

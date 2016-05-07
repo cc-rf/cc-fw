@@ -84,6 +84,7 @@ mac_cfg_t cc_mac_cfg = {
 #include <itm.h>
 #include <uart.h>
 #include <fsl_uart.h>
+#include <fsl_dma_manager.h>
 
 pit_t xsec_timer_lo, xsec_timer, wdog_timer;
 
@@ -92,11 +93,31 @@ int main(void)
     BOARD_InitPins();
     LED_ABCD_ALL_ON();
     BOARD_BootClockHSRUN();
-
+    DMAMGR_Init();
     BOARD_InitDebugConsole();
     itm_init();
     uart_init();
     printf("<boot>\r\n");
+
+
+    printf("\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  er32k\t\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",
+       CLOCK_GetFreq(kCLOCK_CoreSysClk),
+       CLOCK_GetFreq(kCLOCK_BusClk),
+       CLOCK_GetFreq(kCLOCK_FlexBusClk),
+       CLOCK_GetFreq(kCLOCK_FlashClk),
+       CLOCK_GetFreq(kCLOCK_PllFllSelClk),
+       CLOCK_GetFreq(kCLOCK_Er32kClk),
+       CLOCK_GetFreq(kCLOCK_Osc0ErClk),
+       CLOCK_GetFreq(kCLOCK_Osc0ErClkUndiv),
+       CLOCK_GetFreq(kCLOCK_McgFixedFreqClk),
+       CLOCK_GetFreq(kCLOCK_McgInternalRefClk),
+       CLOCK_GetFreq(kCLOCK_McgFllClk),
+       CLOCK_GetFreq(kCLOCK_McgPll0Clk),
+       CLOCK_GetFreq(kCLOCK_McgIrc48MClk),
+       CLOCK_GetFreq(kCLOCK_LpoClk)
+    );
+
+
 
     xsec_timer_lo = pit_alloc(&(pit_cfg_t){
             .period = pit_nsec_tick(1000)
@@ -109,6 +130,13 @@ int main(void)
     pit_start(xsec_timer);
     pit_start(xsec_timer_lo);
 
+    /*u8 chr;
+    while (1) {
+        uart_read(&chr, 1);
+        itm_write(0, &chr, 1);
+        LED_C_TOGGLE();
+    }
+    goto done;*/
 
     /*char buf[42] = "hello\n";
     char rx[100];
@@ -249,34 +277,36 @@ static void main_task(void *param)
     }
 }
 
-u32 pkt_count = 0, pkt_count_0 = 0;
-pit_tick_t pkt_tmr_0 = 0, pkt_tmr_1 = 0;
+u32 pkt_count[CC_NUM_DEVICES] = {0}, pkt_count_0[CC_NUM_DEVICES] = {0};
+pit_tick_t pkt_tmr_0[CC_NUM_DEVICES] = {0}, pkt_tmr_1[CC_NUM_DEVICES] = {0};
 
 static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
 {
-    if (!pkt_count) {
-        pkt_tmr_0 = pit_get_elapsed(xsec_timer);
+    if (!pkt_count[dev]) {
+        pkt_tmr_0[dev] = pit_get_elapsed(xsec_timer);
     }
 
-    ++pkt_count;
+    ++pkt_count[dev];
 
-    printf(".");
-    if (!(pkt_count % 60)) printf("\n");
+    //printf(".");
+    //if (!(pkt_total % 60)) printf("\n");
 
-    if (!(pkt_count % 120)) {
-        pkt_tmr_1 = pit_get_elapsed(xsec_timer);
-        u32 pkt_rate = (pkt_count - pkt_count_0) / ((pkt_tmr_1 - pkt_tmr_0) / 1000000);
-        printf("[%u] rate = %lu p/s\n", dev, pkt_rate);
-        pkt_tmr_0 = pkt_tmr_1;
-        pkt_count_0 = pkt_count;
+    if (!(pkt_count[dev] % 120)) {
+        pkt_tmr_1[dev] = pit_get_elapsed(xsec_timer);
+        u32 div = ((pkt_tmr_1[dev] - pkt_tmr_0[dev]) + (1000000>>1)) / 1000000;
+        u32 pkt_rate = ((pkt_count[dev] - pkt_count_0[dev]) + (div>>1)) / div;
+        printf("[%u] rate = %lu p/s (n=%lu t=%luus)\n", dev, pkt_rate, (pkt_count[dev] - pkt_count_0[dev]), (pkt_tmr_1[dev] - pkt_tmr_0[dev]));
+        pkt_tmr_0[dev] = pkt_tmr_1[dev];
+        pkt_count_0[dev] = pkt_count[dev];
     }
 
     if (dev == CC_DEV_MIN) {
-        if (!(pkt_count % 12)) LED_A_TOGGLE();
+        if (!(pkt_count[dev] % 12)) LED_A_TOGGLE();
     } else {
-        if (!(pkt_count % 12)) LED_B_TOGGLE();
+        if (!(pkt_count[dev] % 12)) LED_B_TOGGLE();
     }
 
+    //uart_puts("hello");
     uart_write(buf, len);
 
     /*struct packet *const rx_data = (struct packet *)buf;

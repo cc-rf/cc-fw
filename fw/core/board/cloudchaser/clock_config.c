@@ -102,7 +102,7 @@ const clock_config_t g_defaultClockConfigRun = {
             .ircs = kMCG_IrcSlow,                /* Select IRC32k. */
             .fcrdiv = 0U,                        /* FCRDIV is 0. */
 
-            .frdiv = 4U,
+            .frdiv = 5U,
             .drs = kMCG_DrsLow,         /* Low frequency range */
             .dmx32 = kMCG_Dmx32Default, /* DCO has a default range of 25% */
             .oscsel = kMCG_OscselOsc,   /* Select OSC */
@@ -143,14 +143,14 @@ const clock_config_t g_defaultClockConfigHsrun = {
             .ircs = kMCG_IrcSlow,                      /* Select IRC32k.*/
             .fcrdiv = 0U,                              /* FCRDIV is 0. */
 
-            .frdiv = 4U,
+            .frdiv = 5U,
             .drs = kMCG_DrsLow,         /* Low frequency range. */
             .dmx32 = kMCG_Dmx32Default, /* DCO has a default range of 25%. */
             .oscsel = kMCG_OscselOsc,   /* Select OSC. */
 
             .pll0Config =
                 {
-                    .enableMode = 0U, .prdiv = /*0x00U*/0x01U, .vdiv = 0x0EU,
+                    .enableMode = kMCG_PllEnableIndependent, .prdiv = /*0x00U*/0x01u, .vdiv = 0x0Eu,
                 },
             .pllcs = kMCG_PllClkSelPll0,
         },
@@ -245,6 +245,8 @@ void BOARD_BootClockRUN(void)
 
 void BOARD_BootClockHSRUN(void)
 {
+    // TODO: CLOCK_SetMcgConfig() ???
+
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
     SMC_SetPowerModeHsrun(SMC);
     while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateHsrun)

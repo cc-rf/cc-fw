@@ -2,69 +2,61 @@
 
 #include <FreeRTOS.h>
 #include <portmacro.h>
+#include <cc/interface/kinetis/kinetis.h>
+#include <malloc.h>
 
 //#include "fsl_dspi_freertos.h"
 
 // TODO: see if CC1200 will accept 8-bit addresses with leading zeroes in upper 8 bits
 
-//static dspi_rtos_handle_t spi;
+static void spi_cb(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData);
 
-/*const static dspi_master_config_t spi_config = {
-    .whichCtar = kDSPI_Ctar0,
-    .ctarConfig = {
-        .baudRate = 5000000,
-        .bitsPerFrame = 8,
-    },
-    .whichPcs = kDSPI_Pcs0
-};*/
-
-
-/*const static spi_dev_t spi_dev[CC_NUM_DEVICES] =
-
-#if BOARD_FRDM_K66F
-    {
-        {SPI0, 0},
-    };
-
-#elif BOARD_FRDM_K22F
-    {
-        {SPI1, 0},
-    };
-
-#elif BOARD_TWR_K65F180M
-    {
-        {SPI2, 1},
-    };
-
-#elif BOARD_CLOUDCHASER
-    {
-        {SPI0, 0},
-        {SPI2, 0}
-    };
-
-#else
-#error unknown board
-#endif*/
-
-
-static dspi_master_config_t spi_config;
+static dspi_master_handle_t spi_handle[CC_NUM_DEVICES];
 
 void cc_spi_init(cc_dev_t dev)
 {
     assert(CC_DEV_VALID(dev));
     const spi_config_t *const cfg = &cc_interface[dev].spi;
+    dspi_master_config_t spi_config;
     DSPI_MasterGetDefaultConfig(&spi_config);
     spi_config.whichPcs = (dspi_which_pcs_t)(1u << cfg->pcs);
     spi_config.ctarConfig.pcsToSckDelayInNanoSec = 1000;
     spi_config.ctarConfig.lastSckToPcsDelayInNanoSec = 1000;
     spi_config.ctarConfig.betweenTransferDelayInNanoSec = 0;
-    spi_config.ctarConfig.baudRate = 7000000;
+    spi_config.ctarConfig.baudRate = 8000000;
 
 
     // TODO: Make this board-specific (also decide on RTOS usage or not...)
     //DSPI_RTOS_Init(&spi, SPI1, &spi_config, CLOCK_GetBusClkFreq());
 
     DSPI_MasterInit(cfg->spi, &spi_config, CLOCK_GetBusClkFreq());
+    DSPI_MasterTransferCreateHandle(cfg->spi, &spi_handle[dev], spi_cb, NULL);
+    //DMAMGR_RequestChannel(UART_TX_DMA_REQUEST, UART_TX_DMA_CHANNEL, &uart_tx_handle);
+
+
+    IRQn_Type irqn = NotAvail_IRQn;
+
+    if      (cfg->spi == SPI0) irqn = SPI0_IRQn;
+    else if (cfg->spi == SPI1) irqn = SPI1_IRQn;
+    else if (cfg->spi == SPI2) irqn = SPI2_IRQn;
+#ifdef SPI3
+    else if (cfg->spi == SPI3) irqn = SPI3_IRQn;
+#endif
+#ifdef SPI4
+    else if (cfg->spi == SPI4) irqn = SPI4_IRQn;
+#endif
+#ifdef SPI5
+        else if (cfg->spi == SPI5) irqn = SPI5_IRQn;
+#endif
+
+    if (irqn == NotAvail_IRQn) {
+        cc_dbg("[%u] irq for SPI@%p unavailable", dev, cfg->spi);
+        return;
+    }
+
+    NVIC_SetPriority(irqn, 0);
+    EnableIRQ(irqn);
+
     cc_dbg_v("[%u] initialized", dev);
 }
 
@@ -89,7 +81,9 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
 
     const u8 hlen = ahi ? (u8)2 : (u8)1;
     const u32 xlen = len + hlen;
-    u8 xbuf[xlen];
+    //u8 xbuf[xlen];
+    u8 *xbuf = malloc(xlen);
+    assert(xbuf);
 
     if (hlen == 1) {
         xbuf[0] = flag | alo;
@@ -120,23 +114,49 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
     cc_dbg_printf_v("tx="); print_hex(xbuf, xlen);
 #endif
 
-    portDISABLE_INTERRUPTS();
-    DSPI_MasterTransferBlocking(cfg->spi, &xfer);
-    portENABLE_INTERRUPTS();
+    //portDISABLE_INTERRUPTS();
+    //DSPI_MasterTransferBlocking(cfg->spi, &xfer);
+    //portENABLE_INTERRUPTS();
+
+    //while ((volatile void *)spi_handle[dev].userData) asm("nop");
+    //spi_handle[dev].userData = xbuf;
+    DSPI_MasterTransferNonBlocking(cfg->spi, &spi_handle[dev], &xfer);
+
+    do {
+        //asm("nop");
+    } while (spi_handle[dev].state != kStatus_Success);
 
 #if CC_DEBUG_VERBOSE
     //cc_dbg_v("flag=0x%x addr=0x%x len=%lu hlen=%u st=0x%02X", flag, addr, len, hlen, xbuf[0]);
     cc_dbg_printf_v("rx="); print_hex(xbuf, xlen);
 #endif
 
-
-
     if (rx && len) {
         memcpy(rx, &xbuf[hlen], len);
     }
 
-    return xbuf[0];
+    u8 st = xbuf[0];
+    free(xbuf);
+    return st;
 }
+
+static void spi_cb(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData)
+{
+    //assert(status == kStatus_Success);
+    /*if (status == kStatus_Success) {
+        if (handle && handle->userData) {
+            handle->userData = NULL;
+        }
+    }*/
+}
+
+
+
+
+
+
+
+
 
 #include <cc/cc1200.h>
 
