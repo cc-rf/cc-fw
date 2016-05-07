@@ -109,7 +109,7 @@ const clock_config_t g_defaultClockConfigRun = {
 
             .pll0Config =
                 {
-                    .enableMode = 0U, .prdiv = /*0x00U*/0x01U, .vdiv = 0x04U,
+                    .enableMode = kMCG_PllEnableIndependent, .prdiv = 0x01U, .vdiv = 0x04U,
                 },
             .pllcs = kMCG_PllClkSelPll0,
         },
@@ -150,7 +150,7 @@ const clock_config_t g_defaultClockConfigHsrun = {
 
             .pll0Config =
                 {
-                    .enableMode = kMCG_PllEnableIndependent, .prdiv = /*0x00U*/0x01u, .vdiv = 0x0Eu,
+                    .enableMode = kMCG_PllEnableIndependent, .prdiv = 0x01u, .vdiv = 0x0Eu,
                 },
             .pllcs = kMCG_PllClkSelPll0,
         },
@@ -190,9 +190,9 @@ const clock_config_t g_defaultClockConfigOchsrun = {
             .pll0Config =
                 {
                         /**
-                         * 234MHz: enableMode = 1u  prdiv = 0x00u  vdiv = 0x17u
+                         * 234MHz: prdiv = 0x01u  vdiv = 0x17u
                          */
-                    .enableMode = 1U, .prdiv = /*0x00U*/0x00U, .vdiv = 0x16U,
+                    .enableMode = kMCG_PllEnableIndependent, .prdiv = 0x01U, .vdiv = 0x17U,
                 },
             .pllcs = kMCG_PllClkSelPll0,
         },
@@ -200,7 +200,7 @@ const clock_config_t g_defaultClockConfigOchsrun = {
         {
             .pllFllSel = 1U,        /* PLLFLLSEL select PLL. */
             .er32kSrc = 2U,         /* ERCLK32K selection, use RTC. */
-            .clkdiv1 = 0x01160000U, /* SIM_CLKDIV1. */
+            .clkdiv1 = 0x01170000U, /* SIM_CLKDIV1. */
         },
     .oscConfig = {.freq = BOARD_XTAL0_CLK_HZ,
                   .capLoad = 0,
@@ -212,7 +212,7 @@ const clock_config_t g_defaultClockConfigOchsrun = {
                           .erclkDiv = 0U,
 #endif
                       }},
-    .coreClock = 192000000U, /* Core clock frequency */
+    .coreClock = 234000000U, /* Core clock frequency */
 };
 
 
