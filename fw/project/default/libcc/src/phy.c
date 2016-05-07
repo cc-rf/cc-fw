@@ -302,6 +302,8 @@ bool phy_rx_enabled(cc_dev_t dev)
 static inline void rx_resume(cc_dev_t dev)
 {
     if (phy[dev].rx_enabled) {
+        phy_rx_tmr_kick(dev);
+
         // TODO: Find a way to use cached state
         const u8 st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
 
@@ -316,8 +318,6 @@ static inline void rx_resume(cc_dev_t dev)
         } else {
             cc_dbg_v("[%u] st=0x%02X", dev, st);
         }
-
-        phy_rx_tmr_kick(dev);
     }
 }
 
