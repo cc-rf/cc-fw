@@ -13,14 +13,14 @@ monitor clrbp
 monitor reset
 monitor halt
 
-monitor semihosting enable
-# new: page 437 of J-Link doc UM08001.pdf
-monitor semihosting breakOnError 1
-#monitor semihosting IOClient 1
-# from doc: 3=both GDB and telnet
-monitor semihosting IOClient 3
-# from doc: passes args to main in fw?
-# monitor semihosting setargs "<argv>" # (in case SYS_GET_CMDLINE command is used)
+monitor semihosting disable
+## new: page 437 of J-Link doc UM08001.pdf
+#monitor semihosting breakOnError 1
+##monitor semihosting IOClient 1
+## from doc: 3=both GDB and telnet
+#monitor semihosting IOClient 3
+## from doc: passes args to main in fw?
+## monitor semihosting setargs "<argv>" # (in case SYS_GET_CMDLINE command is used)
 
 monitor SWO DisableTarget 0xFFFFFFFF
 #monitor SWO EnableTarget 0 0 0x1 0
