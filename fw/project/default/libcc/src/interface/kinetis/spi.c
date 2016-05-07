@@ -55,7 +55,7 @@ void cc_spi_init(cc_dev_t dev)
     }
 
     NVIC_SetPriority(irqn, 0);
-    EnableIRQ(irqn);
+    //EnableIRQ(irqn);
 
     cc_dbg_v("[%u] initialized", dev);
 }

@@ -61,8 +61,9 @@ static struct isr_map ISR_MAP[] = {
 #define PORT_IRQ_HANDLER(P) \
         static volatile u32 isr_count_##P, isr_flag_##P;\
         __attribute__((interrupt)) void PORT##P##_IRQHandler(void){\
-            isr_flag_##P = GPIO_GetPinsInterruptFlags(GPIO##P); \
-            GPIO_ClearPinsInterruptFlags(GPIO##P, isr_flag_##P); \
+            const u32 flag = GPIO_GetPinsInterruptFlags(GPIO##P); \
+            GPIO_ClearPinsInterruptFlags(GPIO##P, flag); \
+            isr_flag_##P = flag; \
             ++isr_count_##P; \
             /*return isr_common(SYS_PORT_##P, GPIO##P);*/ \
         }
@@ -158,7 +159,7 @@ enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t is
         PORT_SetPinInterruptConfig(SYS_PORT_PORTN(cfg->port), cfg->pin, EDGE_MAP[edge]);
 
 //#if defined(configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY)
-        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), 0/*configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY-*//*CC_NUM_DEVICES+dev*/);
+        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), 1/*configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY-*//*CC_NUM_DEVICES+dev*/);
 //#endif
 
         EnableIRQ(SYS_PORT_IRQN(cfg->port));
