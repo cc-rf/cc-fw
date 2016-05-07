@@ -30,7 +30,7 @@ void uart_init(void)
 {
     UART_GetDefaultConfig(&uart_cfg);
 
-    uart_cfg.baudRate_Bps = 115200;
+    uart_cfg.baudRate_Bps = 230400;
     uart_cfg.enableTx = true;
     uart_cfg.enableRx = false;
 
@@ -42,6 +42,8 @@ void uart_init(void)
     DMAMGR_RequestChannel(UART_TX_DMA_REQUEST, UART_TX_DMA_CHANNEL, &uart_tx_handle);
     //DMAMGR_RequestChannel(UART_RX_DMA_REQUEST, UART_RX_DMA_CHANNEL, &uart_rx_handle);
 
+    //NVIC_SetPriority(DMA0_DMA16_IRQn, 0);
+
     UART_TransferCreateHandleEDMA(TRACE_UART, &uart_edma_handle, uart_cb, NULL, &uart_tx_handle, NULL);
 }
 
@@ -52,10 +54,15 @@ void uart_write(const u8 *buf, size_t len)
             .dataSize = len
     };
 
-    assert(xfer.data);
+    //assert(xfer.data);
     memcpy(xfer.data, (void *)buf, len);
 
-    while ((volatile void *)uart_edma_handle.userData) asm("nop"); // need to do this?
+    while (uart_edma_handle.txState) asm("nop"); // need to do this?
+
+    if (uart_edma_handle.userData) {
+        free(uart_edma_handle.userData);
+    }
+
     uart_edma_handle.userData = xfer.data;
 
     UART_SendEDMA(TRACE_UART, &uart_edma_handle, &xfer);
