@@ -92,7 +92,7 @@ int main(void)
 {
     BOARD_InitPins();
     LED_ABCD_ALL_ON();
-    BOARD_BootClockHSRUN();
+    BOARD_BootClockOCHSRUN();
     DMAMGR_Init();
     BOARD_InitDebugConsole();
     itm_init();
@@ -203,7 +203,7 @@ static void main_task(void *param)
     //vcom_init();
 
     printf("<main task>\r\n");
-    
+
 
     /*
     u8 freq2 = cc_get(CC1200_FREQ2);
