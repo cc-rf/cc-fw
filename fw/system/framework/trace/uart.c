@@ -1,35 +1,64 @@
 #include <uart.h>
 #include <string.h>
 
-#include <fsl_uart.h>
+#include <fsl_uart_edma.h>
+#include <fsl_dma_manager.h>
 #include <itm.h>
+#include <malloc.h>
+
+/**
+ * UART0 and UART1 operate off the core system clock, while all others use the bus clock.
+ */
 
 #define TRACE_UART              UART0
-#define TRACE_UART_CLKSRC       BUS_CLK
+#define TRACE_UART_CLKSRC       SYS_CLK
+
+#define UART_TX_DMA_CHANNEL 0U
+#define UART_RX_DMA_CHANNEL 1U
+#define UART_TX_DMA_REQUEST kDmaRequestMux0UART0Tx
+#define UART_RX_DMA_REQUEST kDmaRequestMux0UART0Rx
+
+
+void uart_cb(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData);
 
 static uart_config_t uart_cfg;
+static uart_edma_handle_t uart_edma_handle;
+static edma_handle_t uart_tx_handle;
+//static edma_handle_t uart_rx_handle;
 
 void uart_init(void)
 {
     UART_GetDefaultConfig(&uart_cfg);
+
     uart_cfg.baudRate_Bps = 115200;
-    //uart_cfg.enableRx = true;
-    //uart_cfg.enableTx = true;
-    //uart_cfg.parityMode = kUART_ParityDisabled;
-#if defined(FSL_FEATURE_UART_HAS_STOP_BIT_CONFIG_SUPPORT) && FSL_FEATURE_UART_HAS_STOP_BIT_CONFIG_SUPPORT
-    //uart_cfg.stopBitCount = kUART_OneStopBit;
-#endif
-    u32 clock_speed = CLOCK_GetFreq(TRACE_UART_CLKSRC);
-    UART_Init(TRACE_UART, &uart_cfg, clock_speed);
-    UART_EnableTx(TRACE_UART, true);
-    UART_EnableRx(TRACE_UART, true);
+    uart_cfg.enableTx = true;
+    uart_cfg.enableRx = false;
+
+    UART_Init(TRACE_UART, &uart_cfg, CLOCK_GetFreq(TRACE_UART_CLKSRC));
+
+     // TODO: Guard to check if already initialized
+
+    // TODO: Check status
+    DMAMGR_RequestChannel(UART_TX_DMA_REQUEST, UART_TX_DMA_CHANNEL, &uart_tx_handle);
+    //DMAMGR_RequestChannel(UART_RX_DMA_REQUEST, UART_RX_DMA_CHANNEL, &uart_rx_handle);
+
+    UART_TransferCreateHandleEDMA(TRACE_UART, &uart_edma_handle, uart_cb, NULL, &uart_tx_handle, NULL);
 }
 
 void uart_write(const u8 *buf, size_t len)
 {
-    UART_WriteBlocking(TRACE_UART, buf, len);
+    uart_transfer_t xfer = {
+            .data = malloc(len),
+            .dataSize = len
+    };
 
-    //while (len--) UART_WriteBlocking(TRACE_UART, buf++, 1);
+    assert(xfer.data);
+    memcpy(xfer.data, (void *)buf, len);
+
+    while ((volatile void *)uart_edma_handle.userData) asm("nop"); // need to do this?
+    uart_edma_handle.userData = xfer.data;
+
+    UART_SendEDMA(TRACE_UART, &uart_edma_handle, &xfer);
 }
 
 void uart_read(u8 *buf, size_t len)
@@ -59,4 +88,15 @@ size_t uart_gets(char *str, size_t len)
     }
 
     return count;
+}
+
+void uart_cb(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData)
+{
+    if (status == kStatus_UART_TxIdle)
+    {
+        if (handle && handle->userData) {
+            free(handle->userData);
+            handle->userData = NULL;
+        }
+    }
 }
