@@ -66,4 +66,13 @@ add_custom_target(
         BYPRODUCTS "${PROJECT_NAME}.hex"
 )
 
+
+# https://github.com/energia/Energia/wiki/FLASH-and-estimated-RAM-Usage
+# text + data = flash
+# bss  + data = ram
+add_custom_target(
+        fw_siz
+        COMMAND ${CMAKE_OBJSIZE} --format=berkeley --totals "$<TARGET_FILE:${TARGET}>"
+)
+
 add_dependencies(fw_hex ${TARGET})
