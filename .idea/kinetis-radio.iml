@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="CPP_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/framework/trace/uart.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/framework/trace/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/common/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/main.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/config.cmake" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/usb_device_class.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/virtual_com.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/usb_device_cdc_acm.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/usb_device_ch9.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/usb_device_descriptor.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/interface/kinetis/kinetis.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/interface/kinetis/amp.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/interface/kinetis/spi.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/interface/kinetis/pit.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/interface/kinetis/isr.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/chan.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/io.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/mac.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/phy.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/libcc/src/freq.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/fw.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/config.cmake" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_sai.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_gpio.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_ewm.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_dac.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_lpuart_edma.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_i2c.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_cmp.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_flexbus.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_rtc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_ftm.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_edma.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_pdb.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_rcm.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_flash.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_rnga.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_wdog.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_pmc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_sai_edma.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_lptmr.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_crc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_sim.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_pit.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_i2c_edma.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_llwu.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_lpuart.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_dmamux.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_smc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_dspi_edma.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_dspi.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_uart_edma.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_adc16.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_vref.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_common.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/driver/fsl_uart.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/device/usb_device_dci.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/device/usb_device_ehci.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/device/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/device/usb_device_khci.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/osa/freertos/usb_osa_freertos.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/osa/freertos/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/osa/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/osa/bm/usb_osa_bm.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/osa/bm/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/usb_host_hci.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/usb_host_khci.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/usb_host_devices.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/usb_host_framework.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/usb_host_ehci.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/class/usb_host_msd_ufi.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/class/usb_host_hub_app.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/class/usb_host_phdc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/class/usb_host_hid.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/class/usb_host_msd.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/class/usb_host_hub.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/class/usb_host_audio.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/host/class/usb_host_cdc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/phy/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/usb/phy/usb_phy.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/dma_manager/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/dma_manager/fsl_dma_manager.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/middleware/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cmsis/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/startup/startup_MK65F18.S" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/startup/system_MK65F18.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_sdhc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_clock.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_tsi_v4.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_tpm.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_sdramc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_mpu.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_enet.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_lmem_cache.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_flexcan.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/driver/fsl_cmt.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk65f18/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk22f51212/startup/startup_MK22F51212.S" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk22f51212/startup/system_MK22F51212.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk22f51212/driver/fsl_clock.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk22f51212/driver/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk22f51212/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/startup/system_MK66F18.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/startup/startup_MK66F18.S" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_tsi_v4.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_clock.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_sdhc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_enet.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_tpm.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_mpu.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_sdramc.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_lmem_cache.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_flexcan.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/driver/fsl_cmt.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/cpu/mk66f18/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/util/fsl_notifier.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/util/fsl_debug_console.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/util/fsl_sbrk.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/util/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/driver/fsl_dspi_freertos.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/driver/fsl_uart_freertos.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/driver/fsl_i2c_freertos.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/driver/fsl_lpuart_freertos.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/list.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/timers.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/queue.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/event_groups.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/tasks.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/portable/MemMang/heap_1.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/portable/GCC/ARM_CM4F/port.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/freertos/croutine.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/cloudchaser/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/cloudchaser/pin_mux.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/cloudchaser/config.cmake" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/cloudchaser/board.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/cloudchaser/clock_config.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/frdm_k22f/board.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/frdm_k22f/pin_mux.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/frdm_k22f/clock_config.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/frdm_k22f/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/frdm_k66f/board.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/frdm_k66f/pin_mux.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/frdm_k66f/clock_config.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/frdm_k66f/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/twr_k65f180m/board.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/twr_k65f180m/pin_mux.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/twr_k65f180m/clock_config.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/twr_k65f180m/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/core/board/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/etc/cmake/armgcc.cmake" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/etc/cmake/util.cmake" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/CMakeLists.txt" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/build" />
+      <excludeFolder url="file://$MODULE_DIR$/tmp" />
+    </content>
+    <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module-library">
+      <library name="Header Search Paths">
+        <CLASSES>
+          <root url="file:///usr/lib/arm-none-eabi/include" />
+          <root url="file:///usr/lib/gcc/arm-none-eabi/4.9.3/include-fixed" />
+          <root url="file:///usr/lib/gcc/arm-none-eabi/4.9.3/include" />
+        </CLASSES>
+        <SOURCES>
+          <root url="file:///usr/lib/arm-none-eabi/include" />
+          <root url="file:///usr/lib/gcc/arm-none-eabi/4.9.3/include-fixed" />
+          <root url="file:///usr/lib/gcc/arm-none-eabi/4.9.3/include" />
+        </SOURCES>
+      </library>
+    </orderEntry>
+  </component>
+</module>
