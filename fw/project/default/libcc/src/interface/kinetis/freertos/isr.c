@@ -1,8 +1,8 @@
 #include <cc/isr.h>
-//#include <FreeRTOS.h>
-//#include <task.h>
-//#include <queue.h>
-//#include <semphr.h>
+#include <FreeRTOS.h>
+#include <task.h>
+#include <queue.h>
+#include <semphr.h>
 #include <fsl_rtc.h>
 #include <itm.h>
 #include <cc/interface/kinetis/kinetis.h>
@@ -13,21 +13,12 @@
         __attribute__((interrupt)) void PORT##P##_IRQHandler(void){\
             const u32 flag = GPIO_GetPinsInterruptFlags(GPIO##P); \
             GPIO_ClearPinsInterruptFlags(GPIO##P, flag); \
-            isr_flag_##P = flag; \
-            ++isr_count_##P; \
-            /*return isr_common(SYS_PORT_##P, GPIO##P);*/ \
+            return isr_common(SYS_PORT_##P, flag); \
         }
-
-#define PORT_ISR_TASK(P) \
-        if (isr_count_##P) { \
-            /*--isr_count_##P;*/ \
-            isr_count_##P = 0; \
-            isr_common(SYS_PORT_##P, isr_flag_##P); \
-        }
-
 
 static inline const isr_config_t *const get_isr_config(cc_dev_t dev, enum isr_pin *pin);
-//static void isr_task(void *param);
+static void isr_task(void *param);
+static inline void isr_common(const sys_port_t port, const u32 flag);
 
 static isr_t isr_map[CC_NUM_DEVICES][ISR_PIN_COUNT] = {{ 0 }};
 
@@ -40,27 +31,32 @@ static const port_interrupt_t EDGE_MAP[] = {
         /*ISR_EDGE_LOW*/        kPORT_InterruptLogicZero,
 };
 
-/*volatile u32 port_isr_mask = 0;
-volatile u32 port_isr_flags = 0;
-volatile u64 port_isr_count = 0, isr_handle_count = 0;*/
+typedef struct {
+    sys_port_t port;
+    u32 flag;
+} isr_queue_t;
 
 
-/*typedef struct {
-    xSemaphoreHandle isr_semaphore_handle;
+typedef struct {
+    xQueueHandle isr_queue_handle;
     xTaskHandle isr_task_handle;
+    u8 port_mask;
 
 } isr_rtos_t;
 
-static isr_rtos_t rtos[CC_NUM_DEVICES] = {{NULL}};*/
+static isr_rtos_t rtos[CC_NUM_DEVICES] = {{NULL}};
+
+
 
 bool cc_isr_init(cc_dev_t dev)
 {
     assert(CC_DEV_VALID(dev));
-    /*port_isr_mask = 0;
 
-    if (!rtos[dev].isr_semaphore_handle) {
-        if (!(rtos[dev].isr_semaphore_handle = xSemaphoreCreateCounting(UINT32_MAX, 0))) {
-            cc_dbg("[%u] error: semaphore create failed", dev);
+    if (!rtos[dev].isr_queue_handle) {
+        rtos[dev].port_mask = 0;
+
+        if (!(rtos[dev].isr_queue_handle = xQueueCreate(4, sizeof(isr_queue_t)))) {
+            cc_dbg("[%u] error: queue create failed", dev);
             return false;
         }
     }
@@ -75,7 +71,7 @@ bool cc_isr_init(cc_dev_t dev)
             cc_dbg("[%u] error: task create failed", dev);
             return false;
         }
-    }*/
+    }
 
     /*rtc_config_t rtc_config;
     RTC_GetDefaultConfig(&rtc_config);
@@ -95,6 +91,10 @@ enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t is
     isr_map[dev][pin] = isr;
 
     if (edge != ISR_EDGE_SETUP) {
+        // TODO: Maybe start task here on-demand
+
+        rtos[dev].port_mask |= SYS_PORT_MASK(cfg->port);
+
         const port_pin_config_t port_pin_config = {
                 kPORT_PullDown,
                 kPORT_SlowSlewRate,
@@ -105,13 +105,10 @@ enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t is
                 kPORT_UnlockRegister,
         };
 
-        //port_isr_mask |= (1u << cfg->pin);
         PORT_SetPinConfig(SYS_PORT_PORTN(cfg->port), cfg->pin, &port_pin_config);
         PORT_SetPinInterruptConfig(SYS_PORT_PORTN(cfg->port), cfg->pin, EDGE_MAP[edge]);
 
-//#if defined(configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY)
-        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), 1/*configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY-*//*CC_NUM_DEVICES+dev*/);
-//#endif
+        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY+1);
 
         EnableIRQ(SYS_PORT_IRQN(cfg->port));
 
@@ -157,37 +154,52 @@ static inline const isr_config_t *const get_isr_config(cc_dev_t dev, enum isr_pi
     return cfg;
 }
 
-/*static void isr_task(void *param)
+static void isr_task(void *param)
 {
     const cc_dev_t dev = (cc_dev_t)param; assert(CC_DEV_VALID(dev));
     const isr_config_t *const isrs = cc_interface[dev].isr; assert(isrs);
     const isr_t *const maps = isr_map[dev]; assert(maps);
-    const xSemaphoreHandle sem = rtos[dev].isr_semaphore_handle; assert(sem);
+    const xQueueHandle queue = rtos[dev].isr_queue_handle; assert(queue);
 
-    u32 flags;
+    isr_queue_t evt;
 
     while (1) {
-        //if (xSemaphoreTake(sem, portMAX_DELAY) != pdTRUE) continue;
-        while (isr_handle_count == port_isr_count) { asm("nop"); }
-        flags = port_isr_flags;
-        ++isr_handle_count;
-        //port_isr_flags &= ~flags;
+        if (xQueueReceive(queue, &evt, portMAX_DELAY) != pdTRUE) continue;
 
         for (u8 i = 0; i < ISR_PIN_COUNT; ++i) {
-            const u32 pf = 1u << isrs[i].pin;
-            if (flags & pf) {
-                flags &= ~pf;
-                if (maps[i]) maps[i](dev);
+            if (evt.port == isrs[i].port) {
+                const u32 pf = 1u << isrs[i].pin;
+                if (evt.flag & pf) {
+                    evt.flag &= ~pf;
+                    if (maps[i]) maps[i](dev);
+                }
             }
         }
 
-        if (flags) {
-            cc_dbg("[%u] unhandled: flags=0x%08X", dev, flags);
+        if (evt.flag) {
+            cc_dbg("[%u] unhandled: port=%u flag=0x%08X", dev, evt.port, evt.flag);
         }
     }
-}*/
+}
 
-static inline void isr_common(sys_port_t port, u32 flags/*GPIO_Type *gpio*/);
+static inline void isr_common(sys_port_t port, u32 flag)
+{
+    BaseType_t xHigherPriorityTaskWoken, xHigherPriorityTaskWokenAll = pdFALSE;
+
+    const isr_queue_t evt = {
+            .port = port,
+            .flag = flag
+    };
+
+    for (cc_dev_t dev = CC_DEV_MIN; dev <= CC_DEV_MAX; ++dev) {
+        if (rtos[dev].port_mask & SYS_PORT_MASK(port)) {
+            xQueueSendFromISR(rtos[dev].isr_queue_handle, &evt, &xHigherPriorityTaskWoken);
+            xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+        }
+    }
+
+    portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll);
+}
 
 #ifdef ISR_KINETIS_HAVE_PORTA
 PORT_IRQ_HANDLER(A)
@@ -208,85 +220,3 @@ PORT_IRQ_HANDLER(D)
 #ifdef ISR_KINETIS_HAVE_PORTE
 PORT_IRQ_HANDLER(E)
 #endif
-
-void isr_task(void)
-{
-    #ifdef ISR_KINETIS_HAVE_PORTA
-        PORT_ISR_TASK(A)
-    #endif
-    #ifdef ISR_KINETIS_HAVE_PORTB
-        PORT_ISR_TASK(B)
-    #endif
-    #ifdef ISR_KINETIS_HAVE_PORTC
-        PORT_ISR_TASK(C)
-    #endif
-    #ifdef ISR_KINETIS_HAVE_PORTD
-        PORT_ISR_TASK(D)
-    #endif
-    #ifdef ISR_KINETIS_HAVE_PORTE
-        PORT_ISR_TASK(E)
-    #endif
-}
-
-static inline void isr_common(sys_port_t port, u32 flags/*GPIO_Type *gpio*/)
-{
-    /*bool need_context_switch = false;
-    BaseType_t xHigherPriorityTaskWoken;
-
-    const isr_queue_item_t evt = { port, GPIO_GetPinsInterruptFlags(gpio) };
-
-    for (cc_dev_t dev = 0; dev < CC_NUM_DEVICES; ++dev) {
-        const interface_t *const iface = &cc_interface[dev];
-
-        for (u8 i = 0; i < ISR_PIN_COUNT; ++i) {
-            const isr_config_t *const cfg = &iface->isr[i];
-
-            if (port == cfg->port) {
-                const u32 pin_flag = 1u << cfg->pin;
-
-                if (evt.flag & pin_flag) {
-                    xQueueSendFromISR(rtos[dev].isr_queue_handle, &evt, &xHigherPriorityTaskWoken);
-                    need_context_switch |= xHigherPriorityTaskWoken == pdTRUE;
-                    break;
-                }
-            }
-        }
-    }
-
-    GPIO_ClearPinsInterruptFlags(gpio, evt.flag);
-
-    if (need_context_switch) taskYIELD(); // portEND_SWITCHING_ISR()?? */
-
-    /*const u32 flags = GPIO_GetPinsInterruptFlags(gpio) & port_isr_mask;
-
-    if (flags) {
-        GPIO_ClearPinsInterruptFlags(gpio, flags);
-        ++port_isr_count;
-        port_isr_flags |= flags;
-        //BaseType_t xHigherPriorityTaskWoken;
-        //xSemaphoreGiveFromISR(rtos[0].isr_semaphore_handle, &xHigherPriorityTaskWoken);
-        //portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
-
-    }*/
-
-    //const u32 flags = GPIO_GetPinsInterruptFlags(gpio);
-
-    for (cc_dev_t dev = CC_DEV_MIN; dev <= CC_DEV_MAX; ++dev) {
-        const interface_t *const iface = &cc_interface[dev];
-
-        for (u8 i = 0; i < ISR_PIN_COUNT; ++i) {
-            const isr_config_t *const cfg = &iface->isr[i];
-
-            if (port == cfg->port) {
-                const u32 pin_flag = 1u << cfg->pin;
-
-                if (flags & pin_flag) {
-                    //GPIO_ClearPinsInterruptFlags(gpio, pin_flag);
-                    if (isr_map[dev][i]) isr_map[dev][i](dev);
-                    return;
-                }
-            }
-        }
-    }
-}
-

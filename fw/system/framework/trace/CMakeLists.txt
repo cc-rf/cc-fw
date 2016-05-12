@@ -2,7 +2,7 @@ set(NAME fw_system_framework_trace)
 
 add_library(
         ${NAME} STATIC
-        uart.c
+        freertos/uart.c
 )
 
 target_include_directories(

@@ -47,6 +47,7 @@
 #define SYS_PORT_PORTN(SYS_PORT)    ((PORT_Type*[])PORT_BASE_PTRS)[(SYS_PORT)-1]
 #define SYS_PORT_GPION(SYS_PORT)    ((GPIO_Type*[])GPIO_BASE_PTRS)[(SYS_PORT)-1]
 #define SYS_PORT_IRQN(SYS_PORT)     (((IRQn_Type[])PORT_IRQS)[(SYS_PORT)-1])
+#define SYS_PORT_MASK(SYS_PORT)     ((u8)1<<((SYS_PORT)-1))
 
 typedef enum {
     SYS_PORT_NONE,
@@ -54,7 +55,7 @@ typedef enum {
     SYS_PORT_B,
     SYS_PORT_C,
     SYS_PORT_D,
-    SYS_PORT_E,
+    SYS_PORT_E
 } sys_port_t;
 
 typedef struct {

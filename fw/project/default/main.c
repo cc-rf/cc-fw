@@ -85,6 +85,7 @@ mac_cfg_t cc_mac_cfg = {
 #include <uart.h>
 #include <fsl_uart.h>
 #include <fsl_dma_manager.h>
+#include <malloc.h>
 
 pit_t xsec_timer_lo, xsec_timer, wdog_timer;
 
@@ -130,43 +131,9 @@ int main(void)
     pit_start(xsec_timer);
     pit_start(xsec_timer_lo);
 
-    /*u8 chr;
-    while (1) {
-        uart_read(&chr, 1);
-        itm_write(0, &chr, 1);
-        LED_C_TOGGLE();
-    }
-    goto done;*/
+    if (xTaskCreate(main_task, "main_task", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH, NULL) != pdPASS) goto done;
 
-    /*char buf[42] = "hello\n";
-    char rx[100];
-    size_t len;
-
-    uart_init();
-    LED_ABCD_ALL_OFF();
-    pit_tick_t xsec0, xsec1;
-
-    while (1) {
-        LED_B_TOGGLE();
-        xsec0 = pit_get_elapsed(xsec_timer);
-        uart_puts(buf);
-        while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 500000);
-        LED_A_TOGGLE();
-
-        if ((len = uart_gets(rx, 100))) {
-            LED_C_TOGGLE();
-            itm_puts(0, rx);
-            //uart_puts(buf);
-        } else {
-            LED_D_TOGGLE();
-        }
-    }*/
-
-    main_task(NULL);
-
-    //if (xTaskCreate(main_task, "main_task", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH, NULL) != pdPASS) goto done;
-
-    //vTaskStartScheduler();
+    vTaskStartScheduler();
 
     done:
 
@@ -200,20 +167,7 @@ static void main_task(void *param)
     (void)param;
     LED_ABCD_ALL_OFF();
 
-    //vcom_init();
-
     printf("<main task>\r\n");
-
-
-    /*
-    u8 freq2 = cc_get(CC1200_FREQ2);
-    printf("freq2=%u\r\n", freq2);
-    freq2 = 0x5C;
-    cc_set(CC1200_FREQ2, freq2);
-    freq2 = cc_get(CC1200_FREQ2);
-    printf("freq2=%u\r\n", freq2);
-    goto done;
-     */
 
     if (!mac_init(&cc_mac_cfg)) {
         goto done;
@@ -224,7 +178,7 @@ static void main_task(void *param)
     u32 xsec0, xsec1;
 
     struct packet tx_data = {
-            .id = 1,
+            .id = 2,
             .seq = 0,
             .filler = "ABCDEFGHIJKLMNOPQRSTUVW"
     };
@@ -239,8 +193,9 @@ static void main_task(void *param)
         mac_tx((u8 *)&tx_data, sizeof(tx_data));
         //printf("tx: chan=%u,%u duration=%luus count=%lu\r\n", chan, chan_cur_id, xsec, tx_data.seq);
         if (!(++tx_data.seq % 10)) LED_B_TOGGLE();
-        while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 8333) mac_task();
-        //vTaskDelay((8 - (xsec > 8000 ? 8000 : xsec)/1000) / portTICK_PERIOD_MS);
+        //while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 8333) mac_task();
+        xsec1 = pit_get_elapsed(xsec_timer) - xsec0;
+        vTaskDelay((8 - (xsec1 > 8000 ? 8000 : xsec1)/1000) / portTICK_PERIOD_MS);
     }
 
 #elif MODE == MODE_RX
@@ -249,7 +204,22 @@ static void main_task(void *param)
 
     mac_rx_enable();
 
-    while (1) mac_task();
+    size_t len;
+    u8 *buf;
+
+    while (1) {
+        if (!(len = uart_read_frame(&buf))) {
+            printf("uart rx: empty\n");
+            continue;
+        }
+
+        printf("uart rx frame: len=%u\n", len);
+
+        mac_tx_begin();
+        mac_tx(buf, len);
+        mac_tx_end();
+        free(buf);
+    }
 
 #elif MODE == MODE_TX + MODE_RX
 
@@ -289,9 +259,6 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
 
     ++pkt_count[dev];
 
-    //printf(".");
-    //if (!(pkt_total % 60)) printf("\n");
-
     if (!(pkt_count[dev] % 120)) {
         pkt_tmr_1[dev] = pit_get_elapsed(xsec_timer);
         u32 div = ((pkt_tmr_1[dev] - pkt_tmr_0[dev]) + (1000000>>1)) / 1000000;
@@ -307,25 +274,7 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
         if (!(pkt_count[dev] % 12)) LED_B_TOGGLE();
     }
 
-    //uart_puts("hello");
     uart_write(buf, len);
-
-    /*struct packet *const rx_data = (struct packet *)buf;
-
-    if (len == sizeof(struct packet) && rx_data->id == 1) {
-        if (!rx_count[0]++) LED_A_TOGGLE();
-        else if (rx_count[0] >= 10) rx_count[0] = 0;
-    } else {
-        if (!rx_count[1]++) LED_B_TOGGLE();
-        else if (rx_count[1] >= 10) rx_count[1] = 0;
-    }*/
-
-    //rx_data->filler[23] = 0;
-    //printf("rx: id=%u seq=%lufiller=%s\n", rx_data->id, rx_data->seq, rx_data->filler);
-    //uart_puts(rx_data->filler);
-    //uart_write(buf, len);
-    //LED_A_TOGGLE();
-    //printf("rx: len=%u\n", len);
 }
 
 

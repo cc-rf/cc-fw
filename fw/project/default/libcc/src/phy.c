@@ -14,6 +14,7 @@
 #include <task.h>
 #include <portmacro.h>
 #include <itm.h>
+#include <semphr.h>
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -61,6 +62,7 @@ static struct {
     volatile u8 cca_saved_rx_time;
     phy_cfg_t phy_cfg;
     pit_tick_t rx_tick;
+    xSemaphoreHandle tx_sem;
 
 } phy[CC_NUM_DEVICES];
 
@@ -74,6 +76,7 @@ bool phy_init(cc_dev_t dev, phy_cfg_t *cfg)
     phy[dev].phy_cfg = *cfg;
     phy[dev].rx_enabled = false;
     phy[dev].tx_completion_status = 0;
+    phy[dev].tx_sem = xSemaphoreCreateCounting(UINT32_MAX, 0); assert(phy[dev].tx_sem != NULL);
     cc_spi_init(dev);
     if (!cc_isr_init(dev)) return false;
     if (!phy_setup(dev)) return false;
@@ -114,8 +117,6 @@ static bool phy_setup(cc_dev_t dev)
 
 void phy_task(void)
 {
-    isr_task();
-
     for (cc_dev_t dev = CC_DEV_MIN; dev <= CC_DEV_MAX; ++dev)
         phy_rx_tmr_check(dev);
 }
@@ -148,6 +149,7 @@ static void isr_mcu_wake(cc_dev_t dev)
         case CC1200_MARC_STATUS1_TX_FIFO_UNDERFLOW:
             if (phy[dev].tx_completion_status == 0xFF) {
                 phy[dev].tx_completion_status = ms1;
+                xSemaphoreGive(phy[dev].tx_sem);
             }
 
             if (phy[dev].phy_cfg.signal) phy[dev].phy_cfg.signal(dev, ms1, NULL);
@@ -376,13 +378,9 @@ void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
     cc_dbg_v("[%u] STX", dev);
     cc_strobe(dev, CC1200_STX);
 
-    do {
-        //taskYIELD();
-        //vTaskDelay(1);
-        //phy_task();
-        __WFI();
-    } while ((reg = phy[dev].tx_completion_status) == 0xFF);
+    while (xSemaphoreTake(phy[dev].tx_sem, portMAX_DELAY) != pdTRUE);
 
+    reg = phy[dev].tx_completion_status;
     phy[dev].tx_completion_status = 0;
 
     cc_dbg_v("[%u] tx_completion_status=0x%02X", dev, reg);

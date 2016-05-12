@@ -6,8 +6,8 @@ add_library(
         libcc/src/io.c
         libcc/src/interface/kinetis/amp.c
         libcc/src/interface/kinetis/kinetis.c
-        libcc/src/interface/kinetis/spi.c
-        libcc/src/interface/kinetis/isr.c
+        libcc/src/interface/kinetis/freertos/spi.c
+        libcc/src/interface/kinetis/freertos/isr.c
         libcc/src/interface/kinetis/pit.c
         libcc/src/chan.c
         libcc/src/freq.c

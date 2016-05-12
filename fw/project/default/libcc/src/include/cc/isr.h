@@ -25,6 +25,5 @@ enum __packed isr_edge {
 typedef void (* isr_t)(cc_dev_t dev);
 
 bool cc_isr_init(cc_dev_t dev);
-void isr_task(void);
 enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t isr);
 bool cc_isr_state(cc_dev_t dev, enum isr_pin pin);

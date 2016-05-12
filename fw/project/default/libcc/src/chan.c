@@ -24,15 +24,14 @@ void chan_grp_init(chan_grp_t *grp)
     chan_inf_t chan_temp;
     chan_t rnd;
 
-    //cc_set(grp->dev, CC1200_RNDGEN, CC1200_RNDGEN_EN);
     RNGA_Init(RNG);
 
-    for (chan_t c = 0; c < grp->size; ++c) {
-        //while (c == (rnd = (cc_get(grp->dev, CC1200_RNDGEN) & CC1200_RNDGEN_VALUE_M) % grp->size));
+    // NOTE: Channel 0 keeps its index.
+    for (chan_t c = 1; c < grp->size; ++c) {
         do {
             RNGA_GetRandomData(RNG, (void *)&rnd, 1);
             rnd %= grp->size;
-        } while (rnd == c);
+        } while (!rnd || rnd == c);
 
         chan_temp = grp->chan[c];
         grp->chan[c] = grp->chan[rnd];
