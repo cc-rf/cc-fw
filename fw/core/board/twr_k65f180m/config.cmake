@@ -1,1 +1,0 @@
-set(FW_CPU_NAME mk65f18 CACHE STRING "Firmware CPU")

@@ -3,16 +3,6 @@ set(NAME fw_project_default)
 add_library(
         ${NAME} STATIC
         main.c
-        libcc/src/io.c
-        libcc/src/interface/kinetis/amp.c
-        libcc/src/interface/kinetis/kinetis.c
-        libcc/src/interface/kinetis/freertos/spi.c
-        libcc/src/interface/kinetis/freertos/isr.c
-        libcc/src/interface/kinetis/pit.c
-        libcc/src/chan.c
-        libcc/src/freq.c
-        libcc/src/phy.c
-        libcc/src/mac.c
         usb/usb_device_cdc_acm.c
         usb/usb_device_ch9.c
         usb/usb_device_class.c
@@ -25,19 +15,23 @@ add_library(
 target_include_directories(
         ${NAME}
         PUBLIC include
-        PUBLIC libcc/include
-        #PRIVATE
-        libcc/src/include
-        usb/include
+        PUBLIC usb/include
 )
 
 target_link_libraries(
         ${NAME}
-        PUBLIC fw_core_board
-        PUBLIC fw_core_freertos
-        PUBLIC fw_core_middleware_usb
-        PUBLIC fw_core_middleware_usb_phy
-        PUBLIC fw_core_middleware_usb_device
-        PUBLIC fw_core_middleware_dma_manager
+        PUBLIC fw_board
+        PUBLIC kinetis_freertos
+        PUBLIC kinetis_middleware_usb
+        PUBLIC kinetis_middleware_usb_phy
+        PUBLIC kinetis_middleware_usb_device
+        PUBLIC kinetis_middleware_dma_manager
         PUBLIC fw_system_framework_trace
+        PUBLIC libcc
 )
+
+add_library(kinetis_freertos_config INTERFACE)
+target_include_directories(kinetis_freertos_config INTERFACE include)
+
+add_library(kinetis_middleware_usb_config INTERFACE)
+target_include_directories(kinetis_middleware_usb_config INTERFACE usb/include)

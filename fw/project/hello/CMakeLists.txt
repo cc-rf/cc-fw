@@ -14,6 +14,6 @@ target_include_directories(
 
 target_link_libraries(
         ${NAME}
-        PUBLIC fw_core_board
-        PUBLIC fw_core_freertos
+        PUBLIC fw_board
+        PUBLIC kinetis_freertos
 )

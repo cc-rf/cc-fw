@@ -1,1 +1,1 @@
-set(FW_PROJECT_NAME default CACHE STRING "Firmware project name")
+set(CONFIG_FW_PROJECT "default" CACHE STRING "Target Firmware Project (fw)")

@@ -6,6 +6,7 @@
     <libraryRoots />
     <excludeRoots>
       <file path="$PROJECT_DIR$/build" />
+      <file path="$PROJECT_DIR$/fw_old" />
       <file path="$PROJECT_DIR$/tmp" />
     </excludeRoots>
   </component>

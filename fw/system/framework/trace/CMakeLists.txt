@@ -13,6 +13,8 @@ target_include_directories(
 target_link_libraries(
         ${NAME}
         PUBLIC fw_system_common
-        PUBLIC fw_core_cmsis
-        PUBLIC fw_project
+        PUBLIC kinetis_sdk
+        PUBLIC kinetis_sdk_driver
+        PUBLIC kinetis_freertos
+        PUBLIC kinetis_middleware_dma_manager
 )
