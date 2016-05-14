@@ -5,6 +5,8 @@
       <sourceFolder url="file://$MODULE_DIR$/etc/cmake/armgcc.cmake" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/etc/cmake/util.cmake" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/lib/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/lib/usr/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/project/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/usb_device_class.c" isTestSource="false" />
@@ -16,6 +18,11 @@
       <sourceFolder url="file://$MODULE_DIR$/fw/project/default/main.c" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/project/default/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/fw.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/framework/trace/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/util/uart/uart.h" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/util/uart/uart.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/util/uart/CMakeLists.txt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/system/util/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/system/lib/libcc/src/sys/kinetis/kinetis.c" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/system/lib/libcc/src/sys/kinetis/isr.c" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/system/lib/libcc/src/sys/kinetis/CMakeLists.txt" isTestSource="false" />
@@ -30,9 +37,6 @@
       <sourceFolder url="file://$MODULE_DIR$/fw/system/lib/libcc/src/phy.c" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/system/lib/libcc/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/system/lib/CMakeLists.txt" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/fw/system/common/CMakeLists.txt" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/fw/system/framework/trace/freertos/uart.c" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/fw/system/framework/trace/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/system/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/config.cmake" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/board/cloudchaser/CMakeLists.txt" isTestSource="false" />

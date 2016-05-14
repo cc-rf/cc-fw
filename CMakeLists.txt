@@ -15,4 +15,5 @@ endif()
 include(util)
 
 include(fw/config.cmake)
-add_subdirectory("fw")
+add_subdirectory(fw)
+add_subdirectory(lib)

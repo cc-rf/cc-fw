@@ -1,4 +1,4 @@
-set(NAME fw_system_common)
+set(NAME usr)
 
 add_library(
         ${NAME} INTERFACE

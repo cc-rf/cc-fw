@@ -23,6 +23,7 @@ target_include_directories(
 
 target_link_libraries(
         ${NAME}
+        PUBLIC usr
         PUBLIC libcc_${CONFIG_LIBCC_PLATFORM}
 )
 

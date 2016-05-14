@@ -1,0 +1,178 @@
+#include "uart.h"
+
+
+void uart_cb(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData);
+
+
+uart_t uart_init(const uart_id_t id, const baud_t baud)
+{
+    assert(id < SYSTEM_UART_COUNT);
+
+    uart_t const uart = uart_mem_alloc();
+
+    assert(uart);
+    assert(SYSTEM_UART_TX_DMA_REQ_SRCS[id] != kDmaRequestMux0Disable);
+    assert(SYSTEM_UART_RX_DMA_REQ_SRCS[id] != kDmaRequestMux0Disable);
+
+    uart->base = SYSTEM_UARTS[id];
+
+    uart_config_t config;
+    UART_GetDefaultConfig(&config);
+    config.baudRate_Bps = baud;
+    config.enableRx = true;
+    config.enableTx = true;
+
+
+    UART_Init(uart->base, &config, CLOCK_GetFreq(SYSTEM_UART_CLOCK_SRCS[id]));
+
+    uart->rx_mtx = xSemaphoreCreateMutex(); assert(uart->rx_mtx);
+    uart->rx_sem = xSemaphoreCreateBinary(); assert(uart->rx_sem);
+    uart->tx_sem = xSemaphoreCreateBinary(); assert(uart->tx_sem);
+    xSemaphoreGive(uart->tx_sem);
+
+    status_t status;
+
+    DMAMGR_Init();
+
+    status = DMAMGR_RequestChannel(SYSTEM_UART_TX_DMA_REQ_SRCS[id], DMAMGR_DYNAMIC_ALLOCATE, &uart->tx_handle);
+    assert(status == kStatus_Success);
+
+    status = DMAMGR_RequestChannel(SYSTEM_UART_RX_DMA_REQ_SRCS[id], DMAMGR_DYNAMIC_ALLOCATE, &uart->rx_handle);
+    assert(status == kStatus_Success);
+
+    NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[uart->tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+    NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[uart->rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+
+    UART_TransferCreateHandleEDMA(
+            uart->base, &uart->edma_handle, uart_cb, uart,
+            &uart->tx_handle, &uart->rx_handle
+    );
+
+    return uart;
+}
+
+void uart_free(uart_t const uart)
+{
+    if (uart->base) {
+        DMAMGR_ReleaseChannel(&uart->rx_handle);
+        DMAMGR_ReleaseChannel(&uart->tx_handle);
+        vSemaphoreDelete(uart->rx_mtx);
+        vSemaphoreDelete(uart->rx_sem);
+        vSemaphoreDelete(uart->tx_sem);
+        UART_Deinit(uart->base);
+        uart->base = NULL;
+    }
+
+    return uart_mem_free(uart);
+}
+
+void uart_write(uart_t const uart, const u8 *buf, size_t len)
+{
+    uart_transfer_t xfer = {
+            .data = malloc(len),
+            .dataSize = len
+    };
+
+    assert(xfer.data);
+    memcpy(xfer.data, (void *)buf, len);
+
+    xSemaphoreTake(uart->tx_sem, portMAX_DELAY);
+    uart->tx_buf = xfer.data;
+    UART_SendEDMA(uart->base, &uart->edma_handle, &xfer);
+}
+
+void uart_read(uart_t const uart, u8 *buf, size_t len)
+{
+    uart_transfer_t xfer = {
+            .data = buf,
+            .dataSize = len
+    };
+
+    xSemaphoreTake(uart->rx_mtx, portMAX_DELAY);
+    uart->rx_pending = true;
+    UART_ReceiveEDMA(uart->base, &uart->edma_handle, &xfer);
+    xSemaphoreTake(uart->rx_sem, portMAX_DELAY);
+    xSemaphoreGive(uart->rx_mtx);
+}
+
+size_t uart_read_frame(uart_t const uart, u8 **buf)
+{
+    assert(buf);
+
+    u8 len = 0;
+
+    uart_read(uart, &len, 1);
+
+    if (!len) {
+        *buf = NULL;
+    } else {
+        *buf = malloc(len);
+        assert(*buf);
+        uart_read(uart, *buf, len);
+    }
+
+    return len;
+}
+
+void uart_puts(uart_t const uart, const char *str)
+{
+    uart_write(uart, (u8 *)str, strlen(str)+1);
+}
+
+void uart_putch(uart_t const uart, const char ch)
+{
+    uart_write(uart, (const u8 *)&ch, 1);
+}
+
+size_t uart_gets(uart_t const uart, char *str, size_t len)
+{
+    size_t count = 0;
+
+    /*while (len-- && !UART_ReadBlocking(TRACE_UART, (u8*)str++, 1) && str[count])
+        ++count;*/
+
+    while (len--) {
+        uart_read(uart, (u8 *)str, 1);
+        if (!*str++) break;
+        count++;
+    }
+
+    return count;
+}
+
+void uart_getch(uart_t const uart, char *ch)
+{
+    uart_read(uart, (u8 *)ch, 1);
+}
+
+void uart_cb(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData)
+{
+    uart_t const uart = (uart_t)userData;
+
+    if (uart && uart->base) {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+        switch (status) {
+            case kStatus_UART_TxIdle:
+                if (uart->tx_buf) {
+                    free((void *) uart->tx_buf);
+                    uart->tx_buf = NULL;
+                    xSemaphoreGiveFromISR(uart->tx_sem, &xHigherPriorityTaskWoken);
+                }
+                break;
+
+            case kStatus_UART_RxIdle:
+                if (uart->rx_pending) {
+                    uart->rx_pending = false;
+                    xSemaphoreGiveFromISR(uart->rx_sem, &xHigherPriorityTaskWoken);
+                }
+                break;
+
+            default:
+                assert(status && !status);
+                break;
+        }
+
+        portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
+    }
+}

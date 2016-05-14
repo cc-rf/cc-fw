@@ -44,6 +44,9 @@
  * Variables
  ******************************************************************************/
 
+/* Phillip: only init once (TODO: Add the init for this somewhere globally so it happens once automatically?) */
+static bool s_DMAMGR_Initialized = false;
+
 /*! @brief Variable to store dma manager state. */
 static uint32_t s_DMAMGR_Channels;
 
@@ -60,6 +63,11 @@ static DMAMUX_Type *const s_dmamuxBase[] = DMAMUX_BASE_PTRS;
 
 void DMAMGR_Init(void)
 {
+    if (s_DMAMGR_Initialized)
+        return;
+
+    s_DMAMGR_Initialized = true;
+
     uint32_t i;
 
     /* Reset the dma manager channels */

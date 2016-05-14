@@ -1,6 +1,6 @@
 #pragma once
 
-#include <type.h>
+#include <usr/type.h>
 #include <itm.h>
 #include <semi.h>
 #include <uart.h>

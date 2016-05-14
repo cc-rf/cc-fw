@@ -11,7 +11,6 @@
 #include "queue.h"
 #include "timers.h"
 
-
 #include <cc/spi.h>
 #include <cc/io.h>
 #include <cc/phy.h>
@@ -49,9 +48,7 @@ mac_cfg_t cc_mac_cfg = {
 #define MODE        MODE_RX
 
 #include <itm.h>
-#include <uart.h>
-#include <fsl_uart.h>
-#include <fsl_dma_manager.h>
+#include <util/uart.h>
 #include <malloc.h>
 
 pit_t xsec_timer_lo, xsec_timer, wdog_timer;
@@ -61,10 +58,8 @@ int main(void)
     BOARD_InitPins();
     LED_ABCD_ALL_ON();
     BOARD_BootClockOCHSRUN();
-    DMAMGR_Init();
     BOARD_InitDebugConsole();
     itm_init();
-    uart_init();
     printf("<boot>\r\n");
 
 
@@ -129,12 +124,16 @@ struct packet {
     char filler[24];
 };
 
+static uart_t uart;
+
 static void main_task(void *param)
 {
     (void)param;
     LED_ABCD_ALL_OFF();
 
     printf("<main task>\r\n");
+
+    uart = uart_init(0, 230400);
 
     if (!mac_init(&cc_mac_cfg)) {
         goto done;
@@ -175,7 +174,7 @@ static void main_task(void *param)
     u8 *buf;
 
     while (1) {
-        if (!(len = uart_read_frame(&buf))) {
+        if (!(len = uart_read_frame(uart, &buf))) {
             printf("uart rx: empty\n");
             continue;
         }
@@ -241,7 +240,7 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
         if (!(pkt_count[dev] % 12)) LED_B_TOGGLE();
     }
 
-    uart_write(buf, len);
+    uart_write(uart, buf, len);
 }
 
 

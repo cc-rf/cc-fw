@@ -1,20 +1,19 @@
 set(NAME fw_system_framework_trace)
 
 add_library(
-        ${NAME} STATIC
-        freertos/uart.c
+        ${NAME} INTERFACE
 )
 
 target_include_directories(
         ${NAME}
-        PUBLIC include
+        INTERFACE include
 )
 
 target_link_libraries(
         ${NAME}
-        PUBLIC fw_system_common
-        PUBLIC kinetis_sdk
-        PUBLIC kinetis_sdk_driver
-        PUBLIC kinetis_freertos
-        PUBLIC kinetis_middleware_dma_manager
+        INTERFACE usr
+        INTERFACE kinetis_sdk
+        INTERFACE kinetis_sdk_driver
+        INTERFACE kinetis_freertos
+        INTERFACE kinetis_middleware_dma_manager
 )
