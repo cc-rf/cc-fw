@@ -1,7 +1,7 @@
 #include "uart.h"
 
 
-void uart_cb(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData);
+static void uart_dma_callback(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData);
 
 
 uart_t uart_init(const uart_id_t id, const baud_t baud)
@@ -44,7 +44,7 @@ uart_t uart_init(const uart_id_t id, const baud_t baud)
     NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[uart->rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
 
     UART_TransferCreateHandleEDMA(
-            uart->base, &uart->edma_handle, uart_cb, uart,
+            uart->base, &uart->edma_handle, uart_dma_callback, uart,
             &uart->tx_handle, &uart->rx_handle
     );
 
@@ -145,7 +145,7 @@ void uart_getch(uart_t const uart, char *ch)
     uart_read(uart, (u8 *)ch, 1);
 }
 
-void uart_cb(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData)
+static void uart_dma_callback(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData)
 {
     uart_t const uart = (uart_t)userData;
 
