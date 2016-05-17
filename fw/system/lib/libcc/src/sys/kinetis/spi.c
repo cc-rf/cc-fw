@@ -1,29 +1,37 @@
 #include "kinetis.h"
 #include <cc/spi.h>
 
-#include <fsl_dspi_freertos.h>
-#include <malloc.h>
+#include <fsl_dspi_edma.h>
+#include <fsl_dma_manager.h>
+
+#include <FreeRTOS.h>
+#include <semphr.h>
 
 
 // TODO: see if CC1200 will accept 8-bit addresses with leading zeroes in upper 8 bits
 
-static void spi_cb(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData);
-
-static dspi_master_handle_t spi_handle[CC_NUM_DEVICES];
+static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData);
 
 static struct {
+#ifdef CC_SPI_DMA
+    dspi_master_edma_handle_t edma_handle;
+    edma_handle_t rx_handle;
+    edma_handle_t tx_handle;
+#else
+    dspi_master_handle_t master_handle;
+#endif
     xSemaphoreHandle mtx;
     xSemaphoreHandle sem;
 
-} spi_rtos[CC_NUM_DEVICES];
+} spi[CC_NUM_DEVICES];
 
 void cc_spi_init(cc_dev_t dev)
 {
     assert(CC_DEV_VALID(dev));
     const spi_config_t *const cfg = &cc_interface[dev].spi;
 
-    spi_rtos[dev].mtx = xSemaphoreCreateMutex(); assert(spi_rtos[dev].mtx != NULL);
-    spi_rtos[dev].sem = xSemaphoreCreateBinary(); assert(spi_rtos[dev].sem != NULL);
+    spi[dev].mtx = xSemaphoreCreateMutex(); assert(spi[dev].mtx != NULL);
+    spi[dev].sem = xSemaphoreCreateBinary(); assert(spi[dev].sem != NULL);
 
     dspi_master_config_t spi_config;
     DSPI_MasterGetDefaultConfig(&spi_config);
@@ -33,12 +41,46 @@ void cc_spi_init(cc_dev_t dev)
     spi_config.ctarConfig.betweenTransferDelayInNanoSec = 0;
     spi_config.ctarConfig.baudRate = 8000000;
 
-    // TODO: Make this board-specific (also decide on RTOS usage or not...)
-    //DSPI_RTOS_Init(&spi, SPI1, &spi_config, CLOCK_GetBusClkFreq());
-
     DSPI_MasterInit(cfg->spi, &spi_config, CLOCK_GetBusClkFreq());
-    DSPI_MasterTransferCreateHandle(cfg->spi, &spi_handle[dev], spi_cb, (void *)spi_rtos[dev].sem);
-    //DMAMGR_RequestChannel(UART_TX_DMA_REQUEST, UART_TX_DMA_CHANNEL, &uart_tx_handle);
+
+#ifdef CC_SPI_DMA
+    dma_request_source_t dreq_rx, dreq_tx;
+    status_t status;
+
+    DMAMGR_Init();
+
+    if      (cfg->spi == SPI0) { dreq_rx = kDmaRequestMux0SPI0Rx; dreq_tx = kDmaRequestMux0SPI0Tx; }
+    else if (cfg->spi == SPI1) { dreq_rx = kDmaRequestMux0SPI1Rx; dreq_tx = kDmaRequestMux0SPI1Tx; }
+    else if (cfg->spi == SPI2) { dreq_rx = kDmaRequestMux0SPI2Rx; dreq_tx = kDmaRequestMux0SPI2Tx; }
+#ifdef SPI3
+    else if (cfg->spi == SPI3) { dreq_rx = kDmaRequestMux0SPI3Rx; dreq_tx = kDmaRequestMux0SPI3Tx; }
+#endif
+#ifdef SPI4
+    else if (cfg->spi == SPI4) { dreq_rx = kDmaRequestMux0SPI4Rx; dreq_tx = kDmaRequestMux0SPI4Tx; }
+#endif
+#ifdef SPI5
+    else if (cfg->spi == SPI5) { dreq_rx = kDmaRequestMux0SPI5Rx; dreq_tx = kDmaRequestMux0SPI5Tx; }
+#endif
+
+    status = DMAMGR_RequestChannel(dreq_rx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].tx_handle);
+    assert(status == kStatus_Success);
+
+    status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].rx_handle);
+    assert(status == kStatus_Success);
+
+    NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+    NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+
+    DSPI_MasterTransferCreateHandleEDMA(
+            cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *)dev,
+    );
+#else
+
+#endif
+
+    DSPI_MasterTransferCreateHandle(
+            cfg->spi, &spi[dev].master_handle, spi_irq_callback, (void *) spi[dev].sem
+    );
 
     IRQn_Type irqn = NotAvail_IRQn;
 
@@ -52,7 +94,7 @@ void cc_spi_init(cc_dev_t dev)
     else if (cfg->spi == SPI4) irqn = SPI4_IRQn;
 #endif
 #ifdef SPI5
-        else if (cfg->spi == SPI5) irqn = SPI5_IRQn;
+    else if (cfg->spi == SPI5) irqn = SPI5_IRQn;
 #endif
 
     if (irqn == NotAvail_IRQn) {
@@ -115,10 +157,10 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
     cc_dbg_printf_v("tx="); print_hex(xbuf, xlen);
 #endif
 
-    while (xSemaphoreTake(spi_rtos[dev].mtx, portMAX_DELAY) != pdTRUE);
-    while (DSPI_MasterTransferNonBlocking(cfg->spi, &spi_handle[dev], &xfer) != kStatus_Success);
-    while (xSemaphoreTake(spi_rtos[dev].sem, portMAX_DELAY) != pdTRUE);
-    xSemaphoreGive(spi_rtos[dev].mtx);
+    xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
+    DSPI_MasterTransferNonBlocking(cfg->spi, &spi[dev].master_handle, &xfer);
+    xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
+    xSemaphoreGive(spi[dev].mtx);
 
     if (rx && len) {
         memcpy(rx, &xbuf[hlen], len);
@@ -128,7 +170,7 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
     return st;
 }
 
-static void spi_cb(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData)
+static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData)
 {
     BaseType_t xHigherPriorityTaskWoken;
     xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);

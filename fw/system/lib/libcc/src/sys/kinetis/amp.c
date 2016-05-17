@@ -1,6 +1,9 @@
 #include "kinetis.h"
 #include <cc/amp.h>
 
+#include <fsl_gpio.h>
+#include <fsl_port.h>
+
 #if !CC_PA_SUPPORT
 #error CC_PA_SUPPORT must be set to 1
 #endif

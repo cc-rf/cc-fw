@@ -1,11 +1,13 @@
 #include "kinetis.h"
 #include <cc/isr.h>
 
+#include <fsl_gpio.h>
+#include <fsl_port.h>
+
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
 #include <semphr.h>
-#include <fsl_rtc.h>
 
 
 #define PORT_IRQ_HANDLER(P) \

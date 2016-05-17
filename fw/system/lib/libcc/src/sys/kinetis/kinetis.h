@@ -2,9 +2,7 @@
 
 #include <cc/common.h>
 
-#include <fsl_dspi.h>
-#include <fsl_gpio.h>
-#include <fsl_port.h>
+#include <fsl_device_registers.h>
 
 #define SYS_PORT_VALID(SYS_PORT)    ( ((SYS_PORT) >= SYS_PORT_A) && ((SYS_PORT) <= SYS_PORT_E) )
 #define SYS_PORT_PORTN(SYS_PORT)    ((PORT_Type*[])PORT_BASE_PTRS)[(SYS_PORT)-1]

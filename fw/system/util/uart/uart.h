@@ -42,6 +42,8 @@ static inline void uart_mem_free(uart_t const uart);
 
 // TODO: Find a way to determine if this/any CPU has separate DMAs here (#4 has only 1, for example)
 
+// NOTE: fsl_clock.h defines UARTn_CLK_SRC
+
 #define SYSTEM_UART_CLOCK_SRCS          ((clock_name_t[]){kCLOCK_CoreSysClk,kCLOCK_CoreSysClk,kCLOCK_BusClk,kCLOCK_BusClk,kCLOCK_BusClk,kCLOCK_BusClk})
 #define SYSTEM_UART_TX_DMA_REQ_SRCS     ((dma_request_source_t[]){kDmaRequestMux0UART0Tx,kDmaRequestMux0UART1Tx,kDmaRequestMux0UART2Tx,kDmaRequestMux0UART3Tx,kDmaRequestMux0UART4})
 #define SYSTEM_UART_RX_DMA_REQ_SRCS     ((dma_request_source_t[]){kDmaRequestMux0UART0Rx,kDmaRequestMux0UART1Rx,kDmaRequestMux0UART2Rx,kDmaRequestMux0UART3Rx,kDmaRequestMux0UART4})
