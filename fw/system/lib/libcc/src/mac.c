@@ -28,18 +28,19 @@ static phy_cfg_t phy_cfg = {
 };
 
 static struct {
-    chan_inf_t *chan_cur;
-    u32 chan_cur_pkt_cnt;
+    volatile chan_t chan_cur;
+    volatile u32 chan_cur_pkt_cnt;
     u8 channel_hop_cycle;
     u32 rx_timeout;
-    bool tx_on;
-    bool tx_restart_rx;
+    volatile bool tx_on;
+    volatile bool tx_restart_rx;
 
 } mac[MAC_NUM_DEVICES];
 
 static struct {
     chan_grp_t group;
     chan_inf_t chan[MAC_NUM_CHANNELS];
+    chan_t hop_table[MAC_NUM_CHANNELS];
 
 } channels[MAC_NUM_DEVICES] = {
         {
@@ -103,18 +104,13 @@ static bool mac_setup(cc_dev_t dev)
     mac[dev].rx_timeout = 5000000;
     cc_set_rx_timeout(dev, mac[dev].rx_timeout);
 
-    chan_grp_init(&channels[dev].group);
+    chan_grp_init(&channels[dev].group, channels[dev].hop_table);
     //chan_grp_calibrate(&channels[dev].group);
-    chan_select(&channels[dev].group, 0);
-    mac[dev].chan_cur = &channels[dev].chan[0];
+    mac[dev].chan_cur = channels[dev].hop_table[0];
+    chan_select(&channels[dev].group, mac[dev].chan_cur);
     mac[dev].chan_cur_pkt_cnt = 0;
     mac[dev].channel_hop_cycle = 0;
     return true;
-}
-
-void mac_task(void)
-{
-    phy_task();
 }
 
 #include <board.h>
@@ -123,12 +119,6 @@ void mac_task(void)
 
 static inline void next_chan(cc_dev_t dev)
 {
-    if (mac[dev].tx_on) {
-        mac[dev].chan_cur = &channels[dev].chan[0];
-        chan_select(&channels[dev].group, 0);
-        return;
-    }
-
     incr:
 
     if (!mac[dev].channel_hop_cycle++) {
@@ -140,16 +130,16 @@ static inline void next_chan(cc_dev_t dev)
 
     //return;
 
-    mac[dev].chan_cur = &channels[dev].chan[mac[dev].channel_hop_cycle];
+    mac[dev].chan_cur = channels[dev].hop_table[mac[dev].channel_hop_cycle];
 
 #if MAC_NUM_DEVICES > 1
     for (u8 i = MAC_DEV_MIN; i <= MAC_DEV_MAX; ++i) {
         if (i == dev) continue;
-        if (phy_rx_enabled(i) && mac[dev].chan_cur->id == mac[i].chan_cur->id) goto incr;
+        if ((phy_rx_enabled(i) || mac[i].tx_on) && mac[dev].chan_cur == mac[i].chan_cur) goto incr;
     }
 #endif
 
-    chan_select(&channels[dev].group, mac[dev].channel_hop_cycle);
+    chan_select(&channels[dev].group, mac[dev].chan_cur);
 }
 
 //static volatile bool chan_switch_pending = false;
@@ -161,14 +151,18 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
         case CC1200_MARC_STATUS1_RX_TIMEOUT:
         case CC1200_MARC_STATUS1_RX_TERMINATION:
         case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
-            if (mac[dev].chan_cur_pkt_cnt) {
-                mac[dev].chan_cur_pkt_cnt = 0;
-                cc_set_rx_timeout(dev, mac[dev].rx_timeout);
-            }
+            if (!mac[dev].tx_on) {
+                if (mac[dev].chan_cur_pkt_cnt) {
+                    mac[dev].chan_cur_pkt_cnt = 0;
+                    cc_set_rx_timeout(dev, mac[dev].rx_timeout);
+                }
 
-            if (param) {
-                next_chan(dev);
-                *(bool *)param = true;
+                if (param) {
+                    next_chan(dev);
+                    *(bool *) param = true;
+                }
+            } else {
+                if (param) *(bool *) param = false;
             }
             break;
 
@@ -177,8 +171,11 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
                 cc_set_rx_timeout(dev, mac[dev].rx_timeout*100);
             }
 
-            if (param) *(bool *)param = true;
+            if (param) *(bool *) param = true;
             break;
+
+        default:
+            if (param) *(bool *) param = !mac[dev].tx_on;
     }
 }
 
@@ -192,19 +189,22 @@ static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len)
     //next_chan(dev);
 }
 
-void mac_tx_begin(void)
+void mac_tx_begin(chan_t chan)
 {
     const dev_t dev = MAC_DEV_MAX;
 
     mac[dev].tx_on = true;
 
-    if ((mac[dev].tx_restart_rx = phy_rx_enabled(dev))) {
+    /*if ((mac[dev].tx_restart_rx = phy_rx_enabled(dev))) {
         phy_rx_disable(dev);
-    }
+    }*/
 
     amp_ctrl(dev, AMP_HGM, true);
     amp_ctrl(dev, AMP_PA, true);
-    next_chan(dev);
+
+    cc_strobe(dev, CC1200_SIDLE);
+    mac[dev].chan_cur = chan;
+    chan_select(&channels[dev].group, chan); // NOTE: not in IDLE!
 }
 
 void mac_tx_end(void)
@@ -214,30 +214,42 @@ void mac_tx_end(void)
 
     mac[dev].tx_on = false;
 
-    if (mac[dev].tx_restart_rx) {
+    if (phy_rx_enabled(dev)) {
+        amp_ctrl(dev, AMP_LNA, true);
+    } else {
+        amp_ctrl(dev, AMP_HGM, false);
+        amp_ctrl(dev, AMP_LNA, false);
+    }
+
+    /*if (mac[dev].tx_restart_rx) {
         mac[dev].tx_restart_rx = false;
         amp_ctrl(dev, AMP_LNA, true);
         phy_rx_enable(dev);
     } else {
         amp_ctrl(dev, AMP_HGM, false);
-    }
+        amp_ctrl(dev, AMP_LNA, false);
+    }*/
 }
 
 /**
  * TODO: Collision detection, streaming, automatic TX channel selection
  */
-void mac_tx(u8 *buf, u32 len)
+void mac_tx(bool cca, u8 *buf, u32 len)
 {
-    // LNA for CCA?
     const dev_t dev = MAC_DEV_MAX;
-    phy_tx(dev, false, buf, len);
+
+    if (cca) {
+        amp_ctrl(dev, AMP_LNA, true);
+    }
+
+    phy_tx(dev, cca, buf, len);
+
     //amp_ctrl(MAC_DEVICE_TX, AMP_HGM, /*phy_rx_enabled(MAC_DEVICE_TX)*/);
     //next_chan(dev);
 }
 
 void mac_rx_enable(void)
 {
-
     for (cc_dev_t dev = MAC_DEV_MIN; dev <= MAC_DEV_MAX; ++dev) {
         amp_ctrl(dev, AMP_HGM, true);
         amp_ctrl(dev, AMP_LNA, true);

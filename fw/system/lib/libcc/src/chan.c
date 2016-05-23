@@ -8,7 +8,7 @@
 static void chan_calibrate(chan_grp_t *grp, chan_inf_t *chan);
 static void chan_set(chan_grp_t *grp, chan_inf_t *chan);
 
-void chan_grp_init(chan_grp_t *grp)
+void chan_grp_init(chan_grp_t *grp, chan_t hop_table[])
 {
     assert(grp); assert(grp->size); assert(CC_DEV_VALID(grp->dev));
 
@@ -19,23 +19,26 @@ void chan_grp_init(chan_grp_t *grp)
         grp->chan[c].id = c;
         grp->chan[c].cal.valid = false;
         grp->chan[c].freq = cc_map_freq(grp->dev, freq, &grp->chan[c].cal.reg.freq);
+        if (hop_table) hop_table[c] = c;
     }
 
-    chan_inf_t chan_temp;
-    chan_t rnd;
+    if (hop_table) {
+        chan_t chan_temp;
+        chan_t rnd;
 
-    RNGA_Init(RNG);
+        RNGA_Init(RNG);
 
-    // NOTE: Channel 0 keeps its index.
-    for (chan_t c = 1; c < grp->size; ++c) {
-        do {
-            RNGA_GetRandomData(RNG, (void *)&rnd, 1);
-            rnd %= grp->size;
-        } while (!rnd || rnd == c);
+        // NOTE: Channel 0 keeps its index.
+        for (chan_t c = 0; c < grp->size; ++c) {
+            do {
+                RNGA_GetRandomData(RNG, (void *) &rnd, 1);
+                rnd %= grp->size;
+            } while (rnd == c);
 
-        chan_temp = grp->chan[c];
-        grp->chan[c] = grp->chan[rnd];
-        grp->chan[rnd] = chan_temp;
+            chan_temp = hop_table[c];
+            hop_table[c] = hop_table[rnd];
+            hop_table[rnd] = chan_temp;
+        }
     }
 }
 

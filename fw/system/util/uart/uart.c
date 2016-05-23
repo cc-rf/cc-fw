@@ -1,4 +1,5 @@
 #include "uart.h"
+#include <stdio.h>
 
 
 static void uart_dma_callback(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData);
@@ -90,8 +91,14 @@ void uart_read(uart_t const uart, u8 *buf, size_t len)
 
     xSemaphoreTake(uart->rx_mtx, portMAX_DELAY);
     uart->rx_pending = true;
-    UART_ReceiveEDMA(uart->base, &uart->edma_handle, &xfer);
-    xSemaphoreTake(uart->rx_sem, portMAX_DELAY);
+    const status_t status = UART_ReceiveEDMA(uart->base, &uart->edma_handle, &xfer);
+
+    if (status == kStatus_Success) {
+        xSemaphoreTake(uart->rx_sem, portMAX_DELAY);
+    } else {
+        printf("[uart-rx] fail: status=%li\n", status);
+    }
+
     xSemaphoreGive(uart->rx_mtx);
 }
 
@@ -165,11 +172,13 @@ static void uart_dma_callback(UART_Type *base, uart_edma_handle_t *handle, statu
                 if (uart->rx_pending) {
                     uart->rx_pending = false;
                     xSemaphoreGiveFromISR(uart->rx_sem, &xHigherPriorityTaskWoken);
+                } else {
+                    printf("[uart] no rx pending!\n");
                 }
                 break;
 
             default:
-                assert(status && !status);
+                printf("[uart] unhandled: status=%li\n", status);
                 break;
         }
 

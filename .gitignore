@@ -5,7 +5,6 @@ pub/
 tmp/
 *.log
 out/
-etc/
 
 # https://github.com/github/gitignore/blob/master/Global/Windows.gitignore
 Thumbs.db

@@ -115,7 +115,7 @@ def parse(data):
 
 def main(args):
     tty = args[0]
-    baud = 115200
+    baud = 230400
     try:
         if len(args) > 1:
             baud = int(args[1])

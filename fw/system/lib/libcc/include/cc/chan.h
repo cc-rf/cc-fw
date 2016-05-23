@@ -37,7 +37,6 @@ typedef struct __packed {
 
 } chan_grp_t;
 
-
-void chan_grp_init(chan_grp_t *grp);
+void chan_grp_init(chan_grp_t *grp, chan_t hop_table[]);
 void chan_grp_calibrate(chan_grp_t *grp);
 void chan_select(chan_grp_t *grp, chan_t id);

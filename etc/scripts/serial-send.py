@@ -2,8 +2,6 @@
 import os
 import sys
 
-data_prev = ''
-dump_byte_width = 12
 
 def main(args):
     tty = args[0]
@@ -13,35 +11,29 @@ def main(args):
             baud = int(args[1])
 
         serial = get_serial(tty, baud)
-        read = serial.read
-        write = sys.stdout.write
-        flush = sys.stdout.flush
+        read = sys.stdin.read
+        write = serial.write
+        flush = serial.flush
 
         while True:
-            dump(read(8))
-            flush()
+            data = read(-1)
+            data_len = data_len_rem = len(data)
+            frame_count = 0
+
+            while data_len_rem:
+                xfer_length = min(data_len_rem, 255)
+                write(chr(xfer_length) + data[:xfer_length])
+                flush()
+                frame_count += 1
+                data = data[xfer_length:]
+                data_len_rem -= xfer_length
+
+            print >>sys.stderr, "write: %i bytes / %i frames" % (data_len, frame_count)
+
     except Exception, e:
         print e
     except KeyboardInterrupt:
         print
-
-
-def dump(data):
-    global data_prev
-
-    data = data_prev + data
-
-    #if len(data) < 8:
-    #    data_prev = data
-    #    return
-
-    while len(data) >= dump_byte_width:
-        line = data[:dump_byte_width]
-        data = data[dump_byte_width:]
-        print " ".join("{:02x}".format(ord(c)) for c in line), "\t",
-        print "".join(c if ord(c) in range(33, 128) else "." for c in line)
-
-    data_prev = data
 
 
 def get_serial(tty, baud):

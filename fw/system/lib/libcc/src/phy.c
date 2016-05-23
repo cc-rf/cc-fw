@@ -10,6 +10,7 @@
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include <cc/sys/kinetis/pit.h>
+#include <timers.h>
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -41,6 +42,7 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 };
 
 static bool phy_setup(cc_dev_t dev);
+static void phy_tmr(TimerHandle_t xTimer);
 static void isr_mcu_wake(cc_dev_t dev);
 static void phy_rx_tmr_kick(cc_dev_t dev);
 static void phy_rx_tmr_check(cc_dev_t dev);
@@ -107,11 +109,19 @@ static bool phy_setup(cc_dev_t dev)
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(pin), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
 
+
+    TimerHandle_t tmr = xTimerCreate("phy_tmr", 203 / portTICK_PERIOD_MS, pdTRUE, NULL, phy_tmr);
+
+    if (tmr) {
+        xTimerStart(tmr, 407 / portTICK_PERIOD_MS);
+    }
+
     return true;
 }
 
-void phy_task(void)
+static void phy_tmr(TimerHandle_t xTimer)
 {
+    (void)xTimer;
     for (cc_dev_t dev = CC_DEV_MIN; dev <= CC_DEV_MAX; ++dev)
         phy_rx_tmr_check(dev);
 }
@@ -335,7 +345,7 @@ void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
     memcpy(&pkt[1], buf, len);
 
     //cc_dbg_v("[%u] len=%lu", dev, len);
-    while ((st = cc_strobe(dev, CC1200_SNOP)) & CC1200_STATUS_CHIP_RDYn);
+    while ((st = cc_strobe(dev, CC1200_SIDLE)) & CC1200_STATUS_CHIP_RDYn);
     //cc_dbg_v("[%u] st=0x%02X", dev, st);
 
     if (st & CC1200_STATE_TXFIFO_ERROR) {
@@ -344,7 +354,7 @@ void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
     }
 
     cc_fifo_write(dev, pkt, len + 1);
-    //st = cc_strobe(dev, CC1200_SNOP);
+    st = cc_strobe(dev, CC1200_SNOP);
 
     phy[dev].tx_completion_status = 0xFF;
 
@@ -355,7 +365,7 @@ void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
         cc_dbg_v("[%u] cca begin: st=0x%02X", dev, st);
 
         if ((st & CC1200_STATUS_STATE_M) != CC1200_STATE_RX) {
-            cc_dbg_v("[%u] SRX", dev);
+            cc_dbg_v("[%u] SRX: st=0x%02X", dev, st);
             cc_strobe(dev, CC1200_SRX);
         }
 

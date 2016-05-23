@@ -19,6 +19,7 @@
 #include <cc/isr.h>
 #include <cc/tmr.h>
 #include <cc/mac.h>
+#include <cc/chan.h>
 #include <core_cm4.h>
 #include <cc/sys/kinetis/pit.h>
 
@@ -37,6 +38,7 @@
 extern void vcom_init(void);
 
 static void main_task(void *param);
+static void input_task(void *param);
 static void mac_rx(cc_dev_t dev, u8 *buf, u8 len);
 
 mac_cfg_t cc_mac_cfg = {
@@ -93,7 +95,7 @@ int main(void)
     pit_start(xsec_timer);
     pit_start(xsec_timer_lo);
 
-    if (xTaskCreate(main_task, "main_task", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH, NULL) != pdPASS) goto done;
+    if (xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL) != pdPASS) goto done;
 
     vTaskStartScheduler();
 
@@ -126,6 +128,25 @@ struct packet {
 
 static uart_t uart;
 
+typedef struct __packed uart_frame {
+    size_t len;
+    u8 *data;
+    
+} uart_frame_t;
+
+typedef struct __packed ucmd_hdr {
+    u8 cmd;
+
+} ucmd_hdr_t;
+
+typedef struct __packed ucmd_tx {
+    ucmd_hdr_t hdr;  /* cmd == 0x11 */
+    u8 flags;
+    u8 channel;
+    u8 data[];
+
+} ucmd_tx_t;
+
 static void main_task(void *param)
 {
     (void)param;
@@ -134,6 +155,13 @@ static void main_task(void *param)
     printf("<main task>\r\n");
 
     uart = uart_init(0, 230400);
+
+    xQueueHandle input_queue = xQueueCreate(128, sizeof(uart_frame_t));
+    
+    if (!input_queue) goto done;
+    
+    if (xTaskCreate(input_task, "input", TASK_STACK_SIZE_DEFAULT, (void *)input_queue, TASK_PRIO_HIGH, NULL) != pdPASS) goto done;
+
 
     if (!mac_init(&cc_mac_cfg)) {
         goto done;
@@ -170,21 +198,15 @@ static void main_task(void *param)
 
     mac_rx_enable();
 
-    size_t len;
-    u8 *buf;
+    uart_frame_t frame;
 
     while (1) {
-        if (!(len = uart_read_frame(uart, &buf))) {
+        if (!(frame.len = uart_read_frame(uart, &frame.data))) {
             printf("uart rx: empty\n");
             continue;
         }
 
-        printf("uart rx frame: len=%u\n", len);
-
-        mac_tx_begin();
-        mac_tx(buf, len);
-        mac_tx_end();
-        free(buf);
+        xQueueSend(input_queue, &frame, 0);
     }
 
 #elif MODE == MODE_TX + MODE_RX
@@ -211,6 +233,44 @@ static void main_task(void *param)
         LED_C_TOGGLE();
         LED_D_TOGGLE();
         for (int i = 0; i < 1000000; ++i);
+    }
+}
+
+static void input_task(void *param)
+{
+    xQueueHandle const input_queue = (xQueueHandle)param;
+    uart_frame_t frame;
+    //size_t tx_count = 0;
+
+    while (1) {
+        if (xQueueReceive(input_queue, &frame, portMAX_DELAY) != pdTRUE) continue;
+
+        if (frame.len >= sizeof(ucmd_tx_t)) {
+            ucmd_tx_t *ucmd = (ucmd_tx_t *)frame.data;
+            frame.len -= sizeof(ucmd_tx_t);
+
+            if ((ucmd->hdr.cmd == 0x11) && frame.len) {
+                bool cca = (ucmd->flags & 1) == 0;
+                mac_tx_begin((chan_t) ucmd->channel);
+                mac_tx(cca, ucmd->data, frame.len);
+                mac_tx_end();
+
+                //printf("ucmd(tx): flags=0x%02X channel=%u len=%u total=%u\n",
+                //       ucmd->flags, ucmd->channel, frame.len, ++tx_count
+                //);
+
+                //printf("ucmd(tx): done\n");
+            } else {
+                frame.len = frame.len + sizeof(ucmd_tx_t) - sizeof(ucmd_hdr_t);
+                printf("ucmd: cmd=0x%02X len=%u\n",
+                       ucmd->hdr.cmd, frame.len
+                );
+            }
+        } else {
+            printf("uart rx frame: len=%u\n", frame.len);
+        }
+
+        free(frame.data);
     }
 }
 
