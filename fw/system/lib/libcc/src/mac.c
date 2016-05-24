@@ -17,7 +17,7 @@ static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len);
 
 
 static const struct cc_cfg_reg CC_CFG_MAC[] = {
-        //{CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
+        {CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
 };
 
 static mac_cfg_t mac_cfg;
@@ -105,7 +105,7 @@ static bool mac_setup(cc_dev_t dev)
     cc_set_rx_timeout(dev, mac[dev].rx_timeout);
 
     chan_grp_init(&channels[dev].group, channels[dev].hop_table);
-    //chan_grp_calibrate(&channels[dev].group);
+    chan_grp_calibrate(&channels[dev].group);
     mac[dev].chan_cur = channels[dev].hop_table[0];
     chan_select(&channels[dev].group, mac[dev].chan_cur);
     mac[dev].chan_cur_pkt_cnt = 0;

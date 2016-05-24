@@ -23,22 +23,14 @@
 #include <core_cm4.h>
 #include <cc/sys/kinetis/pit.h>
 
-#define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
-#define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 16)
-#define TASK_STACK_SIZE_DEFAULT     (TASK_STACK_SIZE_SMALL * 2)
 
-#define TASK_PRIO_MAX               (configMAX_PRIORITIES - 1)
-#define TASK_PRIO_MIN               0
-#define TASK_PRIO_HIGHEST           (TASK_PRIO_MAX - 1)
-#define TASK_PRIO_HIGH              (TASK_PRIO_DEFAULT + 1)
-#define TASK_PRIO_DEFAULT           ((TASK_PRIO_MAX - TASK_PRIO_MIN)/2)
-#define TASK_PRIO_LOW               (TASK_PRIO_DEFAULT - 1)
-#define TASK_PRIO_LOWEST            (TASK_PRIO_MIN + 1)
 
 extern void vcom_init(void);
 
 static void main_task(void *param);
 static void input_task(void *param);
+static void output_task(void *param);
+
 static void mac_rx(cc_dev_t dev, u8 *buf, u8 len);
 
 mac_cfg_t cc_mac_cfg = {
@@ -95,7 +87,7 @@ int main(void)
     pit_start(xsec_timer);
     pit_start(xsec_timer_lo);
 
-    if (xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL) != pdPASS) goto done;
+    if (xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL) != pdPASS) goto done;
 
     vTaskStartScheduler();
 
@@ -147,6 +139,8 @@ typedef struct __packed ucmd_tx {
 
 } ucmd_tx_t;
 
+static xQueueHandle output_queue;
+
 static void main_task(void *param)
 {
     (void)param;
@@ -156,12 +150,15 @@ static void main_task(void *param)
 
     uart = uart_init(0, 230400);
 
-    xQueueHandle input_queue = xQueueCreate(128, sizeof(uart_frame_t));
-    
-    if (!input_queue) goto done;
-    
-    if (xTaskCreate(input_task, "input", TASK_STACK_SIZE_DEFAULT, (void *)input_queue, TASK_PRIO_HIGH, NULL) != pdPASS) goto done;
+    xQueueHandle input_queue = xQueueCreate(4, sizeof(uart_frame_t));
 
+    if (!input_queue) goto done;
+
+    //output_queue = xQueueCreate(4, sizeof(uart_frame_t));
+    //if (!output_queue) goto done;
+
+    if (xTaskCreate(input_task, "input", TASK_STACK_SIZE_DEFAULT, (void *)input_queue, TASK_PRIO_LOW, NULL) != pdPASS) goto done;
+    //if (xTaskCreate(output_task, "output", TASK_STACK_SIZE_DEFAULT, (void *)output_queue, TASK_PRIO_HIGHEST, NULL) != pdPASS) goto done;
 
     if (!mac_init(&cc_mac_cfg)) {
         goto done;
@@ -178,13 +175,13 @@ static void main_task(void *param)
     };
 
     //mac_rx_enable();
-    mac_tx_begin();
+    mac_tx_begin(13);
 
     printf("tx: f=%lu\r\n", cc_get_freq(DEVICE));
 
     while (1) {
         xsec0 = pit_get_elapsed(xsec_timer);
-        mac_tx((u8 *)&tx_data, sizeof(tx_data));
+        mac_tx(false, (u8 *)&tx_data, sizeof(tx_data));
         //printf("tx: chan=%u,%u duration=%luus count=%lu\r\n", chan, chan_cur_id, xsec, tx_data.seq);
         if (!(++tx_data.seq % 10)) LED_B_TOGGLE();
         //while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 8333) mac_task();
@@ -250,7 +247,7 @@ static void input_task(void *param)
             frame.len -= sizeof(ucmd_tx_t);
 
             if ((ucmd->hdr.cmd == 0x11) && frame.len) {
-                bool cca = (ucmd->flags & 1) == 0;
+                bool cca = false;//(ucmd->flags & 1) == 0;
                 mac_tx_begin((chan_t) ucmd->channel);
                 mac_tx(cca, ucmd->data, frame.len);
                 mac_tx_end();
@@ -273,6 +270,18 @@ static void input_task(void *param)
         free(frame.data);
     }
 }
+
+/*static void output_task(void *param)
+{
+    (void)param;
+    uart_frame_t frame;
+
+    while (1) {
+        if (xQueueReceive(output_queue, &frame, portMAX_DELAY) != pdTRUE) continue;
+        uart_write(uart, frame.data, frame.len);
+        free(frame.data);
+    }
+}*/
 
 u32 pkt_count[CC_NUM_DEVICES] = {0}, pkt_count_0[CC_NUM_DEVICES] = {0};
 pit_tick_t pkt_tmr_0[CC_NUM_DEVICES] = {0}, pkt_tmr_1[CC_NUM_DEVICES] = {0};
@@ -300,6 +309,12 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
         if (!(pkt_count[dev] % 12)) LED_B_TOGGLE();
     }
 
+    /*uart_frame_t const frame = {
+            .data = buf,
+            .len = len
+    };
+
+    xQueueSend(output_queue, &frame, portMAX_DELAY);*/
     uart_write(uart, buf, len);
 }
 

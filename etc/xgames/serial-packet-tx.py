@@ -3,10 +3,10 @@ import os
 import sys
 import struct
 
-pkt_length = 28
-pkt_count = 160
+pkt_length = 8
+pkt_count = 100
 pkt_flags = 0
-pkt_channel = 11
+pkt_channel = 15
 
 
 def pkt_create(idx):

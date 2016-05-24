@@ -69,6 +69,9 @@ void uart_free(uart_t const uart)
 
 void uart_write(uart_t const uart, const u8 *buf, size_t len)
 {
+    assert(buf > (u8 *)1ul);
+    assert(len);
+
     uart_transfer_t xfer = {
             .data = malloc(len),
             .dataSize = len
@@ -79,7 +82,13 @@ void uart_write(uart_t const uart, const u8 *buf, size_t len)
 
     xSemaphoreTake(uart->tx_sem, portMAX_DELAY);
     uart->tx_buf = xfer.data;
-    UART_SendEDMA(uart->base, &uart->edma_handle, &xfer);
+    //if (uart->rx_pending) UART_TransferAbortReceiveEDMA(uart->base, &uart->edma_handle);
+    const status_t status = UART_SendEDMA(uart->base, &uart->edma_handle, &xfer);
+
+    if (status != kStatus_Success) {
+        printf("[uart-tx] fail: status=%li\n", status);
+        xSemaphoreGive(uart->tx_sem);
+    }
 }
 
 void uart_read(uart_t const uart, u8 *buf, size_t len)

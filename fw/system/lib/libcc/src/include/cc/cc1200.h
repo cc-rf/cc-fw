@@ -262,7 +262,9 @@
 #define CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1     __CC1200_FLGDEF(0x25 /* Partial MARC state status */)
 #define CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS0     __CC1200_FLGDEF(0x26 /* Partial MARC state status */)
 #define CC1200_IOCFG_GPIO_CFG_HIGHZ                 __CC1200_FLGDEF(0x30 /* High impedance (tri-state) */)
+#define CC1200_IOCFG_GPIO_CFG_CHIP_RDYn             __CC1200_FLGDEF(0x32 /* Chip ready (XOSC is stable) */)
 #define CC1200_IOCFG_GPIO_CFG_HW0                   __CC1200_FLGDEF(0x33 /* Hardwire to zero */)
+#define CC1200_IOCFG_GPIO_CFG_INV_M                 __CC1200_FLGDEF(0x40 /* Invert output */)
 
 
 /* CC1200_CHAN_BW bits

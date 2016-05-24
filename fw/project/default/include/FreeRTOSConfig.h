@@ -73,6 +73,19 @@
 /* Phillip: Additional configs from FreeRTOS.h */
 #define configUSE_NEWLIB_REENTRANT 1
 
+/* Phillip: specific task priorities */
+#define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
+#define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 8)
+#define TASK_STACK_SIZE_DEFAULT     (TASK_STACK_SIZE_SMALL * 2)
+
+#define TASK_PRIO_MAX               (configMAX_PRIORITIES - 1)
+#define TASK_PRIO_MIN               0
+#define TASK_PRIO_HIGHEST           (TASK_PRIO_MAX - 1)
+#define TASK_PRIO_HIGH              (TASK_PRIO_DEFAULT + 1)
+#define TASK_PRIO_DEFAULT           ((TASK_PRIO_MAX - TASK_PRIO_MIN)/2)
+#define TASK_PRIO_LOW               (TASK_PRIO_DEFAULT - 1)
+#define TASK_PRIO_LOWEST            (TASK_PRIO_MIN + 1)
+
 
 /*-----------------------------------------------------------
  * Application specific definitions.

@@ -65,8 +65,8 @@ bool cc_isr_init(cc_dev_t dev)
 
     if (!rtos[dev].isr_task_handle) {
         xTaskCreate(
-                isr_task, "isr_task", configMINIMAL_STACK_SIZE*8,
-                (void *)dev, 1, &rtos[dev].isr_task_handle
+                isr_task, "isr_task", TASK_STACK_SIZE_LARGE,
+                (void *)dev, TASK_PRIO_HIGHEST, &rtos[dev].isr_task_handle
         );
 
         if (!rtos[dev].isr_task_handle) {
@@ -98,19 +98,19 @@ enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t is
         rtos[dev].port_mask |= SYS_PORT_MASK(cfg->port);
 
         const port_pin_config_t port_pin_config = {
-                kPORT_PullDown,
-                kPORT_SlowSlewRate,
+                kPORT_PullDisable,
+                kPORT_FastSlewRate,
                 kPORT_PassiveFilterDisable,
                 kPORT_OpenDrainDisable,
                 kPORT_LowDriveStrength,
                 kPORT_MuxAsGpio,
-                kPORT_UnlockRegister,
+                kPORT_LockRegister,
         };
 
         PORT_SetPinConfig(SYS_PORT_PORTN(cfg->port), cfg->pin, &port_pin_config);
         PORT_SetPinInterruptConfig(SYS_PORT_PORTN(cfg->port), cfg->pin, EDGE_MAP[edge]);
 
-        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY+1);
+        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY+2);
 
         EnableIRQ(SYS_PORT_IRQN(cfg->port));
 

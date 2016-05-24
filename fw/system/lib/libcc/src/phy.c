@@ -11,6 +11,7 @@
 #include <semphr.h>
 #include <cc/sys/kinetis/pit.h>
 #include <timers.h>
+#include <malloc.h>
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -58,7 +59,7 @@ static struct {
     volatile u8 cca_saved_sync_thr;
     volatile u8 cca_saved_rx_time;
     phy_cfg_t phy_cfg;
-    pit_tick_t rx_tick;
+    volatile pit_tick_t rx_tick;
     xSemaphoreHandle tx_sem;
 
 } phy[CC_NUM_DEVICES];
@@ -126,6 +127,8 @@ static void phy_tmr(TimerHandle_t xTimer)
         phy_rx_tmr_check(dev);
 }
 
+volatile bool rxtimeout[CC_NUM_DEVICES] = {false,false};
+
 static void isr_mcu_wake(cc_dev_t dev)
 {
     u8 st, ms1, len;
@@ -133,9 +136,12 @@ static void isr_mcu_wake(cc_dev_t dev)
 
     ms1 = cc_get(dev, CC1200_MARC_STATUS1);
 
-#if CC_DEBUG_VERBOSE
-    st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
-    cc_dbg_v("[%u] st=0x%02X ms1=0x%02X", dev, st, ms1);
+#if CC_DEBUG_VERBOSE || 1
+    if (rxtimeout[dev]) {
+        st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
+        cc_dbg("[%u] st=0x%02X ms1=0x%02X", dev, st, ms1);
+        rxtimeout[dev] = false;
+    }
 #else
     (void)st;
 #endif
@@ -166,6 +172,7 @@ static void isr_mcu_wake(cc_dev_t dev)
 
             if (len) {
                 u8 *buf = alloca(len);
+                assert(buf);
                 cc_fifo_read(dev, buf, len);
                 handle_rx(dev, buf, len);
             }
@@ -202,7 +209,6 @@ static void isr_mcu_wake(cc_dev_t dev)
         default:
             if (phy[dev].phy_cfg.signal) phy[dev].phy_cfg.signal(dev, ms1, &flag);
             if (flag) rx_resume(dev);
-            //DBG("unknown ms1=0x%x", ms1);
             break;
     }
 
@@ -218,7 +224,8 @@ static void phy_rx_tmr_check(cc_dev_t dev)
     if (phy[dev].rx_enabled) {
         const pit_tick_t rx_ticks = phy[dev].rx_tick - pit_get_current(xsec_timer);
 
-        if (rx_ticks >= 20000000) {
+        if (rx_ticks >= 8000000) {
+            rxtimeout[dev] = true;
             cc_dbg/*_v*/("[%u] rx timeout", dev);
 
             //const u8 ms = cc_get(dev, CC1200_MODEM_STATUS1);
@@ -237,12 +244,18 @@ static void phy_rx_tmr_check(cc_dev_t dev)
 
             //rx_resume(dev);
             phy_rx_tmr_kick(dev);
+
+            //bool flag = true;
+            //if (phy[dev].phy_cfg.signal) phy[dev].phy_cfg.signal(dev, CC1200_MARC_STATUS1_RX_TIMEOUT, &flag);
+            //if (flag) rx_resume(dev);
         }
     }
 }
 
 static void handle_rx(cc_dev_t dev, u8 *buf, u8 len)
 {
+    assert(buf);
+
     /* Assumption (may change later): variable packet length, 2 status bytes -> 3 total. */
     const static u8 PKT_OVERHEAD = 3;
 
@@ -253,19 +266,27 @@ static void handle_rx(cc_dev_t dev, u8 *buf, u8 len)
             return;
         }
 
-        const u8 rssi = buf[pkt_len+1];
-        const u8 crc_ok = buf[pkt_len+2] & (u8)CC1200_LQI_CRC_OK_BM;
-        const u8 lqi = buf[pkt_len+2] & (u8)CC1200_LQI_EST_BM;
+        if (pkt_len) {
+            const u8 rssi = buf[pkt_len + 1];
+            const u8 crc_ok = buf[pkt_len + 2] & (u8) CC1200_LQI_CRC_OK_BM;
+            const u8 lqi = buf[pkt_len + 2] & (u8) CC1200_LQI_EST_BM;
 
-        /* For now, not dispatching rssi or lqi. */
-        (void)rssi;
-        (void)lqi;
+            /* For now, not dispatching rssi or lqi. */
+            (void) rssi;
+            (void) lqi;
 
-        //DBG("len=%i crc_ok=%i", (int)pkt_len, (int)crc_ok);
+            //DBG("len=%i crc_ok=%i", (int)pkt_len, (int)crc_ok);
 
-        /* TODO: Potentially use the workqueue to post to packet rx callback */
-        if (crc_ok && phy[dev].phy_cfg.rx) {
-            phy[dev].phy_cfg.rx(dev, &buf[1], pkt_len);
+            /* TODO: Potentially use the workqueue to post to packet rx callback */
+            if (crc_ok && phy[dev].phy_cfg.rx) {
+                /*u8 *pkt_buf = malloc(pkt_len);
+                assert(pkt_buf);
+                memcpy(pkt_buf, &buf[1], pkt_len);
+                phy[dev].phy_cfg.rx(dev, pkt_buf, pkt_len);*/
+                assert(buf > (u8 *) 1ul);
+                assert(pkt_len);
+                phy[dev].phy_cfg.rx(dev, &buf[1], pkt_len);
+            }
         }
 
         len -= pkt_len + PKT_OVERHEAD;
