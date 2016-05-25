@@ -57,14 +57,16 @@ void cc_set16(cc_dev_t dev, u16 addr, u16 val)
 
 void cc_update(cc_dev_t dev, u16 addr, u8 mask, u8 val)
 {
-    val = (cc_get(dev, addr) & ~mask) | (val & mask);
-    cc_set(dev, addr, val);
+    u8 cur = cc_get(dev, addr);
+    val = (cur & ~mask) | (val & mask);
+    if (val != cur) cc_set(dev, addr, val);
 }
 
 void cc_update16(cc_dev_t dev, u16 addr, u16 mask, u16 val)
 {
-    val = (cc_get16(dev, addr) & ~mask) | (val & mask);
-    cc_set16(dev, addr, val);
+    u16 cur = cc_get16(dev, addr);
+    val = (cur & ~mask) | (val & mask);
+    if (val != cur) cc_set16(dev, addr, val);
 }
 
 void cc_fifo_read(cc_dev_t dev, u8 *buf, u32 len)

@@ -130,9 +130,43 @@ size_t uart_read_frame(uart_t const uart, u8 **buf)
     return len;
 }
 
+size_t uart_readline(uart_t const uart, char **buf)
+{
+    assert(buf);
+
+    size_t len_max = 60;
+    u8 len = 0;
+    u8 ch;
+
+    *buf = malloc(len_max);
+    assert(*buf);
+
+    while (1) {
+        uart_read(uart, &ch, 1);
+
+        if (ch == '\r' || ch == '\n') {
+            uart_puts(uart, "\r\n");
+            (*buf)[len] = 0;
+            break;
+        }
+
+        uart_write(uart, &ch, 1);
+
+        (*buf)[len++] = ch;
+
+        if (len >= len_max) {
+            len_max *= 2;
+            *buf = realloc(*buf, len_max);
+            assert(*buf);
+        }
+    };
+
+    return len;
+}
+
 void uart_puts(uart_t const uart, const char *str)
 {
-    uart_write(uart, (u8 *)str, strlen(str)+1);
+    uart_write(uart, (u8 *)str, strlen(str));
 }
 
 void uart_putch(uart_t const uart, const char ch)
