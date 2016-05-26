@@ -28,7 +28,7 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
 // -- This is a good low-bandwidth configuration
 // RX filter BW = 104.166667
 // Carrier frequency = 920.599976
-// Symbol rate = 38.4
+// Symbol rate = 50 (was 38.4)
 // Manchester enable = false
 // Address config = No address check
 // Whitening = false
@@ -53,9 +53,9 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_CHAN_BW,           0x10}, // Channel Filter Configuration
         {CC1200_MDMCFG1,           0x42}, // General Modem Parameter Configuration Reg. 1
         {CC1200_MDMCFG0,           0x05}, // General Modem Parameter Configuration Reg. 0
-        {CC1200_SYMBOL_RATE2,      0x8F}, // Symbol Rate Configuration Exponent and Mantissa [1..
-        {CC1200_SYMBOL_RATE1,      0x75}, // Symbol Rate Configuration Mantissa [15:8]
-        {CC1200_SYMBOL_RATE0,      0x10}, // Symbol Rate Configuration Mantissa [7:0]
+        {CC1200_SYMBOL_RATE2,      0x94/*0x8F*/}, // Symbol Rate Configuration Exponent and Mantissa [1..
+        {CC1200_SYMBOL_RATE1,      0x7A/*0x75*/}, // Symbol Rate Configuration Mantissa [15:8]
+        {CC1200_SYMBOL_RATE0,      0xE1/*0x10*/}, // Symbol Rate Configuration Mantissa [7:0]
         {CC1200_AGC_REF,           0x21/*0x27*/}, // AGC Reference Level Configuration
         {CC1200_AGC_CS_THR,        0x01}, // Carrier Sense Threshold Configuration
         {CC1200_AGC_CFG1,          0x11}, // Automatic Gain Control Configuration Reg. 1

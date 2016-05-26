@@ -50,6 +50,8 @@ PKT_ID_STATUS       = 7
 PKT_DATA_LEN_MAP    = { PKT_ID_IMU: 15, PKT_ID_GPS: 27, PKT_ID_STATUS: 2 }
 
 data_prev = ''
+seq_only = True
+
 
 def dump(data):
     global data_prev
@@ -101,13 +103,16 @@ def parse(data):
         p_data = " ".join("{:02x}".format(ord(c)) for c in data[13:13+data_len+1])
         data = data[13+data_len+1:]
 
-        print "packet:"
-        print "  dev_id  = %s" % dev_id
-        print "  pkt_id  = %i" % pkt_id
-        print "  p_cntr  = %i" % p_counter
-        print "  p_data  = %s" % p_data
-        print
-
+        if not seq_only:
+            print "packet:"
+            print "  dev_id  = %s" % dev_id
+            print "  pkt_id  = %i" % pkt_id
+            print "  p_cntr  = %i" % p_counter
+            print "  p_data  = %s" % p_data
+            print
+        else:
+            print str(p_counter)
+            sys.stdout.flush()
 
     if len(data):
         data_prev = data

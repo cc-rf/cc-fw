@@ -6,7 +6,7 @@ import struct
 pkt_length = 8
 pkt_count = 100
 pkt_flags = 0
-pkt_channel = 15
+pkt_channel = 2
 
 
 def pkt_create(idx):

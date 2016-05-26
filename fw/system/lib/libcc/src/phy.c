@@ -171,25 +171,29 @@ static void isr_mcu_wake(cc_dev_t dev)
             len = cc_get(dev, CC1200_NUM_RXBYTES);
 
             if (len) {
+                //u8 rxf = cc_get(dev, CC1200_RXFIRST);
+                //u8 rxl = cc_get(dev, CC1200_RXLAST);
+                //cc_dbg("[%u] rxf=%u rxl=%u n=%u", dev, rxf, rxl, len);
                 u8 *buf = alloca(len);
                 assert(buf);
                 cc_fifo_read(dev, buf, len);
                 handle_rx(dev, buf, len);
             }
 
+            cc_strobe(dev, CC1200_SFRX);
             if (phy[dev].phy_cfg.signal) phy[dev].phy_cfg.signal(dev, ms1, &flag);
             if (flag) rx_resume(dev);
             break;
 
         case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
         case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
-            cc_dbg_v("[%u] rx fifo error: st=0x%02X ms1=0x%02X", dev, st, ms1);
+            //cc_dbg("[%u] rx fifo error: ms1=0x%02X", dev, ms1);
             //cc_strobe(dev, CC1200_SFRX);
 
         case CC1200_MARC_STATUS1_ADDRESS:
         case CC1200_MARC_STATUS1_CRC:
         case CC1200_MARC_STATUS1_MAXIMUM_LENGTH:
-            cc_dbg_v("[%u] rx error: st=0x%02X ms1=0x%02X", dev, st, ms1);
+            cc_dbg("[%u] rx error: ms1=0x%02X", dev, ms1);
         case CC1200_MARC_STATUS1_RX_TERMINATION:
         case CC1200_MARC_STATUS1_RX_TIMEOUT:
             phy_rx_tmr_kick(dev);
@@ -259,10 +263,21 @@ static void handle_rx(cc_dev_t dev, u8 *buf, u8 len)
     /* Assumption (may change later): variable packet length, 2 status bytes -> 3 total. */
     const static u8 PKT_OVERHEAD = 3;
 
+    if (len < PKT_OVERHEAD) {
+        cc_dbg("[%u] len=%u < PKT_OVERHEAD=%u", dev, len, PKT_OVERHEAD);
+    }
+
+    size_t pkt_count = 0;
+
     while (len >= PKT_OVERHEAD) {
+        ++pkt_count;
         u8 pkt_len = buf[0];
+
+        //cc_dbg("[%u] c=%u len=%u pkt_len=%u", dev, pkt_count, len, pkt_len);
+
         if (pkt_len > (len - PKT_OVERHEAD)) {
             /* Bad length field, cannot continue */
+            cc_dbg("[%u] c=%u underflow: len=%u < len[header]=%u", dev, pkt_count, len, pkt_len);
             return;
         }
 
@@ -277,6 +292,10 @@ static void handle_rx(cc_dev_t dev, u8 *buf, u8 len)
 
             //DBG("len=%i crc_ok=%i", (int)pkt_len, (int)crc_ok);
 
+            if (!crc_ok) {
+                cc_dbg("[%u] c=%u len=%u pkt_len=%u crc_ok=0", dev, pkt_count, len, pkt_len);
+            }
+
             /* TODO: Potentially use the workqueue to post to packet rx callback */
             if (crc_ok && phy[dev].phy_cfg.rx) {
                 /*u8 *pkt_buf = malloc(pkt_len);
@@ -287,6 +306,8 @@ static void handle_rx(cc_dev_t dev, u8 *buf, u8 len)
                 assert(pkt_len);
                 phy[dev].phy_cfg.rx(dev, &buf[1], pkt_len);
             }
+        } else {
+            cc_dbg("[%u] c=%u len=%u pkt_len=0", dev, pkt_count, len);
         }
 
         len -= pkt_len + PKT_OVERHEAD;

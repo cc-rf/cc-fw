@@ -51,7 +51,7 @@ int main(void)
 {
     BOARD_InitPins();
     LED_ABCD_ALL_ON();
-    BOARD_BootClockOCHSRUN();
+    BOARD_BootClockHSRUN();
     BOARD_InitDebugConsole();
     itm_init();
     printf("<boot>\r\n");
@@ -87,7 +87,7 @@ int main(void)
     pit_start(xsec_timer);
     pit_start(xsec_timer_lo);
 
-    if (xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL) != pdPASS) goto done;
+    if (xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, MODE == MODE_TX ? TASK_PRIO_MAX : TASK_PRIO_DEFAULT, NULL) != pdPASS) goto done;
 
     vTaskStartScheduler();
 
@@ -115,7 +115,7 @@ static void print_hex(u8 *buf, size_t len)
 struct packet {
     u8 id;
     u32 seq;
-    char filler[24];
+    char filler[20];
 };
 
 static uart_t uart;
@@ -171,7 +171,7 @@ static void main_task(void *param)
     struct packet tx_data = {
             .id = 2,
             .seq = 0,
-            .filler = "ABCDEFGHIJKLMNOPQRSTUVW"
+            .filler = "ABCDEFGHIJKLMNOPQRS"
     };
 
     //mac_rx_enable();
@@ -180,13 +180,15 @@ static void main_task(void *param)
     printf("tx: f=%lu\r\n", cc_get_freq(DEVICE));
 
     while (1) {
-        xsec0 = pit_get_elapsed(xsec_timer);
+        //xsec0 = pit_get_elapsed(xsec_timer);
+        if (!(++tx_data.seq % 10)) LED_B_TOGGLE();
         mac_tx(false, (u8 *)&tx_data, sizeof(tx_data));
         //printf("tx: chan=%u,%u duration=%luus count=%lu\r\n", chan, chan_cur_id, xsec, tx_data.seq);
-        if (!(++tx_data.seq % 10)) LED_B_TOGGLE();
         //while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 8333) mac_task();
-        xsec1 = pit_get_elapsed(xsec_timer) - xsec0;
-        vTaskDelay((8 - (xsec1 > 8000 ? 8000 : xsec1)/1000) / portTICK_PERIOD_MS);
+        /*do {
+            xsec1 = pit_get_elapsed(xsec_timer) - xsec0;
+        } while (xsec1 < 8000);*/
+        //vTaskDelay((8 - (xsec1 > 8000 ? 8000 : xsec1)/1000) / portTICK_PERIOD_MS);
     }
 
 #elif MODE == MODE_RX
@@ -296,9 +298,12 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
 
     if (!(pkt_count[dev] % 120)) {
         pkt_tmr_1[dev] = pit_get_elapsed(xsec_timer);
-        u32 div = ((pkt_tmr_1[dev] - pkt_tmr_0[dev]) + (1000000>>1)) / 1000000;
-        u32 pkt_rate = ((pkt_count[dev] - pkt_count_0[dev]) + (div>>1)) / div;
-        printf("[%u] rate = %lu p/s (n=%lu t=%luus)\n", dev, pkt_rate, (pkt_count[dev] - pkt_count_0[dev]), (pkt_tmr_1[dev] - pkt_tmr_0[dev]));
+        float div = (float)(pkt_tmr_1[dev] - pkt_tmr_0[dev]) / 1000000;
+        u32 pkt_rate = (u32)((pkt_count[dev] - pkt_count_0[dev]) / div);
+        printf("[%u] rate = %*lu p/s\t\tn=%lu t=%luus\tN=%lu\n",
+               dev, 3, pkt_rate, (pkt_count[dev] - pkt_count_0[dev]), (pkt_tmr_1[dev] - pkt_tmr_0[dev]),
+               pkt_count[dev]
+        );
         pkt_tmr_0[dev] = pkt_tmr_1[dev];
         pkt_count_0[dev] = pkt_count[dev];
     }
