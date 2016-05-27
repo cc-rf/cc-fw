@@ -195,9 +195,10 @@ void mac_tx_begin(chan_t chan)
 
     mac[dev].tx_on = true;
 
-    /*if ((mac[dev].tx_restart_rx = phy_rx_enabled(dev))) {
-        phy_rx_disable(dev);
-    }*/
+    if ((mac[dev].tx_restart_rx = phy_rx_enabled(dev))) {
+        //phy_rx_disable(dev);
+        mac_rx_disable();
+    }
 
     amp_ctrl(dev, AMP_HGM, true);
     amp_ctrl(dev, AMP_PA, true);
@@ -214,11 +215,15 @@ void mac_tx_end(void)
 
     mac[dev].tx_on = false;
 
-    if (phy_rx_enabled(dev)) {
+    /*if (phy_rx_enabled(dev)) {
         amp_ctrl(dev, AMP_LNA, true);
     } else {
         amp_ctrl(dev, AMP_HGM, false);
         amp_ctrl(dev, AMP_LNA, false);
+    }*/
+
+    if (mac[dev].tx_restart_rx) {
+        mac_rx_enable();
     }
 
     /*if (mac[dev].tx_restart_rx) {
@@ -254,8 +259,8 @@ void mac_rx_enable(void)
         amp_ctrl(dev, AMP_HGM, true);
         amp_ctrl(dev, AMP_LNA, true);
         phy_rx_enable(dev);
-        cc_dbg("[%u] rx enable: f=%lu sr=%lu",
-               dev, cc_get_freq(dev), cc_get_symbol_rate(dev));
+        //cc_dbg("[%u] rx enable: f=%lu sr=%lu",
+        //       dev, cc_get_freq(dev), cc_get_symbol_rate(dev));
     }
 
 }

@@ -148,9 +148,9 @@ static void main_task(void *param)
 
     printf("<main task>\r\n");
 
-    uart = uart_init(0, 230400);
+    uart = uart_init(0, 115200);
 
-    xQueueHandle input_queue = xQueueCreate(4, sizeof(uart_frame_t));
+    xQueueHandle input_queue = xQueueCreate(24, sizeof(uart_frame_t));
 
     if (!input_queue) goto done;
 
