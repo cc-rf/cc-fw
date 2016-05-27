@@ -564,6 +564,9 @@ void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
         }
     }*/
 
+    printf("!!!!!!!!!! HARD FAULT !!!!!!!!!!!!!!\r\n");
+    NVIC_SystemReset();
+
     while (!hard_fault_continue) asm("nop");
 
     /*if (((SCB->DFSR & SCB_DFSR_BKPT_Msk) != 0)
