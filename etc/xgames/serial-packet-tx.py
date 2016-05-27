@@ -4,14 +4,14 @@ import sys
 import struct
 
 pkt_length = 8
-pkt_count = 100
+pkt_count = 1000
 pkt_flags = 0
 pkt_channel = 2
 
 
 def pkt_create(idx):
     return struct.pack("<BBBB%is" % (pkt_length - 1),
-                       0x11, pkt_flags, pkt_channel, idx, ':' * (pkt_length - 1))
+                       0x11, pkt_flags, pkt_channel, idx % 255, ':' * (pkt_length - 1))
 
 
 def main(args):

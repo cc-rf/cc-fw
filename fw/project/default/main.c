@@ -87,7 +87,7 @@ int main(void)
     pit_start(xsec_timer);
     pit_start(xsec_timer_lo);
 
-    if (xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, MODE == MODE_TX ? TASK_PRIO_MAX : TASK_PRIO_DEFAULT, NULL) != pdPASS) goto done;
+    if (xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL) != pdPASS) goto done;
 
     vTaskStartScheduler();
 
@@ -157,7 +157,7 @@ static void main_task(void *param)
     //output_queue = xQueueCreate(4, sizeof(uart_frame_t));
     //if (!output_queue) goto done;
 
-    if (xTaskCreate(input_task, "input", TASK_STACK_SIZE_DEFAULT, (void *)input_queue, TASK_PRIO_LOW, NULL) != pdPASS) goto done;
+    if (xTaskCreate(input_task, "input", TASK_STACK_SIZE_DEFAULT, (void *)input_queue, TASK_PRIO_HIGH, NULL) != pdPASS) goto done;
     //if (xTaskCreate(output_task, "output", TASK_STACK_SIZE_DEFAULT, (void *)output_queue, TASK_PRIO_HIGHEST, NULL) != pdPASS) goto done;
 
     if (!mac_init(&cc_mac_cfg)) {
@@ -205,7 +205,9 @@ static void main_task(void *param)
             continue;
         }
 
-        xQueueSend(input_queue, &frame, 0);
+        if (!xQueueSend(input_queue, &frame, 0)) {
+            printf("uart rx: queue full\n");
+        }
     }
 
 #elif MODE == MODE_TX + MODE_RX
