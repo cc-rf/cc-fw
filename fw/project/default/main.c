@@ -148,9 +148,9 @@ static void main_task(void *param)
 
     printf("<main task>\r\n");
 
-    uart = uart_init(0, 115200);
+    uart = uart_init(0, 230400);
 
-    xQueueHandle input_queue = xQueueCreate(24, sizeof(uart_frame_t));
+    xQueueHandle input_queue = xQueueCreate(32, sizeof(uart_frame_t));
 
     if (!input_queue) goto done;
 
@@ -244,7 +244,10 @@ static void input_task(void *param)
     //size_t tx_count = 0;
 
     while (1) {
-        if (xQueueReceive(input_queue, &frame, portMAX_DELAY) != pdTRUE) continue;
+        if (xQueueReceive(input_queue, &frame, portMAX_DELAY) != pdTRUE) {
+            printf("input_task: queue receive failed\n");
+            continue;
+        }
 
         if (frame.len >= sizeof(ucmd_tx_t)) {
             ucmd_tx_t *ucmd = (ucmd_tx_t *)frame.data;

@@ -2,9 +2,10 @@
 import os
 import sys
 import struct
+import time
 
-pkt_length = 8
-pkt_count = 1000
+pkt_length = 14
+pkt_count = 100
 pkt_flags = 0
 pkt_channel = 2
 
@@ -42,6 +43,7 @@ def main(args):
                 data_len_rem -= xfer_length
 
             # print >>sys.stderr, "write: %i bytes / %i frames" % (data_len, frame_count)
+            #time.sleep(0.010)
             sys.stderr.write('.')
             sys.stderr.flush()
 

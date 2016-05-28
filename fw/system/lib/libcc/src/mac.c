@@ -5,6 +5,8 @@
 #include <cc/amp.h>
 #include <cc/chan.h>
 #include <assert.h>
+#include <FreeRTOS.h>
+#include <semphr.h>
 
 #define MAC_NUM_DEVICES     CC_NUM_DEVICES
 #define MAC_DEV_MIN         CC_DEV_MIN
@@ -12,9 +14,10 @@
 #define MAC_NUM_CHANNELS    50
 
 static bool mac_setup(cc_dev_t dev);
+static void mac_lock(cc_dev_t dev);
+static void mac_unlock(cc_dev_t dev);
 static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param);
 static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len);
-
 
 static const struct cc_cfg_reg CC_CFG_MAC[] = {
         {CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
@@ -34,6 +37,7 @@ static struct {
     u32 rx_timeout;
     volatile bool tx_on;
     volatile bool tx_restart_rx;
+    xSemaphoreHandle mtx;
 
 } mac[MAC_NUM_DEVICES];
 
@@ -78,6 +82,10 @@ bool mac_init(mac_cfg_t *cfg)
 
 static bool mac_setup(cc_dev_t dev)
 {
+    mac[dev].mtx = xSemaphoreCreateRecursiveMutex();
+
+    if (!mac[dev].mtx) return false;
+
     if (!cc_cfg_regs(dev, CC_CFG_DEFAULT, COUNT_OF(CC_CFG_DEFAULT))) {
         cc_dbg("[%u] error: could not configure (default)", dev);
         return false;
@@ -113,6 +121,17 @@ static bool mac_setup(cc_dev_t dev)
     return true;
 }
 
+static void mac_lock(cc_dev_t dev)
+{
+    xSemaphoreTakeRecursive(mac[dev].mtx, portMAX_DELAY);
+}
+
+static void mac_unlock(cc_dev_t dev)
+{
+    xSemaphoreGiveRecursive(mac[dev].mtx);
+}
+
+
 #include <board.h>
 #include <stdio.h>
 
@@ -146,6 +165,8 @@ static inline void next_chan(cc_dev_t dev)
 
 static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
 {
+    mac_lock(dev);
+
     switch (ms1) {
         case CC1200_MARC_STATUS1_NO_FAILURE:
         case CC1200_MARC_STATUS1_RX_TIMEOUT:
@@ -177,6 +198,8 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
         default:
             if (param) *(bool *) param = !mac[dev].tx_on;
     }
+
+    mac_unlock(dev);
 }
 
 static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len)
@@ -193,6 +216,7 @@ void mac_tx_begin(chan_t chan)
 {
     const dev_t dev = MAC_DEV_MAX;
 
+    mac_lock(dev);
     mac[dev].tx_on = true;
 
     if ((mac[dev].tx_restart_rx = phy_rx_enabled(dev))) {
@@ -206,11 +230,14 @@ void mac_tx_begin(chan_t chan)
     cc_strobe(dev, CC1200_SIDLE);
     mac[dev].chan_cur = chan;
     chan_select(&channels[dev].group, chan); // NOTE: not in IDLE!
+    mac_unlock(dev);
 }
 
 void mac_tx_end(void)
 {
     const dev_t dev = MAC_DEV_MAX;
+
+    mac_lock(dev);
     amp_ctrl(dev, AMP_PA, false);
 
     mac[dev].tx_on = false;
@@ -234,6 +261,8 @@ void mac_tx_end(void)
         amp_ctrl(dev, AMP_HGM, false);
         amp_ctrl(dev, AMP_LNA, false);
     }*/
+
+    mac_unlock(dev);
 }
 
 /**
@@ -256,9 +285,11 @@ void mac_tx(bool cca, u8 *buf, u32 len)
 void mac_rx_enable(void)
 {
     for (cc_dev_t dev = MAC_DEV_MIN; dev <= MAC_DEV_MAX; ++dev) {
+        mac_lock(dev);
         amp_ctrl(dev, AMP_HGM, true);
         amp_ctrl(dev, AMP_LNA, true);
         phy_rx_enable(dev);
+        mac_unlock(dev);
         //cc_dbg("[%u] rx enable: f=%lu sr=%lu",
         //       dev, cc_get_freq(dev), cc_get_symbol_rate(dev));
     }
@@ -268,8 +299,10 @@ void mac_rx_enable(void)
 void mac_rx_disable(void)
 {
     for (cc_dev_t dev = MAC_DEV_MIN; dev <= MAC_DEV_MAX; ++dev) {
+        mac_lock(dev);
         phy_rx_disable(dev);
         amp_ctrl(dev, AMP_LNA, false);
         amp_ctrl(dev, AMP_HGM, false);
+        mac_unlock(dev);
     }
 }

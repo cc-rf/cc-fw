@@ -49,8 +49,17 @@ static void phy_rx_tmr_kick(cc_dev_t dev);
 static void phy_rx_tmr_check(cc_dev_t dev);
 static void handle_rx(cc_dev_t dev, u8 *buf, u8 len);
 static inline void rx_resume(cc_dev_t dev);
+static void tx_task(void *param);
+static void phy_tx_execute(cc_dev_t dev, bool cca, u8 *buf, u32 len);
 static void cca_enable(cc_dev_t dev/*, u8 cca_mode*/);
 static void cca_disable(cc_dev_t dev);
+
+typedef struct __packed {
+    bool cca;
+    u8 *buf;
+    u32 len;
+
+} tx_queue_item;
 
 static struct {
     bool rx_enabled;
@@ -61,6 +70,8 @@ static struct {
     phy_cfg_t phy_cfg;
     volatile pit_tick_t rx_tick;
     xSemaphoreHandle tx_sem;
+    xQueueHandle tx_queue;
+    xTaskHandle tx_task;
 
 } phy[CC_NUM_DEVICES];
 
@@ -75,6 +86,15 @@ bool phy_init(cc_dev_t dev, phy_cfg_t *cfg)
     phy[dev].rx_enabled = false;
     phy[dev].tx_completion_status = 0;
     phy[dev].tx_sem = xSemaphoreCreateCounting(UINT32_MAX, 0); assert(phy[dev].tx_sem != NULL);
+    /*phy[dev].tx_queue = xQueueCreate(8, sizeof(tx_queue_item)); assert(phy[dev].tx_queue != NULL);
+
+    xTaskCreate(
+            tx_task, "tx_task", TASK_STACK_SIZE_DEFAULT,
+            (void *)dev, TASK_PRIO_HIGHEST, &phy[dev].tx_task
+    );
+
+    assert(phy[dev].tx_task);*/
+
     cc_spi_init(dev);
     if (!cc_isr_init(dev)) return false;
     if (!phy_setup(dev)) return false;
@@ -370,10 +390,47 @@ static inline void rx_resume(cc_dev_t dev)
     }
 }
 
+static void tx_task(void *param)
+{
+    const cc_dev_t dev = (cc_dev_t)param;
+    const xQueueHandle queue = phy[dev].tx_queue; assert(queue);
+
+    tx_queue_item txq;
+
+    while (1) {
+        if (xQueueReceive(queue, &txq, portMAX_DELAY) != pdTRUE) continue;
+        phy_tx_execute(dev, txq.cca, txq.buf, txq.len);
+        free(txq.buf);
+    }
+}
+
 void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
 {
-    if (!len || len > 120) return; // TODO: support longer packets
+    /*if (!len || len > 120) return;
 
+    tx_queue_item txq = {
+            .buf = malloc(len + 1),
+            .len = len,
+            .cca = cca
+    };
+
+    assert(txq.buf);
+    txq.buf[0] = (u8)len;
+    memcpy(&txq.buf[1], buf, len);
+
+    if (!xQueueSend(phy[dev].tx_queue, &txq, portMAX_DELAY)) {
+        cc_dbg("[%u] tx queue full!", dev);
+    }*/
+
+    u8 *pkt = alloca(len + 1);
+    assert(pkt);
+    pkt[0] = (u8)len;
+    memcpy(&pkt[1], buf, len);
+    phy_tx_execute(dev, cca, pkt, len);
+}
+
+static void phy_tx_execute(cc_dev_t dev, bool cca, u8 *buf, u32 len)
+{
     if (phy_rx_enabled(dev)) {
         // TODO: Disable RX or add a flag to this or something
         phy_rx_tmr_kick(dev);
@@ -382,9 +439,8 @@ void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
     u8 *pkt, st, reg;
     //bool cb = false;
 
-    pkt = alloca(len + 1);
-    pkt[0] = (u8)len;
-    memcpy(&pkt[1], buf, len);
+    pkt = buf;
+    assert(pkt[0] == (u8)len);
 
     //cc_dbg_v("[%u] len=%lu", dev, len);
     while ((st = cc_strobe(dev, CC1200_SIDLE)) & CC1200_STATUS_CHIP_RDYn);
@@ -425,7 +481,10 @@ void phy_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
     cc_dbg_v("[%u] STX", dev);
     cc_strobe(dev, CC1200_STX);
 
-    while (xSemaphoreTake(phy[dev].tx_sem, portMAX_DELAY) != pdTRUE);
+    if (xSemaphoreTake(phy[dev].tx_sem, 100 / portTICK_PERIOD_MS) != pdTRUE) {
+        cc_dbg("[%u] timeout, checking manually", dev);
+        isr_mcu_wake(dev);
+    }
 
     reg = phy[dev].tx_completion_status;
     phy[dev].tx_completion_status = 0;
