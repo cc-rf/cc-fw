@@ -80,7 +80,17 @@ void uart_write(uart_t const uart, const u8 *buf, size_t len)
     assert(xfer.data);
     memcpy(xfer.data, (void *)buf, len);
 
-    xSemaphoreTake(uart->tx_sem, portMAX_DELAY);
+    while (!xSemaphoreTake(uart->tx_sem, 100 / portTICK_PERIOD_MS)) {
+        UART_TransferAbortSendEDMA(uart->base, &uart->edma_handle);
+        printf("[uart-tx] timeout: aborting\n");
+        if (uart->tx_buf) {
+            free((void *)uart->tx_buf);
+            uart->tx_buf = NULL;
+        }
+
+        xSemaphoreGive(uart->tx_sem);
+    }
+
     uart->tx_buf = xfer.data;
     //if (uart->rx_pending) UART_TransferAbortReceiveEDMA(uart->base, &uart->edma_handle);
     const status_t status = UART_SendEDMA(uart->base, &uart->edma_handle, &xfer);
@@ -99,6 +109,7 @@ void uart_read(uart_t const uart, u8 *buf, size_t len)
     };
 
     xSemaphoreTake(uart->rx_mtx, portMAX_DELAY);
+
     uart->rx_pending = true;
     const status_t status = UART_ReceiveEDMA(uart->base, &uart->edma_handle, &xfer);
 

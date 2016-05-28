@@ -531,7 +531,10 @@ static fault_reg_t hard_fault_last_reg;
 void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
 {
     static int hard_fault_count_init;
-    
+
+    printf("!!!!!!!!!! HARD FAULT !!!!!!!!!!!!!!\r\n");
+    NVIC_SystemReset();
+
     if (hard_fault_count_init != 0xABCD) {
         hard_fault_count_init = 0xABCD;
         hard_fault_count = 1;
@@ -563,9 +566,6 @@ void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
             __NOP();
         }
     }*/
-
-    printf("!!!!!!!!!! HARD FAULT !!!!!!!!!!!!!!\r\n");
-    NVIC_SystemReset();
 
     while (!hard_fault_continue) asm("nop");
 

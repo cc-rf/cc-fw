@@ -110,7 +110,7 @@ enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t is
         PORT_SetPinConfig(SYS_PORT_PORTN(cfg->port), cfg->pin, &port_pin_config);
         PORT_SetPinInterruptConfig(SYS_PORT_PORTN(cfg->port), cfg->pin, EDGE_MAP[edge]);
 
-        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY/*+2*/);
+        NVIC_SetPriority(SYS_PORT_IRQN(cfg->port), configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY+1/*+2*/);
 
         EnableIRQ(SYS_PORT_IRQN(cfg->port));
 
