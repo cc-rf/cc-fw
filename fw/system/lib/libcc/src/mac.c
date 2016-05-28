@@ -189,7 +189,22 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
 
         case CC1200_MARC_STATUS1_RX_FINISHED:
             if (!mac[dev].chan_cur_pkt_cnt++) {
-                cc_set_rx_timeout(dev, mac[dev].rx_timeout*100);
+                bool chan_changed = false;
+
+                for (u8 i = MAC_DEV_MIN; i <= MAC_DEV_MAX; ++i) {
+                    if (i == dev) continue;
+                    if ((phy_rx_enabled(i) || mac[i].tx_on) && mac[dev].chan_cur == mac[i].chan_cur) {
+                        next_chan(dev);
+                        chan_changed = true;
+                        break;
+                    }
+                }
+
+                if (chan_changed) {
+                    mac[dev].chan_cur_pkt_cnt = 0;
+                } else {
+                    cc_set_rx_timeout(dev, mac[dev].rx_timeout*100);
+                }
             }
 
             if (param) *(bool *) param = true;
