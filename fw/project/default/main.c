@@ -135,6 +135,8 @@ typedef struct __packed ucmd_tx {
     ucmd_hdr_t hdr;  /* cmd == 0x11 */
     u8 flags;
     u8 channel;
+    u8 count;
+    u8 delay;
     u8 data[];
 
 } ucmd_tx_t;
@@ -254,16 +256,22 @@ static void input_task(void *param)
             frame.len -= sizeof(ucmd_tx_t);
 
             if ((ucmd->hdr.cmd == 0x11) && frame.len) {
-                bool cca = false;//(ucmd->flags & 1) == 0;
+                const bool cca = false;//(ucmd->flags & 1) == 0;
+
+                printf("ucmd(tx): flags=0x%02X channel=%u len=%u count=%u delay=%u\n",
+                       ucmd->flags, ucmd->channel, frame.len, ucmd->count, ucmd->delay
+                );
+
                 mac_tx_begin((chan_t) ucmd->channel);
-                mac_tx(cca, ucmd->data, frame.len);
+
+                while (ucmd->count--) {
+                    mac_tx(cca, ucmd->data, frame.len);
+                    vTaskDelay((TickType_t)ucmd->delay / portTICK_PERIOD_MS);
+                }
+
                 mac_tx_end();
 
-                //printf("ucmd(tx): flags=0x%02X channel=%u len=%u total=%u\n",
-                //       ucmd->flags, ucmd->channel, frame.len, ++tx_count
-                //);
-
-                //printf("ucmd(tx): done\n");
+                printf("ucmd(tx): done\n");
             } else {
                 frame.len = frame.len + sizeof(ucmd_tx_t) - sizeof(ucmd_hdr_t);
                 printf("ucmd: cmd=0x%02X len=%u\n",

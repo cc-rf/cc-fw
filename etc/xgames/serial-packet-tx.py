@@ -6,13 +6,14 @@ import time
 
 pkt_length = 14
 pkt_count = 100
+pkt_delay = 0
 pkt_flags = 0
 pkt_channel = 2
 
-
 def pkt_create(idx):
-    return struct.pack("<BBBB%is" % (pkt_length - 1),
-                       0x11, pkt_flags, pkt_channel, idx % 255, ':' * (pkt_length - 1))
+    return struct.pack("<BBBBBB%is" % (pkt_length - 1),
+             0x11, pkt_flags, pkt_channel, pkt_count, pkt_delay,
+             idx % 255, ':' * (pkt_length - 1))
 
 
 def main(args):
@@ -29,7 +30,7 @@ def main(args):
 
         print >>sys.stderr, "tx: flags=%i channel=%i length=%i count=%i" % (pkt_flags, pkt_channel, pkt_length, pkt_count)
 
-        for idx in range(pkt_count):
+        for idx in range(1):
             data = pkt_create(idx)
             data_len = data_len_rem = len(data)
             frame_count = 0
