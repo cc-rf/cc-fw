@@ -38,6 +38,7 @@ static struct {
     volatile bool tx_on;
     volatile bool tx_restart_rx;
     xSemaphoreHandle mtx;
+    u8 rx_channel;
 
 } mac[MAC_NUM_DEVICES];
 
@@ -112,6 +113,7 @@ static bool mac_setup(cc_dev_t dev)
     mac[dev].rx_timeout = 5000000;
     cc_set_rx_timeout(dev, mac[dev].rx_timeout);
 
+    mac[dev].rx_channel = 0xFF;
     chan_grp_init(&channels[dev].group, channels[dev].hop_table);
     chan_grp_calibrate(&channels[dev].group);
     mac[dev].chan_cur = channels[dev].hop_table[0];
@@ -138,6 +140,15 @@ static void mac_unlock(cc_dev_t dev)
 
 static inline void next_chan(cc_dev_t dev)
 {
+    if (mac[dev].rx_channel != 0xFF) {
+        if (mac[dev].chan_cur != mac[dev].rx_channel) {
+            mac[dev].chan_cur = mac[dev].rx_channel;
+            chan_select(&channels[dev].group, mac[dev].chan_cur);
+        }
+
+        return;
+    }
+
     incr:
 
     if (!mac[dev].channel_hop_cycle++) {
@@ -175,7 +186,10 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
             if (!mac[dev].tx_on) {
                 if (mac[dev].chan_cur_pkt_cnt) {
                     mac[dev].chan_cur_pkt_cnt = 0;
-                    cc_set_rx_timeout(dev, mac[dev].rx_timeout);
+
+                    if (mac[dev].rx_channel == 0xFF) {
+                        cc_set_rx_timeout(dev, mac[dev].rx_timeout);
+                    }
                 }
 
                 if (param) {
@@ -189,23 +203,27 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
 
         case CC1200_MARC_STATUS1_RX_FINISHED:
             if (!mac[dev].chan_cur_pkt_cnt++) {
-                bool chan_changed = false;
+                if (mac[dev].rx_channel == 0xFF) {
+                    bool chan_changed = false;
 
-                for (u8 i = MAC_DEV_MIN; i <= MAC_DEV_MAX; ++i) {
-                    if (i == dev) continue;
-                    if ((phy_rx_enabled(i) || mac[i].tx_on) && mac[dev].chan_cur == mac[i].chan_cur) {
-                        next_chan(dev);
-                        chan_changed = true;
-                        break;
+                    for (u8 i = MAC_DEV_MIN; i <= MAC_DEV_MAX; ++i) {
+                        if (i == dev) continue;
+                        if ((phy_rx_enabled(i) || mac[i].tx_on) && mac[dev].chan_cur == mac[i].chan_cur) {
+                            next_chan(dev);
+                            chan_changed = true;
+                            break;
+                        }
+                    }
+
+                    if (chan_changed) {
+                        mac[dev].chan_cur_pkt_cnt = 0;
+                    } else {
+                        cc_set_rx_timeout(dev, mac[dev].rx_timeout * 100);
                     }
                 }
-
-                if (chan_changed) {
-                    mac[dev].chan_cur_pkt_cnt = 0;
-                } else {
-                    cc_set_rx_timeout(dev, mac[dev].rx_timeout*100);
-                }
             }
+
+            if (mac[dev].rx_channel != 0xFF) next_chan(dev);
 
             if (param) *(bool *) param = true;
             break;
@@ -295,6 +313,19 @@ void mac_tx(bool cca, u8 *buf, u32 len)
 
     //amp_ctrl(MAC_DEVICE_TX, AMP_HGM, /*phy_rx_enabled(MAC_DEVICE_TX)*/);
     //next_chan(dev);
+}
+
+void mac_set_rx_channel(cc_dev_t dev, u8 channel)
+{
+    if (channel != mac[dev].rx_channel) {
+        mac[dev].rx_channel = channel;
+
+        if (channel == 0xFF) {
+            cc_set_rx_timeout(dev, mac[dev].rx_timeout);
+        } else {
+            cc_set_rx_timeout(dev, mac[dev].rx_timeout*100);
+        }
+    }
 }
 
 void mac_rx_enable(void)

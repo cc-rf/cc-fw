@@ -141,6 +141,13 @@ typedef struct __packed ucmd_tx {
 
 } ucmd_tx_t;
 
+typedef struct __packed ucmd_rx {
+    ucmd_hdr_t hdr;  /* cmd == 0x12 */
+    u8 radio;
+    u8 channel;
+
+} ucmd_rx_t;
+
 static xQueueHandle output_queue;
 
 static void main_task(void *param)
@@ -251,11 +258,13 @@ static void input_task(void *param)
             continue;
         }
 
-        if (frame.len >= sizeof(ucmd_tx_t)) {
-            ucmd_tx_t *ucmd = (ucmd_tx_t *)frame.data;
-            frame.len -= sizeof(ucmd_tx_t);
+        if (frame.len >= sizeof(ucmd_hdr_t)) {
+            ucmd_hdr_t *hdr = (ucmd_hdr_t *)frame.data;
 
-            if ((ucmd->hdr.cmd == 0x11) && frame.len) {
+            if (hdr->cmd == 0x11 && frame.len >= sizeof(ucmd_tx_t)) {
+                ucmd_tx_t *ucmd = (ucmd_tx_t *) frame.data;
+                frame.len -= sizeof(ucmd_tx_t);
+
                 const bool cca = false;//(ucmd->flags & 1) == 0;
 
                 printf("ucmd(tx): flags=0x%02X channel=%u len=%u count=%u delay=%u\n",
@@ -266,18 +275,23 @@ static void input_task(void *param)
 
                 while (ucmd->count--) {
                     mac_tx(cca, ucmd->data, frame.len);
-                    vTaskDelay((TickType_t)ucmd->delay / portTICK_PERIOD_MS);
+                    vTaskDelay((TickType_t) ucmd->delay / portTICK_PERIOD_MS);
                 }
 
                 mac_tx_end();
 
                 printf("ucmd(tx): done\n");
+            } else if (hdr->cmd == 0x12 && frame.len >= sizeof(ucmd_rx_t)) {
+                ucmd_rx_t *ucmd = (ucmd_rx_t *) frame.data;
+                if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->channel < 50 || ucmd->channel == 0xFF))
+                    mac_set_rx_channel((cc_dev_t)ucmd->radio, ucmd->channel);
             } else {
                 frame.len = frame.len + sizeof(ucmd_tx_t) - sizeof(ucmd_hdr_t);
                 printf("ucmd: cmd=0x%02X len=%u\n",
-                       ucmd->hdr.cmd, frame.len
+                       hdr->cmd, frame.len
                 );
             }
+
         } else {
             printf("uart rx frame: len=%u\n", frame.len);
         }
