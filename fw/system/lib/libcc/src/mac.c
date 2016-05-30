@@ -320,11 +320,16 @@ void mac_set_rx_channel(cc_dev_t dev, u8 channel)
     if (channel != mac[dev].rx_channel) {
         mac[dev].rx_channel = channel;
 
+        cc_strobe(dev, CC1200_SIDLE);
+
         if (channel == 0xFF) {
             cc_set_rx_timeout(dev, mac[dev].rx_timeout);
         } else {
             cc_set_rx_timeout(dev, mac[dev].rx_timeout*100);
+            chan_select(&channels[dev].group, mac[dev].rx_channel);
         }
+
+        cc_strobe(dev, CC1200_SRX);
     }
 }
 
@@ -334,6 +339,12 @@ void mac_rx_enable(void)
         mac_lock(dev);
         amp_ctrl(dev, AMP_HGM, true);
         amp_ctrl(dev, AMP_LNA, true);
+        cc_set_rx_timeout(dev, mac[dev].rx_timeout);
+        if (mac[dev].rx_channel != 0xFF) {
+            cc_strobe(dev, CC1200_SIDLE);
+            mac[dev].chan_cur = mac[dev].rx_channel;
+            chan_select(&channels[dev].group, mac[dev].rx_channel);
+        }
         phy_rx_enable(dev);
         mac_unlock(dev);
         //cc_dbg("[%u] rx enable: f=%lu sr=%lu",
