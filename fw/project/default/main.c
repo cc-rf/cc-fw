@@ -180,6 +180,10 @@ static void main_task(void *param)
         goto done;
     }
 
+    cc_set_mod_cfg_1(0);
+    cc_set_mod_cfg_1(1);
+
+
 #if MODE == MODE_TX
 
     u32 xsec0, xsec1;

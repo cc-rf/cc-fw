@@ -222,9 +222,11 @@ u32 cc_set_freq_dev(cc_dev_t dev, u32 freq_dev)
 
     reg = (u8)fdr;
     cc_set(dev, CC1200_DEVIATION_M, reg);
+    cc_dbg("[%u] DEVIATION_M = 0x%02X", dev, reg);
     reg = cc_get(dev, CC1200_MODCFG_DEV_E);
     reg |= dev_e << CC1200_MODCFG_DEV_E_DEV_E_S;
     cc_set(dev, CC1200_MODCFG_DEV_E, reg);
+    cc_dbg("[%u] MODCFG_DEV_E = 0x%02X", dev, reg);
 
     /* TODO: Determine whether a read-back is needed first.
      * Otherwise, just convert back in case of rounding errors
@@ -309,6 +311,7 @@ u32 cc_set_symbol_rate(cc_dev_t dev, u32 symbol_rate)
     cc_set(dev, CC1200_SYMBOL_RATE2, sr.reg[2]);
     cc_set(dev, CC1200_SYMBOL_RATE1, sr.reg[1]);
     cc_set(dev, CC1200_SYMBOL_RATE0, sr.reg[0]);
+    cc_dbg("[%u] SYMBOL_RATE = [ 2: 0x%02X, 1: 0x%02X, 0: 0x%02X ]", dev, sr.reg[2], sr.reg[1], sr.reg[0]);
 
     /* TODO: Determine whether a read-back is needed first.
      * Otherwise, just convert back in case of rounding errors
@@ -394,6 +397,7 @@ u32 cc_set_rx_filt_bw(cc_dev_t dev, u32 rx_filt_bw)
                  | ((bdf_best << CC1200_CHAN_BW_BB_CIC_DECFACT_S) & CC1200_CHAN_BW_BB_CIC_DECFACT_M);
 
     cc_set(dev, CC1200_CHAN_BW, cbw);
+    cc_dbg("[%u] CHAN_BW = 0x%02X", dev, cbw);
 
     const u32 div = adf_best * bdf_best * 2u;
 
@@ -480,17 +484,34 @@ u64 cc_set_rx_timeout(cc_dev_t dev, u64 ns)
 void cc_set_mod_cfg_0(cc_dev_t dev)
 {
     cc_strobe(dev, CC1200_SIDLE);
-    cc_set_freq_dev(dev, 20000);
+
+    //cc_set_freq_dev(dev, 20000);
+    cc_set(dev, CC1200_DEVIATION_M, 0x06);
+    cc_set(dev, CC1200_MODCFG_DEV_E, 0x0B);
+
     cc_set_symbol_rate(dev, 50000);
-    cc_set_rx_filt_bw(dev, 105000);
-    cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_NORMAL);
+
+    //cc_set_rx_filt_bw(dev, 105000);
+    cc_set(dev, CC1200_CHAN_BW, 0x84);
+
+    //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_NORMAL);
+    //cc_dbg("[%u] MODCFG_DEV_E[NORMAL] = 0x%02X", dev, cc_get(dev, CC1200_MODCFG_DEV_E));
 }
 
 void cc_set_mod_cfg_1(cc_dev_t dev)
 {
     cc_strobe(dev, CC1200_SIDLE);
-    cc_set_freq_dev(dev, 180000);
+
+    //cc_set_freq_dev(dev, 180000);
+    cc_set(dev, CC1200_DEVIATION_M, 0x27);
+    cc_set(dev, CC1200_MODCFG_DEV_E, 0x8E);
+
     cc_set_symbol_rate(dev, 200000);
-    cc_set_rx_filt_bw(dev, 512000);
-    cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_DSSS_PN);
+
+    //cc_set_rx_filt_bw(dev, 512000);
+    cc_set(dev, CC1200_CHAN_BW, 0x03);
+
+    //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_DSSS_PN);
+    //cc_dbg("[%u] MODCFG_DEV_E[DSSS] = 0x%02X", dev, cc_get(dev, CC1200_MODCFG_DEV_E));
+
 }
