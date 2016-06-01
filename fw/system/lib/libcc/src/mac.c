@@ -315,9 +315,30 @@ void mac_tx(bool cca, u8 *buf, u32 len)
     //next_chan(dev);
 }
 
+void mac_set_mod_cfg_0(cc_dev_t dev)
+{
+    mac_lock(dev);
+    cc_set_mod_cfg_0(dev);
+    if (phy_rx_enabled(dev)) {
+        cc_strobe(dev, CC1200_SRX);
+    }
+    mac_unlock(dev);
+}
+
+void mac_set_mod_cfg_1(cc_dev_t dev)
+{
+    mac_lock(dev);
+    cc_set_mod_cfg_1(dev);
+    if (phy_rx_enabled(dev)) {
+        cc_strobe(dev, CC1200_SRX);
+    }
+    mac_unlock(dev);
+}
+
 void mac_set_rx_channel(cc_dev_t dev, u8 channel)
 {
     if (channel != mac[dev].rx_channel) {
+        mac_lock(dev);
         mac[dev].rx_channel = channel;
 
         cc_strobe(dev, CC1200_SIDLE);
@@ -330,6 +351,7 @@ void mac_set_rx_channel(cc_dev_t dev, u8 channel)
         }
 
         cc_strobe(dev, CC1200_SRX);
+        mac_unlock(dev);
     }
 }
 

@@ -148,6 +148,13 @@ typedef struct __packed ucmd_rx {
 
 } ucmd_rx_t;
 
+typedef struct __packed ucmd_mod {
+    ucmd_hdr_t hdr;     /* cmd == 0x13 */
+    u8 radio;           /* == 0 or 1 */
+    u8 mode;            /* == 0 or 1 */
+
+} ucmd_mod_t;
+
 static xQueueHandle output_queue;
 
 static void main_task(void *param)
@@ -282,6 +289,14 @@ static void input_task(void *param)
 
                 printf("ucmd(tx): done\n");
             } else if (hdr->cmd == 0x12 && frame.len >= sizeof(ucmd_rx_t)) {
+                ucmd_mod_t *ucmd = (ucmd_mod_t *) frame.data;
+                if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->mode == 0 || ucmd->mode == 1)) {
+                    if (ucmd->mode == 0)
+                        mac_set_mod_cfg_0((cc_dev_t) ucmd->radio);
+                    else
+                        mac_set_mod_cfg_1((cc_dev_t) ucmd->radio);
+                }
+            } else if (hdr->cmd == 0x13 && frame.len >= sizeof(ucmd_mod_t)) {
                 ucmd_rx_t *ucmd = (ucmd_rx_t *) frame.data;
                 if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->channel < 50 || ucmd->channel == 0xFF))
                     mac_set_rx_channel((cc_dev_t)ucmd->radio, ucmd->channel);
