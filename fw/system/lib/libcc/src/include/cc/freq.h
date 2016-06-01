@@ -168,3 +168,6 @@ u64 cc_get_rx_timeout(cc_dev_t dev);
  * @return configured RX termination timeout (ns).
  */
 u64 cc_set_rx_timeout(cc_dev_t dev, u64 ns);
+
+void cc_set_mod_cfg_0(cc_dev_t dev);
+void cc_set_mod_cfg_1(cc_dev_t dev);

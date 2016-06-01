@@ -476,3 +476,21 @@ u64 cc_set_rx_timeout(cc_dev_t dev, u64 ns)
 
     return ((1000000000ul * 1250ul * ev) << (4 * wr)) / CC_XOSC_FREQ; /* TODO: Is rounding needed? */
 }
+
+void cc_set_mod_cfg_0(cc_dev_t dev)
+{
+    cc_strobe(dev, CC1200_SIDLE);
+    cc_set_freq_dev(dev, 20000);
+    cc_set_symbol_rate(dev, 50000);
+    cc_set_rx_filt_bw(dev, 105000);
+    cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_NORMAL);
+}
+
+void cc_set_mod_cfg_1(cc_dev_t dev)
+{
+    cc_strobe(dev, CC1200_SIDLE);
+    cc_set_freq_dev(dev, 180000);
+    cc_set_symbol_rate(dev, 200000);
+    cc_set_rx_filt_bw(dev, 512000);
+    cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_DSSS_PN);
+}

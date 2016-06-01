@@ -14,9 +14,9 @@
       <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/usb_device_cdc_acm.c" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/usb_device_ch9.c" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/project/default/usb/usb_device_descriptor.c" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/CMakeLists.txt" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/main.c" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/project/default/config.cmake" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/main.c" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/fw/project/default/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/fw.c" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/system/framework/trace/CMakeLists.txt" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/fw/system/util/uart/uart.h" isTestSource="false" />
