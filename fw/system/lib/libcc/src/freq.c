@@ -494,6 +494,13 @@ void cc_set_mod_cfg_0(cc_dev_t dev)
     //cc_set_rx_filt_bw(dev, 105000);
     cc_set(dev, CC1200_CHAN_BW, 0x84);
 
+    cc_set(dev, CC1200_DCFILT_CFG, 0x56);
+    cc_set(dev, CC1200_AGC_REF, 0x2E);
+    cc_set(dev, CC1200_AGC_CS_THR, 0x01);
+
+    // FB2PLL off
+    //cc_set(dev, CC1200_FREQOFF_CFG, 0x20);
+
     //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_NORMAL);
     //cc_dbg("[%u] MODCFG_DEV_E[NORMAL] = 0x%02X", dev, cc_get(dev, CC1200_MODCFG_DEV_E));
 }
@@ -503,13 +510,24 @@ void cc_set_mod_cfg_1(cc_dev_t dev)
     cc_strobe(dev, CC1200_SIDLE);
 
     //cc_set_freq_dev(dev, 180000);
-    cc_set(dev, CC1200_DEVIATION_M, 0x27);
-    cc_set(dev, CC1200_MODCFG_DEV_E, 0x8E);
+    cc_set(dev, CC1200_DEVIATION_M, 0x27); // 180 kHz
+    //cc_set(dev, CC1200_DEVIATION_M, 0x89); // 120 kHz
+    //cc_set(dev, CC1200_DEVIATION_M, 0x48); // 200 kHz
+    cc_set(dev, CC1200_MODCFG_DEV_E, 0x8E); // 180/200 kHz
+    //cc_set(dev, CC1200_MODCFG_DEV_E, 0x8D); // 120 kHz
 
     cc_set_symbol_rate(dev, 200000);
 
     //cc_set_rx_filt_bw(dev, 512000);
     cc_set(dev, CC1200_CHAN_BW, 0x03);
+
+    cc_set(dev, CC1200_DCFILT_CFG, 0x56);
+    cc_set(dev, CC1200_AGC_REF, 0x27);
+    cc_set(dev, CC1200_AGC_CS_THR, 0x01);
+
+
+    // FB2PLL
+    //cc_set(dev, CC1200_FREQOFF_CFG, 0x30);
 
     //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_DSSS_PN);
     //cc_dbg("[%u] MODCFG_DEV_E[DSSS] = 0x%02X", dev, cc_get(dev, CC1200_MODCFG_DEV_E));

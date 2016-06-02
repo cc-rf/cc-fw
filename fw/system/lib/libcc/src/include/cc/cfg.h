@@ -39,13 +39,15 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
 // Device address = 0
 // Packet length = 255
 // Packet bit length = 0
+// [Changed sync word length to 18 bits]
 
 static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC3,             0x6F}, // Sync Word Configuration [31:24]
         {CC1200_SYNC2,             0x4E}, // Sync Word Configuration [23:16]
         {CC1200_SYNC1,             0x90}, // Sync Word Configuration [15:8]
         {CC1200_SYNC0,             0x4E}, // Sync Word Configuration [7:0]
-        {CC1200_SYNC_CFG1,         0xE9}, // Sync Word Detection Configuration Reg. 1
+        {CC1200_SYNC_CFG1,         0xA5/*0xE9*/}, // Sync Word Detection Configuration Reg. 1
+        {CC1200_SYNC_CFG0,         0x23},
         {CC1200_MODCFG_DEV_E,      0x0B}, // Modulation Format and Frequency Deviation Configur..
         {CC1200_PREAMBLE_CFG1,     0x29}, // Preamble Length Configuration Reg. 1
         {CC1200_PREAMBLE_CFG0,     0x8A}, // Preamble Detection Configuration Reg. 0
@@ -59,13 +61,13 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_AGC_REF,           0x21/*0x27*/}, // AGC Reference Level Configuration
         {CC1200_AGC_CS_THR,        0x01}, // Carrier Sense Threshold Configuration
         {CC1200_AGC_CFG1,          0x11}, // Automatic Gain Control Configuration Reg. 1
-        {CC1200_AGC_CFG0,          0x94}, // Automatic Gain Control Configuration Reg. 0
+        {CC1200_AGC_CFG0,          0x90/*0x94*/}, // Automatic Gain Control Configuration Reg. 0
         {CC1200_FIFO_CFG,          0x00}, // FIFO Configuration
         {CC1200_FS_CFG,            0x12}, // Frequency Synthesizer Configuration
         {CC1200_PKT_CFG2,          0x00}, // Packet Configuration Reg. 2
         {CC1200_PKT_CFG0,          0x20}, // Packet Configuration Reg. 0
         {CC1200_PKT_LEN,           0xFF}, // Packet Length Configuration
-        {CC1200_IF_MIX_CFG,        0x1C}, // IF Mix Configuration
+        {CC1200_IF_MIX_CFG,        0x18/*0x1C*/}, // IF Mix Configuration
         {CC1200_TOC_CFG,           0x03}, // Timing Offset Correction Configuration
         {CC1200_MDMCFG2,           0x02}, // General Modem Parameter Configuration Reg. 2
         {CC1200_FREQ2,             0x5C}, // Frequency Configuration [23:16]

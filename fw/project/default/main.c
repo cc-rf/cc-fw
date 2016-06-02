@@ -293,6 +293,10 @@ static void input_task(void *param)
 
                 printf("ucmd(tx): done\n");
             } else if (hdr->cmd == 0x12 && frame.len >= sizeof(ucmd_rx_t)) {
+                ucmd_rx_t *ucmd = (ucmd_rx_t *) frame.data;
+                if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->channel < 50 || ucmd->channel == 0xFF))
+                    mac_set_rx_channel((cc_dev_t)ucmd->radio, ucmd->channel);
+            } else if (hdr->cmd == 0x13 && frame.len >= sizeof(ucmd_mod_t)) {
                 ucmd_mod_t *ucmd = (ucmd_mod_t *) frame.data;
                 if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->mode == 0 || ucmd->mode == 1)) {
                     if (ucmd->mode == 0)
@@ -300,10 +304,6 @@ static void input_task(void *param)
                     else
                         mac_set_mod_cfg_1((cc_dev_t) ucmd->radio);
                 }
-            } else if (hdr->cmd == 0x13 && frame.len >= sizeof(ucmd_mod_t)) {
-                ucmd_rx_t *ucmd = (ucmd_rx_t *) frame.data;
-                if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->channel < 50 || ucmd->channel == 0xFF))
-                    mac_set_rx_channel((cc_dev_t)ucmd->radio, ucmd->channel);
             } else {
                 frame.len = frame.len + sizeof(ucmd_tx_t) - sizeof(ucmd_hdr_t);
                 printf("ucmd: cmd=0x%02X len=%u\n",
