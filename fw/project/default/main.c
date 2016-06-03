@@ -180,10 +180,6 @@ static void main_task(void *param)
         goto done;
     }
 
-    cc_set_mod_cfg_1(0);
-    cc_set_mod_cfg_1(1);
-
-
 #if MODE == MODE_TX
 
     u32 xsec0, xsec1;
@@ -282,23 +278,29 @@ static void input_task(void *param)
                        ucmd->flags, ucmd->channel, frame.len, ucmd->count, ucmd->delay
                 );
 
-                mac_tx_begin((chan_t) ucmd->channel);
+                if (ucmd->flags & 0x01) mac_tx_begin(CC_DEV_MIN, (chan_t) ucmd->channel);
+                if (ucmd->flags & 0x02) mac_tx_begin(CC_DEV_MAX, (chan_t) ucmd->channel);
 
                 while (ucmd->count--) {
-                    mac_tx(cca, ucmd->data, frame.len);
+                    if (ucmd->flags & 0x01) mac_tx(CC_DEV_MIN, cca, ucmd->data, frame.len);
+                    if (ucmd->flags & 0x02) mac_tx(CC_DEV_MAX, cca, ucmd->data, frame.len);
                     vTaskDelay((TickType_t) ucmd->delay / portTICK_PERIOD_MS);
                 }
 
-                mac_tx_end();
+                if (ucmd->flags & 0x01) mac_tx_end(CC_DEV_MIN);
+                if (ucmd->flags & 0x02) mac_tx_end(CC_DEV_MAX);
 
                 printf("ucmd(tx): done\n");
             } else if (hdr->cmd == 0x12 && frame.len >= sizeof(ucmd_rx_t)) {
                 ucmd_rx_t *ucmd = (ucmd_rx_t *) frame.data;
-                if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->channel < 50 || ucmd->channel == 0xFF))
-                    mac_set_rx_channel((cc_dev_t)ucmd->radio, ucmd->channel);
+                if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->channel < 50 || ucmd->channel == 0xFF)) {
+                    printf("ucmd(rx): radio=%u channel=%u\n", ucmd->radio, ucmd->channel);
+                    mac_set_rx_channel((cc_dev_t) ucmd->radio, ucmd->channel);
+                }
             } else if (hdr->cmd == 0x13 && frame.len >= sizeof(ucmd_mod_t)) {
                 ucmd_mod_t *ucmd = (ucmd_mod_t *) frame.data;
                 if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->mode == 0 || ucmd->mode == 1)) {
+                    printf("ucmd(mod): radio=%u mode=%u\n", ucmd->radio, ucmd->mode);
                     if (ucmd->mode == 0)
                         mac_set_mod_cfg_0((cc_dev_t) ucmd->radio);
                     else

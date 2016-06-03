@@ -245,10 +245,8 @@ static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len)
     //next_chan(dev);
 }
 
-void mac_tx_begin(chan_t chan)
+void mac_tx_begin(cc_dev_t dev, chan_t chan)
 {
-    const dev_t dev = MAC_DEV_MAX;
-
     mac_lock(dev);
     mac[dev].tx_on = true;
 
@@ -266,10 +264,8 @@ void mac_tx_begin(chan_t chan)
     mac_unlock(dev);
 }
 
-void mac_tx_end(void)
+void mac_tx_end(cc_dev_t dev)
 {
-    const dev_t dev = MAC_DEV_MAX;
-
     mac_lock(dev);
     amp_ctrl(dev, AMP_PA, false);
 
@@ -301,10 +297,8 @@ void mac_tx_end(void)
 /**
  * TODO: Collision detection, streaming, automatic TX channel selection
  */
-void mac_tx(bool cca, u8 *buf, u32 len)
+void mac_tx(cc_dev_t dev, bool cca, u8 *buf, u32 len)
 {
-    const dev_t dev = MAC_DEV_MAX;
-
     if (cca) {
         amp_ctrl(dev, AMP_LNA, true);
     }

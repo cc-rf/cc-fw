@@ -500,6 +500,12 @@ void cc_set_mod_cfg_0(cc_dev_t dev)
     cc_set(dev, CC1200_IFAMP, 0x05);
     cc_set(dev, CC1200_PA_CFG0, 0x53);
 
+    cc_set(dev, CC1200_SYNC_CFG1, 0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16);
+    cc_set(dev, CC1200_PKT_CFG1, CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F |
+                                 CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF |
+                                 CC1200_PKT_CFG1_APPEND_STATUS);
+    cc_set(dev, CC1200_PREAMBLE_CFG1, 0x4 << 2);
+
     // FB2PLL off
     //cc_set(dev, CC1200_FREQOFF_CFG, 0x20);
 
@@ -530,6 +536,13 @@ void cc_set_mod_cfg_1(cc_dev_t dev)
     cc_set(dev, CC1200_AGC_CS_THR, /*0x01*/0xEC);
     cc_set(dev, CC1200_IFAMP, 0x05);
     cc_set(dev, CC1200_PA_CFG0, 0x51);
+
+    cc_set(dev, CC1200_SYNC_CFG1, 0xA5);
+    cc_set(dev, CC1200_PKT_CFG1, CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F |
+                                 CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF |
+                                 CC1200_PKT_CFG1_APPEND_STATUS |
+                                 CC1200_PKT_CFG1_WHITE_DATA);
+    cc_set(dev, CC1200_PREAMBLE_CFG1, 0x2 << 2);
 
     // FB2PLL
     //cc_set(dev, CC1200_FREQOFF_CFG, 0x30);
