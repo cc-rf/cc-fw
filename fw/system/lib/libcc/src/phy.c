@@ -25,13 +25,13 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
          * forever despite the lack of a sync word detection.
          * For the timeout to always trigger an interrupt, RX_TIME_QUAL must be zero.
          * */
-        {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE | (0x7<<1) /*| CC1200_RFEND_CFG1_RX_TIME_QUAL_M*/},
-        {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE | 0/*!CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN*/},
+        {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE | (0x7<<1) | CC1200_RFEND_CFG1_RX_TIME_QUAL_M},
+        {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE | CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN},
 
         // These may not necessarily be part of the phy handling
 
-        {CC1200_PREAMBLE_CFG1, /*0xD*/0x4 << 2},
-        {CC1200_SYNC_CFG1,  0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16/* changed from 11 */},
+        //{CC1200_PREAMBLE_CFG1, /*0xD*/0x4 << 2},
+        //{CC1200_SYNC_CFG1,  0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16/* changed from 11 */},
         {CC1200_PKT_CFG2,   CC1200_PKT_CFG2_CCA_MODE_ALWAYS},
         {CC1200_PKT_CFG1,   CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F | CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF | CC1200_PKT_CFG1_APPEND_STATUS},
         {CC1200_PKT_CFG0,   CC1200_PKT_CFG0_LENGTH_CONFIG_VARIABLE},
@@ -131,10 +131,13 @@ static bool phy_setup(cc_dev_t dev)
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(pin), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
 
 
-    TimerHandle_t tmr = xTimerCreate("phy_tmr", 203 / portTICK_PERIOD_MS, pdTRUE, NULL, phy_tmr);
+    TimerHandle_t tmr = xTimerCreate("phy_tmr", 90/*203*/ / portTICK_PERIOD_MS, pdTRUE, NULL, phy_tmr);
 
     if (tmr) {
-        xTimerStart(tmr, 407 / portTICK_PERIOD_MS);
+        xTimerStart(tmr, /*407*/121 / portTICK_PERIOD_MS);
+    } else {
+        cc_dbg("[%u] error: timer create failed", dev);
+        return false;
     }
 
     return true;
@@ -197,12 +200,16 @@ static void isr_mcu_wake(cc_dev_t dev)
                 u8 *buf = alloca(len);
                 assert(buf);
                 cc_fifo_read(dev, buf, len);
-                handle_rx(dev, buf, len);
-            }
 
-            cc_strobe(dev, CC1200_SFRX);
-            if (phy[dev].phy_cfg.signal) phy[dev].phy_cfg.signal(dev, ms1, &flag);
-            if (flag) rx_resume(dev);
+                if (phy[dev].phy_cfg.signal) phy[dev].phy_cfg.signal(dev, ms1, &flag);
+                if (flag) rx_resume(dev);
+
+                handle_rx(dev, buf, len);
+            } else {
+                cc_strobe(dev, CC1200_SFRX);
+                if (phy[dev].phy_cfg.signal) phy[dev].phy_cfg.signal(dev, ms1, &flag);
+                if (flag) rx_resume(dev);
+            }
             break;
 
         case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
@@ -250,7 +257,6 @@ static void phy_rx_tmr_check(cc_dev_t dev)
 
         if (rx_ticks >= 8000000) {
             rxtimeout[dev] = true;
-            cc_dbg/*_v*/("[%u] rx timeout", dev);
 
             //const u8 ms = cc_get(dev, CC1200_MODEM_STATUS1);
             //const u8 st = cc_strobe(dev, CC1200_ACCESS_READ | CC1200_SNOP);
@@ -262,12 +268,14 @@ static void phy_rx_tmr_check(cc_dev_t dev)
             const u8 st = cc_strobe(dev, CC1200_SIDLE | CC1200_ACCESS_READ);
             //}
 
+            cc_dbg/*_v*/("[%u] rx timeout: st=0x%02X", dev, st);
+
             if (st & CC1200_STATUS_EXTRA_M) {
                 cc_strobe(dev, CC1200_SFRX);
             }
 
-            //rx_resume(dev);
-            phy_rx_tmr_kick(dev);
+            rx_resume(dev);
+            //phy_rx_tmr_kick(dev);
 
             //bool flag = true;
             //if (phy[dev].phy_cfg.signal) phy[dev].phy_cfg.signal(dev, CC1200_MARC_STATUS1_RX_TIMEOUT, &flag);

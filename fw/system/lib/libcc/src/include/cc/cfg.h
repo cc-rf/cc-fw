@@ -40,7 +40,7 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
 // Packet length = 255
 // Packet bit length = 0
 
-static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
+static const struct cc_cfg_reg CC_CFG_DEFAULT_0[] = {
         {CC1200_SYNC3,             0x6F}, // Sync Word Configuration [31:24]
         {CC1200_SYNC2,             0x4E}, // Sync Word Configuration [23:16]
         {CC1200_SYNC1,             0x90}, // Sync Word Configuration [15:8]
@@ -49,26 +49,26 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         //{CC1200_SYNC_CFG0,         0x23},
         //{CC1200_DEVIATION_M,       0x06},
         {CC1200_MODCFG_DEV_E,      0x0B}, // Modulation Format and Frequency Deviation Configur..
-        //{CC1200_DCFILT_CFG,        0x56}, // Digital DC Removal Configuration
+        ///*NEW-PA*/{CC1200_DCFILT_CFG,        0x56}, // Digital DC Removal Configuration
         {CC1200_PREAMBLE_CFG1,     0x29}, // Preamble Length Configuration Reg. 1
         {CC1200_PREAMBLE_CFG0,     0x8A}, // Preamble Detection Configuration Reg. 0
-        {CC1200_IQIC,              0x4B/*0xC8*/}, // Digital Image Channel Compensation Configuration
+        /*NEW-PA*/{CC1200_IQIC,              0x4B/*0xC8*/}, // Digital Image Channel Compensation Configuration
         {CC1200_CHAN_BW,           0x84/*0x10*/}, // Channel Filter Configuration
         {CC1200_MDMCFG1,           0x40/*0x42*/}, // General Modem Parameter Configuration Reg. 1
         {CC1200_MDMCFG0,           0x05}, // General Modem Parameter Configuration Reg. 0
         {CC1200_SYMBOL_RATE2,      0x94/*0x8F*/}, // Symbol Rate Configuration Exponent and Mantissa [1..
         {CC1200_SYMBOL_RATE1,      0x7A/*0x75*/}, // Symbol Rate Configuration Mantissa [15:8]
         {CC1200_SYMBOL_RATE0,      0xE1/*0x10*/}, // Symbol Rate Configuration Mantissa [7:0]
-        {CC1200_AGC_REF,           /*0x4E*/0x21/*0x27*/}, // AGC Reference Level Configuration
-        {CC1200_AGC_CS_THR,        /*0xEC*/0x01}, // Carrier Sense Threshold Configuration
+        /*NEW-PA*/{CC1200_AGC_REF,           0x4E/*0x21*//*0x27*/}, // AGC Reference Level Configuration
+        /*NEW-PA*/{CC1200_AGC_CS_THR,        0xEC/*0x01*/}, // Carrier Sense Threshold Configuration
         {CC1200_AGC_CFG1,          0x11}, // Automatic Gain Control Configuration Reg. 1
-        {CC1200_AGC_CFG0,          /*0x90*/0x94}, // Automatic Gain Control Configuration Reg. 0
+        /*NEW-PA*/{CC1200_AGC_CFG0,          /*0x90*/0x94}, // Automatic Gain Control Configuration Reg. 0
         {CC1200_FIFO_CFG,          0x00}, // FIFO Configuration
         {CC1200_FS_CFG,            0x12}, // Frequency Synthesizer Configuration
         {CC1200_PKT_CFG2,          0x00}, // Packet Configuration Reg. 2
         {CC1200_PKT_CFG0,          0x20}, // Packet Configuration Reg. 0
         {CC1200_PKT_LEN,           0xFF}, // Packet Length Configuration
-        {CC1200_IF_MIX_CFG,        /*0x18*/0x1C}, // IF Mix Configuration
+        /*NEW-PA*/{CC1200_IF_MIX_CFG,        /*0x18*/0x1C}, // IF Mix Configuration
         {CC1200_TOC_CFG,           0x03}, // Timing Offset Correction Configuration
         {CC1200_MDMCFG2,           0x02}, // General Modem Parameter Configuration Reg. 2
         {CC1200_FREQ2,             0x5C}, // Frequency Configuration [23:16]
@@ -88,10 +88,10 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_REG_DIV_CML,    0x1C}, // Frequency Synthesizer Divider Regulator Configurat..
         {CC1200_FS_SPARE,          0xAC}, // Frequency Synthesizer Spare
         {CC1200_FS_VCO0,           0xB5}, // FS Voltage Controlled Oscillator Configuration Reg..
-        {CC1200_IFAMP,             /*0x05*/0x09}, // Intermediate Frequency Amplifier Configuration
+        /*NEW-PA*/{CC1200_IFAMP,             /*0x05*/0x09}, // Intermediate Frequency Amplifier Configuration
         {CC1200_XOSC5,             0x0E}, // Crystal Oscillator Configuration Reg. 5
         {CC1200_XOSC1,             0x03}, // Crystal Oscillator Configuration Reg. 1
-        //{CC1200_PA_CFG0,           0x53}
+        ///*NEW-PA*/{CC1200_PA_CFG0,           0x53}
 };
 
 // -- This is a good low-bandwidth configuration
@@ -231,3 +231,73 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
         {CC1200_XOSC5,             0x0E}, // Crystal Oscillator Configuration Reg. 5
         {CC1200_XOSC1,             0x03}, // Crystal Oscillator Configuration Reg. 1
 };
+
+// Carrier frequency = 920.599976
+// Deviation = 138.854980
+// Address config = No address check
+// RX filter BW = 555.555556
+// Packet length mode = Variable
+// Device address = 0
+// Symbol rate = 250
+// Packet bit length = 0
+// Whitening = false
+// Modulation format = 2-GFSK
+// Packet length = 255
+// Bit rate = 250
+// Manchester enable = false
+ 
+static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
+        {CC1200_IOCFG2,            0x06},
+        {CC1200_SYNC_CFG1,         0xA8},
+        {CC1200_SYNC_CFG0,         0x23},
+        {CC1200_DEVIATION_M,       0xC7},
+        {CC1200_MODCFG_DEV_E,      0x0D},
+        {CC1200_DCFILT_CFG,        0x4B},
+        {CC1200_PREAMBLE_CFG1,     0x34}, // 30-byte preamble (4 == 0x18)
+        {CC1200_PREAMBLE_CFG0,     0x8A},
+        {CC1200_IQIC,              0x58},
+        {CC1200_CHAN_BW,           0x03},
+        {CC1200_MDMCFG1,           0x42},
+        {CC1200_MDMCFG0,           0x05},
+        {CC1200_SYMBOL_RATE2,      0xB9},
+        {CC1200_SYMBOL_RATE1,      0x99},
+        {CC1200_SYMBOL_RATE0,      0x9A},
+        {CC1200_AGC_REF,           0x80/*0x33*/},
+        {CC1200_AGC_CS_THR,        0x04/*0xFC*/},
+        {CC1200_AGC_CFG1,          0x00},
+        {CC1200_AGC_CFG0,          0x80},
+        {CC1200_FIFO_CFG,          0x00},
+        {CC1200_SETTLING_CFG,      0x03},
+        {CC1200_FS_CFG,            0x12},
+        {CC1200_WOR_CFG0,          0x20},
+        {CC1200_WOR_EVENT0_LSB,    0x1E},
+        {CC1200_PKT_CFG2,          0x00},
+        {CC1200_PKT_CFG0,          0x20},
+        {CC1200_RFEND_CFG0,        0x09},
+        {CC1200_PA_CFG1,           0x77},
+        {CC1200_PA_CFG0,           0x51},
+        {CC1200_PKT_LEN,           0xFF},
+        {CC1200_IF_MIX_CFG,        0x1C},
+        {CC1200_TOC_CFG,           0x03},
+        {CC1200_MDMCFG2,           0x02},
+        {CC1200_FREQ2,             0x5C},
+        {CC1200_FREQ1,             0x0F},
+        {CC1200_FREQ0,             0x5C},
+        {CC1200_IF_ADC1,           0xEE},
+        {CC1200_IF_ADC0,           0x10},
+        {CC1200_FS_DIG1,           0x04},
+        {CC1200_FS_DIG0,           0x55},
+        {CC1200_FS_CAL1,           0x40},
+        {CC1200_FS_CAL0,           0x0E},
+        {CC1200_FS_DIVTWO,         0x03},
+        {CC1200_FS_DSM0,           0x33},
+        {CC1200_FS_DVC0,           0x17},
+        {CC1200_FS_PFD,            0x00},
+        {CC1200_FS_PRE,            0x6E},
+        {CC1200_FS_REG_DIV_CML,    0x1C},
+        {CC1200_FS_SPARE,          0xAC},
+        {CC1200_FS_VCO0,           0xB5},
+        {CC1200_IFAMP,             0x09},
+        {CC1200_XOSC5,             0x0E},
+        {CC1200_XOSC1,             0x03}, 
+}; 

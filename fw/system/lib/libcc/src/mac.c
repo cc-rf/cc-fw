@@ -11,7 +11,7 @@
 #define MAC_NUM_DEVICES     CC_NUM_DEVICES
 #define MAC_DEV_MIN         CC_DEV_MIN
 #define MAC_DEV_MAX         CC_DEV_MAX
-#define MAC_NUM_CHANNELS    50
+#define MAC_NUM_CHANNELS    25
 
 static bool mac_setup(cc_dev_t dev);
 static void mac_lock(cc_dev_t dev);
@@ -110,7 +110,7 @@ static bool mac_setup(cc_dev_t dev)
      * of how long we stay there.
      */
 
-    mac[dev].rx_timeout = 5000000;
+    mac[dev].rx_timeout = 70000;//5000000;
     cc_set_rx_timeout(dev, mac[dev].rx_timeout);
 
     mac[dev].rx_channel = 0xFF;
@@ -187,9 +187,9 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
                 if (mac[dev].chan_cur_pkt_cnt) {
                     mac[dev].chan_cur_pkt_cnt = 0;
 
-                    if (mac[dev].rx_channel == 0xFF) {
+                    /*if (mac[dev].rx_channel == 0xFF) {
                         cc_set_rx_timeout(dev, mac[dev].rx_timeout);
-                    }
+                    }*/
                 }
 
                 if (param) {
@@ -218,7 +218,7 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
                     if (chan_changed) {
                         mac[dev].chan_cur_pkt_cnt = 0;
                     } else {
-                        cc_set_rx_timeout(dev, mac[dev].rx_timeout * 100);
+                        //cc_set_rx_timeout(dev, mac[dev].rx_timeout * 100);
                     }
                 }
             }

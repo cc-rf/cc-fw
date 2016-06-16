@@ -65,7 +65,7 @@ bool cc_isr_init(cc_dev_t dev)
 
     if (!rtos[dev].isr_task_handle) {
         xTaskCreate(
-                isr_task, "isr_task", TASK_STACK_SIZE_LARGE,
+                isr_task, "isr_task", TASK_STACK_SIZE_DEFAULT,
                 (void *)dev, TASK_PRIO_DEFAULT, &rtos[dev].isr_task_handle
         );
 

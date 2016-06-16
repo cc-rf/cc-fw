@@ -56,7 +56,7 @@
 #include "fsl_smc.h"
 #endif
 
-#define usb_echo(...)
+//#define usb_echo(...)
 
 #include "pin_mux.h"
 /*******************************************************************************
@@ -701,9 +701,9 @@ void vcom_init(void)
 {
     xTaskCreate(APPTask,                         /* pointer to the task                      */
                     s_appName,                       /* task name for kernel awareness debugging */
-                    5000L / sizeof(portSTACK_TYPE),  /* task stack size                          */
+                    TASK_STACK_SIZE_LARGE,  /* task stack size                          */
                     &s_cdcVcom,                      /* optional task startup argument           */
-                    configMAX_PRIORITIES - 1,        /* initial priority                         */
+                    TASK_PRIO_MAX,        /* initial priority                         */
                     &s_cdcVcom.applicationTaskHandle /* optional task handle to create           */
                     );
     //APPTask(&s_cdcVcom);

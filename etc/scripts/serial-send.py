@@ -20,6 +20,9 @@ def main(args):
             data_len = data_len_rem = len(data)
             frame_count = 0
 
+            if not data_len:
+				break
+
             while data_len_rem:
                 xfer_length = min(data_len_rem, 255)
                 write(chr(xfer_length) + data[:xfer_length])

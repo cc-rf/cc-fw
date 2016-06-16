@@ -51,7 +51,7 @@ int main(void)
 {
     BOARD_InitPins();
     LED_ABCD_ALL_ON();
-    BOARD_BootClockHSRUN();
+    BOARD_BootClockOCHSRUN();
     BOARD_InitDebugConsole();
     itm_init();
     printf("<boot>\r\n");
@@ -166,6 +166,7 @@ static void main_task(void *param)
 
     uart = uart_init(0, 230400);
 
+
     xQueueHandle input_queue = xQueueCreate(32, sizeof(uart_frame_t));
 
     if (!input_queue) goto done;
@@ -191,14 +192,14 @@ static void main_task(void *param)
     };
 
     //mac_rx_enable();
-    mac_tx_begin(13);
+    mac_tx_begin(DEVICE, 13);
 
     printf("tx: f=%lu\r\n", cc_get_freq(DEVICE));
 
     while (1) {
         //xsec0 = pit_get_elapsed(xsec_timer);
         if (!(++tx_data.seq % 10)) LED_B_TOGGLE();
-        mac_tx(false, (u8 *)&tx_data, sizeof(tx_data));
+        mac_tx(DEVICE, false, (u8 *)&tx_data, sizeof(tx_data));
         //printf("tx: chan=%u,%u duration=%luus count=%lu\r\n", chan, chan_cur_id, xsec, tx_data.seq);
         //while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 8333) mac_task();
         /*do {
@@ -212,6 +213,9 @@ static void main_task(void *param)
     //printf("rx: f=%lusr=%lut=%luus\r\n", cc_get_freq(DEVICE),  cc_get_symbol_rate(DEVICE), (u32)(cc_get_rx_timeout(DEVICE)/1000));
 
     mac_rx_enable();
+    //mac_set_rx_channel(0, 2);
+    //mac_set_rx_channel(1, 14);
+
 
     uart_frame_t frame;
 
@@ -338,7 +342,9 @@ pit_tick_t pkt_tmr_0[CC_NUM_DEVICES] = {0}, pkt_tmr_1[CC_NUM_DEVICES] = {0};
 
 static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
 {
-    if (!pkt_count[dev]) {
+    if (dev) itm_puts(0, "1");
+    else itm_puts(0, "0");
+    /*if (!pkt_count[dev]) {
         pkt_tmr_0[dev] = pit_get_elapsed(xsec_timer);
     }
 
@@ -360,7 +366,7 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
         if (!(pkt_count[dev] % 12)) LED_A_TOGGLE();
     } else {
         if (!(pkt_count[dev] % 12)) LED_B_TOGGLE();
-    }
+    }*/
 
     /*uart_frame_t const frame = {
             .data = buf,

@@ -4,11 +4,11 @@ import sys
 import struct
 import time
 
-pkt_length = 14
-pkt_count = 100
+pkt_length = 30
+pkt_count = 3
 pkt_delay = 0
-pkt_flags = 0
-pkt_channel = 2
+pkt_flags = 1
+pkt_channel = 10
 
 def pkt_create(idx):
     return struct.pack("<BBBBBB%is" % (pkt_length - 1),

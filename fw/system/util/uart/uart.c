@@ -35,6 +35,8 @@ uart_t uart_init(const uart_id_t id, const baud_t baud)
 
     DMAMGR_Init();
 
+    // NOTE: See FSL_FEATURE_UART_HAS_SEPARATE_DMA_RX_TX_REQn
+
     status = DMAMGR_RequestChannel(SYSTEM_UART_TX_DMA_REQ_SRCS[id], DMAMGR_DYNAMIC_ALLOCATE, &uart->tx_handle);
     assert(status == kStatus_Success);
 
