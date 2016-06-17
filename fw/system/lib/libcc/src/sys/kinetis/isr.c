@@ -57,7 +57,7 @@ bool cc_isr_init(cc_dev_t dev)
     if (!rtos[dev].isr_queue_handle) {
         rtos[dev].port_mask = 0;
 
-        if (!(rtos[dev].isr_queue_handle = xQueueCreate(4, sizeof(isr_queue_t)))) {
+        if (!(rtos[dev].isr_queue_handle = xQueueCreate(24, sizeof(isr_queue_t)))) {
             cc_dbg("[%u] error: queue create failed", dev);
             return false;
         }
@@ -195,7 +195,11 @@ static inline void isr_common(sys_port_t port, u32 flag)
 
     for (cc_dev_t dev = CC_DEV_MIN; dev <= CC_DEV_MAX; ++dev) {
         if (rtos[dev].port_mask & SYS_PORT_MASK(port)) {
-            xQueueSendFromISR(rtos[dev].isr_queue_handle, &evt, &xHigherPriorityTaskWoken);
+            if (xQueueSendFromISR(rtos[dev].isr_queue_handle, &evt, &xHigherPriorityTaskWoken) != pdTRUE) {
+                cc_dbg("[%u] interrupt queue full!", dev);
+                assert(false);
+            }
+
             xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
         }
     }

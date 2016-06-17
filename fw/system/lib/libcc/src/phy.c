@@ -116,6 +116,11 @@ static bool phy_setup(cc_dev_t dev)
         return false;
     }
 
+    if (!cc_cfg_regs(dev, CC_CFG_DEFAULT, COUNT_OF(CC_CFG_DEFAULT))) {
+        cc_dbg("[%u] error: could not configure (default)", dev);
+        return false;
+    }
+
     if (!cc_cfg_regs(dev, CC_CFG_PHY, COUNT_OF(CC_CFG_PHY))) {
         cc_dbg("[%u] error: could not configure", dev);
         return false;

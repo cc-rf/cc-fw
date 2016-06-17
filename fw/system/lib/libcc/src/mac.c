@@ -87,11 +87,6 @@ static bool mac_setup(cc_dev_t dev)
 
     if (!mac[dev].mtx) return false;
 
-    if (!cc_cfg_regs(dev, CC_CFG_DEFAULT, COUNT_OF(CC_CFG_DEFAULT))) {
-        cc_dbg("[%u] error: could not configure (default)", dev);
-        return false;
-    }
-
     if (!cc_cfg_regs(dev, CC_CFG_MAC, COUNT_OF(CC_CFG_MAC))) {
         cc_dbg("[%u] error: could not configure (mac)", dev);
         return false;

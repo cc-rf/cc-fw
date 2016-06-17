@@ -14,8 +14,16 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
 {
     for (u32 i = 0; i < len; i++) {
         cc_set(dev, regs[i].addr, regs[i].data);
+
         if (regs[i].addr == CC1200_RNDGEN) continue;
-        const u8 data = cc_get(dev, regs[i].addr);
+
+        u8 data = cc_get(dev, regs[i].addr);
+
+        if (regs[i].addr == CC1200_SERIAL_STATUS) {
+            // Mask out clock signals etc.
+            data &= regs[i].data;
+        }
+
         if (data != regs[i].data) {
             cc_dbg("[%u] validation error: addr=0x%04X data=0x%02X data[read-back]=0x%02X", dev, regs[i].addr, regs[i].data, data);
             return false;
@@ -232,72 +240,68 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
         {CC1200_XOSC1,             0x03}, // Crystal Oscillator Configuration Reg. 1
 };
 
-// Carrier frequency = 920.599976
-// Deviation = 138.854980
-// Address config = No address check
-// RX filter BW = 555.555556
-// Packet length mode = Variable
-// Device address = 0
+
+// Address Config = No address check
+// Bit Rate = 250
+// Carrier Frequency = 920.599976
+// Deviation = 50.048828
+// Device Address = 0
+// Manchester Enable = false
+// Modulation Format = 2-GFSK
+// Packet Bit Length = 0
+// Packet Length = 255
+// Packet Length Mode = Variable
+// RX Filter BW = 555.555556
 // Symbol rate = 250
-// Packet bit length = 0
 // Whitening = false
-// Modulation format = 2-GFSK
-// Packet length = 255
-// Bit rate = 250
-// Manchester enable = false
- 
+
 static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
-        {CC1200_IOCFG2,            0x06},
-        {CC1200_SYNC_CFG1,         0xA8},
-        {CC1200_SYNC_CFG0,         0x23},
-        {CC1200_DEVIATION_M,       0xC7},
-        {CC1200_MODCFG_DEV_E,      0x0D},
-        {CC1200_DCFILT_CFG,        0x4B},
-        {CC1200_PREAMBLE_CFG1,     0x34}, // 30-byte preamble (4 == 0x18)
-        {CC1200_PREAMBLE_CFG0,     0x8A},
-        {CC1200_IQIC,              0x58},
-        {CC1200_CHAN_BW,           0x03},
-        {CC1200_MDMCFG1,           0x42},
-        {CC1200_MDMCFG0,           0x05},
-        {CC1200_SYMBOL_RATE2,      0xB9},
-        {CC1200_SYMBOL_RATE1,      0x99},
-        {CC1200_SYMBOL_RATE0,      0x9A},
-        {CC1200_AGC_REF,           0x80/*0x33*/},
-        {CC1200_AGC_CS_THR,        0x04/*0xFC*/},
-        {CC1200_AGC_CFG1,          0x00},
-        {CC1200_AGC_CFG0,          0x80},
-        {CC1200_FIFO_CFG,          0x00},
-        {CC1200_SETTLING_CFG,      0x03},
-        {CC1200_FS_CFG,            0x12},
-        {CC1200_WOR_CFG0,          0x20},
-        {CC1200_WOR_EVENT0_LSB,    0x1E},
-        {CC1200_PKT_CFG2,          0x00},
-        {CC1200_PKT_CFG0,          0x20},
-        {CC1200_RFEND_CFG0,        0x09},
-        {CC1200_PA_CFG1,           0x77},
-        {CC1200_PA_CFG0,           0x51},
-        {CC1200_PKT_LEN,           0xFF},
-        {CC1200_IF_MIX_CFG,        0x1C},
-        {CC1200_TOC_CFG,           0x03},
-        {CC1200_MDMCFG2,           0x02},
-        {CC1200_FREQ2,             0x5C},
-        {CC1200_FREQ1,             0x0F},
-        {CC1200_FREQ0,             0x5C},
-        {CC1200_IF_ADC1,           0xEE},
-        {CC1200_IF_ADC0,           0x10},
-        {CC1200_FS_DIG1,           0x04},
-        {CC1200_FS_DIG0,           0x55},
-        {CC1200_FS_CAL1,           0x40},
-        {CC1200_FS_CAL0,           0x0E},
-        {CC1200_FS_DIVTWO,         0x03},
-        {CC1200_FS_DSM0,           0x33},
-        {CC1200_FS_DVC0,           0x17},
-        {CC1200_FS_PFD,            0x00},
-        {CC1200_FS_PRE,            0x6E},
-        {CC1200_FS_REG_DIV_CML,    0x1C},
-        {CC1200_FS_SPARE,          0xAC},
-        {CC1200_FS_VCO0,           0xB5},
-        {CC1200_IFAMP,             0x09},
-        {CC1200_XOSC5,             0x0E},
-        {CC1200_XOSC1,             0x03}, 
-}; 
+            {CC1200_SYNC_CFG1,         0xA8},
+            {CC1200_SYNC_CFG0,         0x23},
+            {CC1200_DEVIATION_M,       0x48},
+            {CC1200_MODCFG_DEV_E,      0x0C},
+            {CC1200_DCFILT_CFG,        0x4B},
+            {CC1200_PREAMBLE_CFG1,     0x18}, // 30-byte preamble (4 == 0x18)
+            {CC1200_PREAMBLE_CFG0,     0x8A},
+            {CC1200_IQIC,              0x58},
+            {CC1200_CHAN_BW,           0x03},
+            {CC1200_MDMCFG1,           0x42},
+            {CC1200_MDMCFG0,           0x05},
+            {CC1200_SYMBOL_RATE2,      0xB9},
+            {CC1200_SYMBOL_RATE1,      0x99},
+            {CC1200_SYMBOL_RATE0,      0x9A},
+            {CC1200_AGC_REF,           0x33},
+            {CC1200_AGC_CS_THR,        0x01},
+            {CC1200_AGC_CFG1,          0x12},
+            {CC1200_AGC_CFG0,          0x80},
+            {CC1200_FIFO_CFG,          0x00},
+            {CC1200_FS_CFG,            0x12},
+            {CC1200_PKT_CFG2,          0x00},
+            {CC1200_PKT_CFG0,          0x20},
+            {CC1200_PA_CFG1,           0x43}, // 0x55 == 25dBm 0x77 == 26+dBm 0x43 == min
+            {CC1200_PA_CFG0,           0x51},
+            {CC1200_PKT_LEN,           0xFF},
+            {CC1200_IF_MIX_CFG,        0x1C},
+            {CC1200_TOC_CFG,           0x03},
+            {CC1200_MDMCFG2,           0x02},
+            {CC1200_FREQ2,             0x5C},
+            {CC1200_FREQ1,             0x0F},
+            {CC1200_FREQ0,             0x5C},
+            {CC1200_IF_ADC1,           0xEE},
+            {CC1200_IF_ADC0,           0x10},
+            {CC1200_FS_DIG1,           0x04},
+            {CC1200_FS_DIG0,           0x55},
+            {CC1200_FS_CAL1,           0x40},
+            {CC1200_FS_CAL0,           0x0E},
+            {CC1200_FS_DIVTWO,         0x03},
+            {CC1200_FS_DSM0,           0x33},
+            {CC1200_FS_DVC0,           0x17},
+            {CC1200_FS_PFD,            0x00},
+            {CC1200_FS_PRE,            0x6E},
+            {CC1200_FS_REG_DIV_CML,    0x1C},
+            {CC1200_FS_SPARE,          0xAC},
+            {CC1200_FS_VCO0,           0xB5},
+            {CC1200_IFAMP,             0x09},
+            {CC1200_XOSC5,             0x0E},
+            {CC1200_XOSC1,             0x03},
+    }; 

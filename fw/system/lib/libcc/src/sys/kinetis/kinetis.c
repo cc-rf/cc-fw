@@ -28,6 +28,11 @@ const interface_t cc_interface[CC_NUM_DEVICES] = {
         }
     }/*,{
         .spi = {SPI1, 1},
+        .amp = {
+            .hgm = {SYS_PORT_NONE,  0},
+            .lna = {SYS_PORT_NONE,  0},
+            .pa  = {SYS_PORT_NONE,  0},
+        },
         .isr = {
             {SYS_PORT_NONE,  0},
             {SYS_PORT_E,     4},

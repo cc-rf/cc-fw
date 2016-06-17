@@ -44,6 +44,8 @@ mac_cfg_t cc_mac_cfg = {
 #include <itm.h>
 #include <util/uart.h>
 #include <malloc.h>
+#include <cc/cfg.h>
+#include <cc/amp.h>
 
 pit_t xsec_timer_lo, xsec_timer, wdog_timer;
 
@@ -51,7 +53,7 @@ int main(void)
 {
     BOARD_InitPins();
     LED_ABCD_ALL_ON();
-    BOARD_BootClockOCHSRUN();
+    BOARD_BootClockHSRUN();
     BOARD_InitDebugConsole();
     itm_init();
     printf("<boot>\r\n");
@@ -97,7 +99,7 @@ int main(void)
 
     while (1) {
         LED_ABCD_ALL_TOGGLE();
-        for (int i = 0; i < 1000000; ++i);
+        for (int i = 0; i < 10000000; ++i);
     }
 }
 
@@ -110,52 +112,11 @@ static void print_hex(u8 *buf, size_t len)
     printf("\r\n");
 }
 
-#define DEVICE 1
+static bool radio_init(cc_dev_t dev);
+static void isr_mcu_wake(cc_dev_t dev);
+static void isr_rssi_valid(cc_dev_t dev);
+static void isr_carrier_sense(cc_dev_t dev);
 
-struct packet {
-    u8 id;
-    u32 seq;
-    char filler[20];
-};
-
-static uart_t uart;
-
-typedef struct __packed uart_frame {
-    size_t len;
-    u8 *data;
-    
-} uart_frame_t;
-
-typedef struct __packed ucmd_hdr {
-    u8 cmd;
-
-} ucmd_hdr_t;
-
-typedef struct __packed ucmd_tx {
-    ucmd_hdr_t hdr;  /* cmd == 0x11 */
-    u8 flags;
-    u8 channel;
-    u8 count;
-    u8 delay;
-    u8 data[];
-
-} ucmd_tx_t;
-
-typedef struct __packed ucmd_rx {
-    ucmd_hdr_t hdr;  /* cmd == 0x12 */
-    u8 radio;
-    u8 channel;
-
-} ucmd_rx_t;
-
-typedef struct __packed ucmd_mod {
-    ucmd_hdr_t hdr;     /* cmd == 0x13 */
-    u8 radio;           /* == 0 or 1 */
-    u8 mode;            /* == 0 or 1 */
-
-} ucmd_mod_t;
-
-static xQueueHandle output_queue;
 
 static void main_task(void *param)
 {
@@ -164,85 +125,49 @@ static void main_task(void *param)
 
     printf("<main task>\r\n");
 
-    uart = uart_init(0, 230400);
+    const cc_dev_t dev_rx = 0, dev_tx = 1;
 
+    if (!radio_init(dev_rx) || !radio_init(dev_tx)) goto done;
 
-    xQueueHandle input_queue = xQueueCreate(32, sizeof(uart_frame_t));
+    cc_isr(dev_rx, ISR_PIN_GPIO3, ISR_EDGE_RISING, isr_mcu_wake);
+    cc_set(dev_rx, CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
+    cc_isr(dev_rx, ISR_PIN_GPIO2, ISR_EDGE_RISING, isr_rssi_valid);
+    cc_set(dev_rx, CC1200_IOCFG2, CC1200_IOCFG_GPIO_CFG_RSSI_VALID);
 
-    if (!input_queue) goto done;
+    cc_isr(dev_rx, ISR_PIN_GPIO0, ISR_EDGE_RISING, isr_carrier_sense);
+    cc_set(dev_rx, CC1200_IOCFG0, CC1200_IOCFG_GPIO_CFG_CARRIER_SENSE);
 
-    //output_queue = xQueueCreate(4, sizeof(uart_frame_t));
-    //if (!output_queue) goto done;
+    cc_isr(dev_tx, ISR_PIN_GPIO3, ISR_EDGE_RISING, isr_mcu_wake);
+    cc_set(dev_tx, CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
 
-    if (xTaskCreate(input_task, "input", TASK_STACK_SIZE_DEFAULT, (void *)input_queue, TASK_PRIO_HIGH, NULL) != pdPASS) goto done;
-    //if (xTaskCreate(output_task, "output", TASK_STACK_SIZE_DEFAULT, (void *)output_queue, TASK_PRIO_HIGHEST, NULL) != pdPASS) goto done;
+    //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_CARRIER_SENSE);
 
-    if (!mac_init(&cc_mac_cfg)) {
-        goto done;
-    }
+    u32 freq = 907235124;
 
-#if MODE == MODE_TX
+    cc_set_freq(dev_rx, freq);
+    printf("[%u] f = %lu\n", dev_rx, cc_get_freq(dev_rx));
+    cc_set_freq(dev_tx, freq);
+    printf("[%u] f = %lu\n", dev_tx, cc_get_freq(dev_tx));
 
-    u32 xsec0, xsec1;
+    amp_ctrl(dev_rx, AMP_LNA, false);
+    amp_ctrl(dev_rx, AMP_HGM, false);
+    cc_strobe(dev_rx, CC1200_SRX);
 
-    struct packet tx_data = {
-            .id = 2,
-            .seq = 0,
-            .filler = "ABCDEFGHIJKLMNOPQRS"
-    };
+    //vTaskDelay(10 / portTICK_PERIOD_MS);
 
-    //mac_rx_enable();
-    mac_tx_begin(DEVICE, 13);
+    struct {
+        u8 len;
+        u8 data;
+    } pkt = { 1, 0 };
 
-    printf("tx: f=%lu\r\n", cc_get_freq(DEVICE));
+    amp_ctrl(dev_tx, AMP_PA, false);
+    amp_ctrl(dev_tx, AMP_HGM, false);
 
-    while (1) {
-        //xsec0 = pit_get_elapsed(xsec_timer);
-        if (!(++tx_data.seq % 10)) LED_B_TOGGLE();
-        mac_tx(DEVICE, false, (u8 *)&tx_data, sizeof(tx_data));
-        //printf("tx: chan=%u,%u duration=%luus count=%lu\r\n", chan, chan_cur_id, xsec, tx_data.seq);
-        //while ((xsec1 = pit_get_elapsed(xsec_timer) - xsec0) < 8333) mac_task();
-        /*do {
-            xsec1 = pit_get_elapsed(xsec_timer) - xsec0;
-        } while (xsec1 < 8000);*/
-        //vTaskDelay((8 - (xsec1 > 8000 ? 8000 : xsec1)/1000) / portTICK_PERIOD_MS);
-    }
+    cc_fifo_write(dev_tx, (u8 *)&pkt, 2);
+    cc_strobe(dev_tx, CC1200_STX);
+    //cc_strobe(dev_tx, CC1200_STATE_FSTXON);
 
-#elif MODE == MODE_RX
-
-    //printf("rx: f=%lusr=%lut=%luus\r\n", cc_get_freq(DEVICE),  cc_get_symbol_rate(DEVICE), (u32)(cc_get_rx_timeout(DEVICE)/1000));
-
-    mac_rx_enable();
-    //mac_set_rx_channel(0, 2);
-    //mac_set_rx_channel(1, 14);
-
-
-    uart_frame_t frame;
-
-    while (1) {
-        if (!(frame.len = uart_read_frame(uart, &frame.data))) {
-            printf("uart rx: empty\n");
-            continue;
-        }
-
-        if (!xQueueSend(input_queue, &frame, 0)) {
-            printf("uart rx: queue full\n");
-        }
-    }
-
-#elif MODE == MODE_TX + MODE_RX
-
-    mac_rx_enable();
-
-    char buf[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\r\n"; // 29 bytes
-
-    while (1) {
-        mac_tx((u8 *)buf, strlen(buf)+1);
-        LED_A_TOGGLE();
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-
-#endif
+    vTaskSuspend(NULL);
 
     done:
     //vTaskDelete(NULL);
@@ -253,130 +178,97 @@ static void main_task(void *param)
     while (1) {
         LED_C_TOGGLE();
         LED_D_TOGGLE();
-        for (int i = 0; i < 1000000; ++i);
+        for (int i = 0; i < 10000000; ++i);
     }
 }
 
-static void input_task(void *param)
+static void isr_mcu_wake(cc_dev_t dev)
 {
-    xQueueHandle const input_queue = (xQueueHandle)param;
-    uart_frame_t frame;
-    //size_t tx_count = 0;
-
-    while (1) {
-        if (xQueueReceive(input_queue, &frame, portMAX_DELAY) != pdTRUE) {
-            printf("input_task: queue receive failed\n");
-            continue;
-        }
-
-        if (frame.len >= sizeof(ucmd_hdr_t)) {
-            ucmd_hdr_t *hdr = (ucmd_hdr_t *)frame.data;
-
-            if (hdr->cmd == 0x11 && frame.len >= sizeof(ucmd_tx_t)) {
-                ucmd_tx_t *ucmd = (ucmd_tx_t *) frame.data;
-                frame.len -= sizeof(ucmd_tx_t);
-
-                const bool cca = false;//(ucmd->flags & 1) == 0;
-
-                printf("ucmd(tx): flags=0x%02X channel=%u len=%u count=%u delay=%u\n",
-                       ucmd->flags, ucmd->channel, frame.len, ucmd->count, ucmd->delay
-                );
-
-                if (ucmd->flags & 0x01) mac_tx_begin(CC_DEV_MIN, (chan_t) ucmd->channel);
-                if (ucmd->flags & 0x02) mac_tx_begin(CC_DEV_MAX, (chan_t) ucmd->channel);
-
-                while (ucmd->count--) {
-                    if (ucmd->flags & 0x01) mac_tx(CC_DEV_MIN, cca, ucmd->data, frame.len);
-                    if (ucmd->flags & 0x02) mac_tx(CC_DEV_MAX, cca, ucmd->data, frame.len);
-                    vTaskDelay((TickType_t) ucmd->delay / portTICK_PERIOD_MS);
-                }
-
-                if (ucmd->flags & 0x01) mac_tx_end(CC_DEV_MIN);
-                if (ucmd->flags & 0x02) mac_tx_end(CC_DEV_MAX);
-
-                printf("ucmd(tx): done\n");
-            } else if (hdr->cmd == 0x12 && frame.len >= sizeof(ucmd_rx_t)) {
-                ucmd_rx_t *ucmd = (ucmd_rx_t *) frame.data;
-                if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->channel < 50 || ucmd->channel == 0xFF)) {
-                    printf("ucmd(rx): radio=%u channel=%u\n", ucmd->radio, ucmd->channel);
-                    mac_set_rx_channel((cc_dev_t) ucmd->radio, ucmd->channel);
-                }
-            } else if (hdr->cmd == 0x13 && frame.len >= sizeof(ucmd_mod_t)) {
-                ucmd_mod_t *ucmd = (ucmd_mod_t *) frame.data;
-                if (ucmd->radio >= CC_DEV_MIN && ucmd->radio <= CC_DEV_MAX && (ucmd->mode == 0 || ucmd->mode == 1)) {
-                    printf("ucmd(mod): radio=%u mode=%u\n", ucmd->radio, ucmd->mode);
-                    if (ucmd->mode == 0)
-                        mac_set_mod_cfg_0((cc_dev_t) ucmd->radio);
-                    else
-                        mac_set_mod_cfg_1((cc_dev_t) ucmd->radio);
-                }
-            } else {
-                frame.len = frame.len + sizeof(ucmd_tx_t) - sizeof(ucmd_hdr_t);
-                printf("ucmd: cmd=0x%02X len=%u\n",
-                       hdr->cmd, frame.len
-                );
-            }
-
-        } else {
-            printf("uart rx frame: len=%u\n", frame.len);
-        }
-
-        free(frame.data);
-    }
+    u8 st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
+    u8 ms1 = cc_get(dev, CC1200_MARC_STATUS1);
+    printf("[%u] st = 0x%02X \t\t ms1  = 0x%02X\r\n", dev, st, ms1);
 }
 
-/*static void output_task(void *param)
+static void isr_rssi_valid(cc_dev_t dev)
 {
-    (void)param;
-    uart_frame_t frame;
+    struct {
+        s8 rssi1;
+        u8 rssi0;
+    } rssi;
 
-    while (1) {
-        if (xQueueReceive(output_queue, &frame, portMAX_DELAY) != pdTRUE) continue;
-        uart_write(uart, frame.data, frame.len);
-        free(frame.data);
-    }
-}*/
+    cc_read(dev, CC1200_RSSI1, (u8 *)&rssi, sizeof(rssi));
+    printf("[%u] <RS> rssi = %i \t\t cs = %u\r\n", dev, rssi.rssi1, rssi.rssi0 & CC1200_RSSI0_CARRIER_SENSE);
 
-u32 pkt_count[CC_NUM_DEVICES] = {0}, pkt_count_0[CC_NUM_DEVICES] = {0};
-pit_tick_t pkt_tmr_0[CC_NUM_DEVICES] = {0}, pkt_tmr_1[CC_NUM_DEVICES] = {0};
+}
 
-static void mac_rx(cc_dev_t dev, u8 *buf, u8 len)
+static void isr_carrier_sense(cc_dev_t dev)
 {
-    if (dev) itm_puts(0, "1");
-    else itm_puts(0, "0");
-    /*if (!pkt_count[dev]) {
-        pkt_tmr_0[dev] = pit_get_elapsed(xsec_timer);
+    struct {
+        s8 rssi1;
+        u8 rssi0;
+    } rssi;
+
+    cc_read(dev, CC1200_RSSI1, (u8 *)&rssi, sizeof(rssi));
+    printf("[%u] <CS> rssi = %i \t\t cs = %u\r\n", dev, rssi.rssi1, rssi.rssi0 & CC1200_RSSI0_CARRIER_SENSE);
+
+}
+
+static bool radio_init(cc_dev_t dev)
+{
+    cc_spi_init(dev);
+    amp_init(dev);
+
+    cc_strobe(dev, CC1200_SRES);
+    int i = 0;
+
+    while ((i++ < 1000) && (cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_CHIP_RDYn));
+
+    u8 pn = cc_get(dev, CC1200_PARTNUMBER);
+
+    if (pn != 0x20) {
+        cc_dbg("[%u] error: part number 0x%02X != 0x20", dev, pn);
+        return false;
     }
 
-    ++pkt_count[dev];
-
-    if (!(pkt_count[dev] % 120)) {
-        pkt_tmr_1[dev] = pit_get_elapsed(xsec_timer);
-        float div = (float)(pkt_tmr_1[dev] - pkt_tmr_0[dev]) / 1000000;
-        u32 pkt_rate = (u32)((pkt_count[dev] - pkt_count_0[dev]) / div);
-        printf("[%u] rate = %*lu p/s\t\tn=%lu t=%luus\tN=%lu\n",
-               dev, 3, pkt_rate, (pkt_count[dev] - pkt_count_0[dev]), (pkt_tmr_1[dev] - pkt_tmr_0[dev]),
-               pkt_count[dev]
-        );
-        pkt_tmr_0[dev] = pkt_tmr_1[dev];
-        pkt_count_0[dev] = pkt_count[dev];
+    if (!cc_cfg_regs(dev, CC_CFG_DEFAULT, COUNT_OF(CC_CFG_DEFAULT))) {
+        cc_dbg("[%u] error: could not configure (default)", dev);
+        return false;
     }
 
-    if (dev == CC_DEV_MIN) {
-        if (!(pkt_count[dev] % 12)) LED_A_TOGGLE();
-    } else {
-        if (!(pkt_count[dev] % 12)) LED_B_TOGGLE();
-    }*/
+    static const struct cc_cfg_reg CC_CFG_LOCAL[] = {
+            {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
+            {CC1200_IOCFG2, CC1200_IOCFG_GPIO_CFG_HW0},
+            {CC1200_IOCFG1, CC1200_IOCFG_GPIO_CFG_HIGHZ},
+            {CC1200_IOCFG0, CC1200_IOCFG_GPIO_CFG_HW0},
 
-    /*uart_frame_t const frame = {
-            .data = buf,
-            .len = len
+            /* NOTE: Enabling CC1200_RFEND_CFG1_RX_TIME_QUAL_M when using a RX timeout means that
+             * there will be times when the radio stays in RX due to a valid CS or PQT but will hang there
+             * regardless of whether a packet was received. It seems to linger on the channel potentially
+             * forever despite the lack of a sync word detection.
+             * For the timeout to always trigger an interrupt, RX_TIME_QUAL must be zero.
+             * */
+            {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE | (0x7<<1) | CC1200_RFEND_CFG1_RX_TIME_QUAL_M},
+            {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE | CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN},
+
+            //{CC1200_PREAMBLE_CFG1, /*0xD*/0x4 << 2},
+            //{CC1200_SYNC_CFG1,  0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16/* changed from 11 */},
+            {CC1200_PKT_CFG2,   CC1200_PKT_CFG2_CCA_MODE_ALWAYS},
+            {CC1200_PKT_CFG1,   CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F | CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF | CC1200_PKT_CFG1_APPEND_STATUS},
+            {CC1200_PKT_CFG0,   CC1200_PKT_CFG0_LENGTH_CONFIG_VARIABLE},
+            {CC1200_PKT_LEN,    255},
+            {CC1200_SERIAL_STATUS, CC1200_SERIAL_STATUS_IOC_SYNC_PINS_EN}, // Enable access to GPIO state in CC1200_GPIO_STATUS.GPIO_STATE
+
+            {CC1200_RNDGEN,     CC1200_RNDGEN_EN}, // Needed for random backoff for LBT CCA: https://e2e.ti.com/support/wireless_connectivity/f/156/t/370230
+            {CC1200_FIFO_CFG,   0 /*!CC1200_FIFO_CFG_CRC_AUTOFLUSH*/},
     };
 
-    xQueueSend(output_queue, &frame, portMAX_DELAY);*/
-    uart_write(uart, buf, len);
-}
+    if (!cc_cfg_regs(dev, CC_CFG_LOCAL, COUNT_OF(CC_CFG_LOCAL))) {
+        cc_dbg("[%u] error: could not configure (local)", dev);
+        return false;
+    }
 
+    return cc_isr_init(dev);
+}
 
 int _write(int handle, char *buffer, int size)
 {
@@ -584,8 +476,8 @@ void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
 {
     static int hard_fault_count_init;
 
-    printf("!!!!!!!!!! HARD FAULT !!!!!!!!!!!!!!\r\n");
-    NVIC_SystemReset();
+    itm_puts(0, "!!!!!!!!!! HARD FAULT !!!!!!!!!!!!!!\r\n");
+    //NVIC_SystemReset();
 
     if (hard_fault_count_init != 0xABCD) {
         hard_fault_count_init = 0xABCD;
@@ -657,6 +549,8 @@ void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
 void usage_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
 {
     static int usage_fault_count_init;
+
+    itm_puts(0, "!!!!!!!!!! USAGE FAULT !!!!!!!!!!!!!!\r\n");
 
     if (usage_fault_count_init != 0xBEEF) {
         usage_fault_count_init = 0xBEEF;
