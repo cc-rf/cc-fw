@@ -17,7 +17,7 @@ static bool mac_setup(cc_dev_t dev);
 static void mac_lock(cc_dev_t dev);
 static void mac_unlock(cc_dev_t dev);
 static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param);
-static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len);
+static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len, s8 rssi, u8 lqi);
 
 static const struct cc_cfg_reg CC_CFG_MAC[] = {
         {CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
@@ -105,7 +105,7 @@ static bool mac_setup(cc_dev_t dev)
      * of how long we stay there.
      */
 
-    mac[dev].rx_timeout = 70000;//5000000;
+    mac[dev].rx_timeout = 0/*10000000*//*122000*/;//5000000;
     cc_set_rx_timeout(dev, mac[dev].rx_timeout);
 
     mac[dev].rx_channel = 0xFF;
@@ -157,6 +157,13 @@ static inline void next_chan(cc_dev_t dev)
 
     mac[dev].chan_cur = channels[dev].hop_table[mac[dev].channel_hop_cycle];
 
+    if (mac[dev].chan_cur == 17) goto incr;
+
+    //if (channels[dev].chan[mac[dev].chan_cur].skip) {
+    //    //channels[dev].chan[mac[dev].chan_cur].skip = false;
+    //    goto incr;
+    //}
+
 #if MAC_NUM_DEVICES > 1
     for (u8 i = MAC_DEV_MIN; i <= MAC_DEV_MAX; ++i) {
         if (i == dev) continue;
@@ -169,9 +176,15 @@ static inline void next_chan(cc_dev_t dev)
 
 //static volatile bool chan_switch_pending = false;
 
+extern volatile bool rxtimeout[CC_NUM_DEVICES];
+
 static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
 {
     mac_lock(dev);
+
+    if (rxtimeout[dev]/* && !mac[dev].chan_cur_pkt_cnt*/) {
+        channels[dev].chan[mac[dev].chan_cur].skip = true;
+    }
 
     switch (ms1) {
         case CC1200_MARC_STATUS1_NO_FAILURE:
@@ -185,7 +198,13 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
                     /*if (mac[dev].rx_channel == 0xFF) {
                         cc_set_rx_timeout(dev, mac[dev].rx_timeout);
                     }*/
-                }
+                } /*else {
+                    if (mac[dev].chan_cur == 10) {
+                        extern const s8 rssi_adj;
+                        const s16 rssi = cc_get_rssi(dev);
+                        cc_dbg("[%u] ch10-rssi: %i / %i", dev, rssi, rssi - rssi_adj);
+                    }
+                }*/
 
                 if (param) {
                     next_chan(dev);
@@ -230,10 +249,10 @@ static void mac_phy_signal(cc_dev_t dev, u8 ms1, void *param)
     mac_unlock(dev);
 }
 
-static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len)
+static void mac_phy_rx(cc_dev_t dev, u8 *buf, u8 len, s8 rssi, u8 lqi)
 {
     //next_chan(dev);
-    if (mac_cfg.rx) mac_cfg.rx(dev, buf, len);
+    if (mac_cfg.rx) mac_cfg.rx(dev, buf, len, rssi, lqi);
     /* TODO: Maybe start channel transition before callback?
      * But what if TX response needs to happen on this channel first?
      */

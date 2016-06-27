@@ -171,3 +171,5 @@ u64 cc_set_rx_timeout(cc_dev_t dev, u64 ns);
 
 void cc_set_mod_cfg_0(cc_dev_t dev);
 void cc_set_mod_cfg_1(cc_dev_t dev);
+
+s16 cc_get_rssi(cc_dev_t dev);

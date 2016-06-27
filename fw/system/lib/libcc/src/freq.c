@@ -551,3 +551,10 @@ void cc_set_mod_cfg_1(cc_dev_t dev)
     //cc_dbg("[%u] MODCFG_DEV_E[DSSS] = 0x%02X", dev, cc_get(dev, CC1200_MODCFG_DEV_E));
 
 }
+
+s16 cc_get_rssi(cc_dev_t dev)
+{
+    //u8 rssi1 = cc_get(dev, CC1200_RSSI1);
+    //s16 rssi = rssi1;
+    return (s16)(s8)cc_get(dev, CC1200_RSSI1);// - (s16)107/*99*/;
+}

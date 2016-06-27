@@ -242,66 +242,138 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
 
 
 // Address Config = No address check
-// Bit Rate = 250
+// Bit Rate = 200 (was 250)
 // Carrier Frequency = 920.599976
-// Deviation = 50.048828
+// Deviation = 70 (was ~87.5 (was 62.561035))
 // Device Address = 0
 // Manchester Enable = false
 // Modulation Format = 2-GFSK
 // Packet Bit Length = 0
 // Packet Length = 255
 // Packet Length Mode = Variable
-// RX Filter BW = 555.555556
-// Symbol rate = 250
+// RX Filter BW = 333 (was 555.555556)
+// Symbol rate = 200 (was 250)
 // Whitening = false
 
 static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
-            {CC1200_SYNC_CFG1,         0xA8},
-            {CC1200_SYNC_CFG0,         0x23},
-            {CC1200_DEVIATION_M,       0x48},
-            {CC1200_MODCFG_DEV_E,      0x0C},
-            {CC1200_DCFILT_CFG,        0x4B},
-            {CC1200_PREAMBLE_CFG1,     0x18}, // 30-byte preamble (4 == 0x18)
-            {CC1200_PREAMBLE_CFG0,     0x8A},
-            {CC1200_IQIC,              0x58},
-            {CC1200_CHAN_BW,           0x03},
-            {CC1200_MDMCFG1,           0x42},
-            {CC1200_MDMCFG0,           0x05},
-            {CC1200_SYMBOL_RATE2,      0xB9},
-            {CC1200_SYMBOL_RATE1,      0x99},
-            {CC1200_SYMBOL_RATE0,      0x9A},
-            {CC1200_AGC_REF,           0x33},
-            {CC1200_AGC_CS_THR,        0x01},
-            {CC1200_AGC_CFG1,          0x12},
-            {CC1200_AGC_CFG0,          0x80},
-            {CC1200_FIFO_CFG,          0x00},
-            {CC1200_FS_CFG,            0x12},
-            {CC1200_PKT_CFG2,          0x00},
-            {CC1200_PKT_CFG0,          0x20},
-            {CC1200_PA_CFG1,           0x43}, // 0x55 == 25dBm 0x77 == 26+dBm 0x43 == min
-            {CC1200_PA_CFG0,           0x51},
-            {CC1200_PKT_LEN,           0xFF},
-            {CC1200_IF_MIX_CFG,        0x1C},
-            {CC1200_TOC_CFG,           0x03},
-            {CC1200_MDMCFG2,           0x02},
-            {CC1200_FREQ2,             0x5C},
-            {CC1200_FREQ1,             0x0F},
-            {CC1200_FREQ0,             0x5C},
-            {CC1200_IF_ADC1,           0xEE},
-            {CC1200_IF_ADC0,           0x10},
-            {CC1200_FS_DIG1,           0x04},
-            {CC1200_FS_DIG0,           0x55},
-            {CC1200_FS_CAL1,           0x40},
-            {CC1200_FS_CAL0,           0x0E},
-            {CC1200_FS_DIVTWO,         0x03},
-            {CC1200_FS_DSM0,           0x33},
-            {CC1200_FS_DVC0,           0x17},
-            {CC1200_FS_PFD,            0x00},
-            {CC1200_FS_PRE,            0x6E},
-            {CC1200_FS_REG_DIV_CML,    0x1C},
-            {CC1200_FS_SPARE,          0xAC},
-            {CC1200_FS_VCO0,           0xB5},
-            {CC1200_IFAMP,             0x09},
-            {CC1200_XOSC5,             0x0E},
-            {CC1200_XOSC1,             0x03},
-    }; 
+        //{CC1200_SYNC3,             0x6F},
+        //{CC1200_SYNC2,             0x4E},
+        //{CC1200_SYNC1,             0x90}, // Sync Word Configuration [15:8]
+        //{CC1200_SYNC0,             0x4E}, // Sync Word Configuration [7:0]
+
+        {CC1200_SYNC_CFG1,         0xA7/*0xA9*//*0xA8*/},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         0x33/*0x13*/}, // bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
+        /*!!UNCONFIRMED CHANGE*/{CC1200_DEVIATION_M,       /*0x48*//*0xCB*/0x1F/*0x9A*/},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_MODCFG_DEV_E,      /*0x8D*//*0x8C*/0x8D/*0x8C*/}, // 0x80: coding gain
+        {CC1200_DCFILT_CFG,        0x4B},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_PREAMBLE_CFG1,     0x18/*0x34*/}, // 0x34: 30-byte preamble (4 == 0x18)
+        {CC1200_PREAMBLE_CFG0,     0x8A},
+        {CC1200_IQIC,              0x58/*NOTE: changing back to 0x58 improved AGC/RSSI performance*//*0x80*//*0x58*/},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_CHAN_BW,           /*0x05*//*0x04*/0x03},
+        {CC1200_MDMCFG1,           0x42}, // |=0x80: CS gates sync search   |=((0x00-0x03)<<1) DVGA gain 0/-18/3/6 dB
+        {CC1200_MDMCFG0,           0x05},
+        {CC1200_SYMBOL_RATE2,      /*0xB4*/0xB9},
+        {CC1200_SYMBOL_RATE1,      /*0x7A*/0x99},
+        {CC1200_SYMBOL_RATE0,      /*0xE1*/0x9A},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_AGC_REF,           0x2E/*0x3D*//*0x37*/}, // Calibrated setting: 0x2E
+        {CC1200_AGC_CS_THR,        (u8)-127},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_AGC_CFG2,          0x80/*0x40*/}, //  Calibrated setting: 0x40. Default: 0x20 (Normal mode, max gain 39dB). 0x4:Performance/max=27dB
+        {CC1200_AGC_CFG1,          0x16},
+        {CC1200_AGC_CFG0,          0x84},
+        {CC1200_FIFO_CFG,          0x00},
+        {CC1200_FS_CFG,            0x12},
+        {CC1200_PKT_CFG2,          0x00},
+        {CC1200_PKT_CFG0,          0x20},
+        {CC1200_PA_CFG1,           0x55}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG0,           0x51},
+        {CC1200_PKT_LEN,           0xFF},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_IF_MIX_CFG,        0x1C/*0x1C*/}, // IF: highest freq
+        ///*!!UNCONFIRMED CHANGE*/{CC1200_FREQOFF_CFG,       0x3D}, // FOC with low gain and in fast loop with high gain after sync detect
+        {CC1200_TOC_CFG,           0x03},
+        {CC1200_MDMCFG2,           0x02},
+        {CC1200_FREQ2,             0x5C},
+        {CC1200_FREQ1,             0x0F},
+        {CC1200_FREQ0,             0x5C},
+        {CC1200_IF_ADC1,           0xEE},
+        {CC1200_IF_ADC0,           0x10},
+        {CC1200_FS_DIG1,           0x04},
+        {CC1200_FS_DIG0,           0x55},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_FS_CAL3,           0x40}, // More accurate calibration
+        {CC1200_FS_CAL1,           0x40},
+        {CC1200_FS_CAL0,           0x0E},
+        {CC1200_FS_DIVTWO,         0x03},
+        {CC1200_FS_DSM0,           0x33},
+        {CC1200_FS_DVC0,           0x17},
+        {CC1200_FS_PFD,            0x00},
+        {CC1200_FS_PRE,            0x6E},
+        {CC1200_FS_REG_DIV_CML,    0x1C},
+        {CC1200_FS_SPARE,          0xAC},
+        {CC1200_FS_VCO0,           0xB5},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_IFAMP,             0x05/*0x01*//*0x09*/}, // IFAMP (SS) BW 1000kHz -> 300kHz [NOTE: Seems to affect RSSI level, unsure of calibration after this. Keeping because it raises LQI. Also technically breaks the rule outlined in the user guide.]
+        {CC1200_XOSC5,             0x0E},
+        {CC1200_XOSC1,             0x03},
+}; 
+
+// Address Config = No address check
+// Bit Rate = 30 (was 38.4)
+// Carrier Frequency = 920.599976
+// Deviation = 15 (was 7.5 (was 19.989014))
+// Device Address = 0
+// Manchester Enable = false
+// Modulation Format = 2-GFSK
+// Packet Bit Length = 0
+// Packet Length = 255
+// Packet Length Mode = Variable
+// RX Filter BW = 92.592593  (was 79.365079)
+// Symbol rate = 30
+// Whitening = true
+
+static const struct cc_cfg_reg CC_CFG_DEFAULT_NB[] = {
+        {CC1200_SYNC_CFG1,         0xA9},
+        {CC1200_DEVIATION_M,       0x89/*DEFAULT*/},
+        {CC1200_MODCFG_DEV_E,      0x0A/*0x09*//*0x0B*/},
+        {CC1200_PREAMBLE_CFG0,     0x8A},
+        {CC1200_IQIC,              0xC8},
+        {CC1200_CHAN_BW,           0x12/*0x0E*//*0x15*/},
+        {CC1200_MDMCFG1,           0x42},
+        {CC1200_MDMCFG0,           0x05},
+        {CC1200_SYMBOL_RATE2,      0x88/*0x8F*/},
+        {CC1200_SYMBOL_RATE1,      0x93/*0x75*/},
+        {CC1200_SYMBOL_RATE0,      0x75/*0x10*/},
+        {CC1200_AGC_REF,           0x2B},
+        {CC1200_AGC_CS_THR,        (u8)-99},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_AGC_CFG2,          0x80}, // Added, unconfirmed
+        {CC1200_AGC_CFG1,          0x11},
+        {CC1200_AGC_CFG0,          0x94},
+        {CC1200_FIFO_CFG,          0x00},
+        {CC1200_FS_CFG,            0x12},
+        {CC1200_PKT_CFG2,          0x00},
+        {CC1200_PKT_CFG1,          0x43},
+        {CC1200_PKT_CFG0,          0x20},
+        {CC1200_PA_CFG1,           0x55},
+        {CC1200_PKT_LEN,           0xFF},
+        {CC1200_IF_MIX_CFG,        0x1C},
+        //{CC1200_FREQOFF_CFG,       0x3C},
+        {CC1200_TOC_CFG,           0x03},
+        {CC1200_MDMCFG2,           0x02},
+        {CC1200_FREQ2,             0x5C},
+        {CC1200_FREQ1,             0x0F},
+        {CC1200_FREQ0,             0x5C},
+        {CC1200_IF_ADC1,           0xEE},
+        {CC1200_IF_ADC0,           0x10},
+        {CC1200_FS_DIG1,           0x04},
+        {CC1200_FS_DIG0,           0x55},
+        {CC1200_FS_CAL1,           0x40},
+        {CC1200_FS_CAL0,           0x0E},
+        {CC1200_FS_DIVTWO,         0x03},
+        {CC1200_FS_DSM0,           0x33},
+        {CC1200_FS_DVC0,           0x17},
+        {CC1200_FS_PFD,            0x00},
+        {CC1200_FS_PRE,            0x6E},
+        {CC1200_FS_REG_DIV_CML,    0x1C},
+        {CC1200_FS_SPARE,          0xAC},
+        {CC1200_FS_VCO0,           0xB5},
+        {CC1200_IFAMP,             0x09},
+        {CC1200_XOSC5,             0x0E},
+        {CC1200_XOSC1,             0x03},
+}; 

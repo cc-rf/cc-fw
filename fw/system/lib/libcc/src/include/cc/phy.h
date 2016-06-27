@@ -5,7 +5,7 @@
 
 typedef struct {
     void (* signal)(cc_dev_t dev, u8 ms1, void *param);
-    void (* rx)(cc_dev_t dev, u8 *buf, u8 len);
+    void (* rx)(cc_dev_t dev, u8 *buf, u8 len, s8 rssi, u8 lqi);
 
 } phy_cfg_t;
 

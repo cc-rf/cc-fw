@@ -4,10 +4,10 @@ import sys
 import struct
 import time
 
-pkt_length = 30
-pkt_count = 3
+pkt_length = 10
+pkt_count = 2
 pkt_delay = 0
-pkt_flags = 1
+pkt_flags = 2
 pkt_channel = 10
 
 def pkt_create(idx):

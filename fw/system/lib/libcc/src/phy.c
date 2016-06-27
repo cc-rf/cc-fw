@@ -12,6 +12,7 @@
 #include <cc/sys/kinetis/pit.h>
 #include <timers.h>
 #include <malloc.h>
+#include <cc/freq.h>
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -25,8 +26,8 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
          * forever despite the lack of a sync word detection.
          * For the timeout to always trigger an interrupt, RX_TIME_QUAL must be zero.
          * */
-        {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE | (0x7<<1) | CC1200_RFEND_CFG1_RX_TIME_QUAL_M},
-        {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE | CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN},
+        {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE | (0x7<<1) /*| CC1200_RFEND_CFG1_RX_TIME_QUAL_M*/},
+        {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE | CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN /*| 1*/},
 
         // These may not necessarily be part of the phy handling
 
@@ -116,9 +117,20 @@ static bool phy_setup(cc_dev_t dev)
         return false;
     }
 
-    if (!cc_cfg_regs(dev, CC_CFG_DEFAULT, COUNT_OF(CC_CFG_DEFAULT))) {
-        cc_dbg("[%u] error: could not configure (default)", dev);
-        return false;
+    //if (dev == CC_DEV_MIN) {
+        if (!cc_cfg_regs(dev, CC_CFG_DEFAULT, COUNT_OF(CC_CFG_DEFAULT))) {
+            cc_dbg("[%u] error: could not configure (default)", dev);
+            return false;
+        }
+    //} else {
+    //    if (!cc_cfg_regs(dev, CC_CFG_DEFAULT_NB, COUNT_OF(CC_CFG_DEFAULT_NB))) {
+    //        cc_dbg("[%u] error: could not configure (default-nb)", dev);
+    //        return false;
+    //    }
+    //}
+
+    if (dev != CC_DEV_MIN) {
+        cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_DSSS_PN, 0);
     }
 
     if (!cc_cfg_regs(dev, CC_CFG_PHY, COUNT_OF(CC_CFG_PHY))) {
@@ -135,11 +147,10 @@ static bool phy_setup(cc_dev_t dev)
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(pin), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
 
-
-    TimerHandle_t tmr = xTimerCreate("phy_tmr", 90/*203*/ / portTICK_PERIOD_MS, pdTRUE, NULL, phy_tmr);
+    TimerHandle_t tmr = xTimerCreate("phy_tmr", 30 / portTICK_PERIOD_MS, pdTRUE, NULL, phy_tmr);
 
     if (tmr) {
-        xTimerStart(tmr, /*407*/121 / portTICK_PERIOD_MS);
+        //xTimerStart(tmr, 41 / portTICK_PERIOD_MS);
     } else {
         cc_dbg("[%u] error: timer create failed", dev);
         return false;
@@ -164,7 +175,7 @@ static void isr_mcu_wake(cc_dev_t dev)
 
     ms1 = cc_get(dev, CC1200_MARC_STATUS1);
 
-#if CC_DEBUG_VERBOSE || 1
+#if CC_DEBUG_VERBOSE
     if (rxtimeout[dev]) {
         st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
         cc_dbg("[%u] st=0x%02X ms1=0x%02X", dev, st, ms1);
@@ -248,6 +259,8 @@ static void isr_mcu_wake(cc_dev_t dev)
             break;
     }
 
+    if (rxtimeout[dev]) rxtimeout[dev] = false;
+
 }
 
 static void phy_rx_tmr_kick(cc_dev_t dev)
@@ -260,7 +273,7 @@ static void phy_rx_tmr_check(cc_dev_t dev)
     if (phy[dev].rx_enabled) {
         const pit_tick_t rx_ticks = phy[dev].rx_tick - pit_get_current(xsec_timer);
 
-        if (rx_ticks >= 8000000) {
+        if (rx_ticks >= 50000) {
             rxtimeout[dev] = true;
 
             //const u8 ms = cc_get(dev, CC1200_MODEM_STATUS1);
@@ -270,10 +283,19 @@ static void phy_rx_tmr_check(cc_dev_t dev)
 
             // TODO: Maybe always strobe sidle in case the isr needs to be triggered?
             //if (st & CC1200_STATE_RX) {
-            const u8 st = cc_strobe(dev, CC1200_SIDLE | CC1200_ACCESS_READ);
+            const u8 st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
+            const bool cs = cc_get(dev, CC1200_RSSI0) & (CC1200_RSSI0_CARRIER_SENSE_VALID | CC1200_RSSI0_CARRIER_SENSE) == (CC1200_RSSI0_CARRIER_SENSE_VALID | CC1200_RSSI0_CARRIER_SENSE);
+            const u8 mo1 = cc_get(dev, CC1200_MODEM_STATUS1);
+            const bool pqt = mo1 & (CC1200_MODEM_STATUS1_PQT_VALID | CC1200_MODEM_STATUS1_PQT_REACHED) == (CC1200_MODEM_STATUS1_PQT_VALID | CC1200_MODEM_STATUS1_PQT_REACHED);
+            const bool sync = mo1 & CC1200_MODEM_STATUS1_SYNC_FOUND != 0;
             //}
 
-            cc_dbg/*_v*/("[%u] rx timeout: st=0x%02X", dev, st);
+            cc_dbg/*_v*/("[%u] rx timeout: st=0x%02X rssi=%i freq=%u cs=%u pqt=%u sync=%u", dev, st,
+                         cc_get_rssi(dev), cc_get_freq(dev),
+                         cs, pqt, sync
+            );
+
+            cc_strobe(dev, CC1200_SIDLE);
 
             if (st & CC1200_STATUS_EXTRA_M) {
                 cc_strobe(dev, CC1200_SFRX);
@@ -315,13 +337,9 @@ static void handle_rx(cc_dev_t dev, u8 *buf, u8 len)
         }
 
         if (pkt_len) {
-            const u8 rssi = buf[pkt_len + 1];
+            const s8 rssi = (s8)buf[pkt_len + 1];
             const u8 crc_ok = buf[pkt_len + 2] & (u8) CC1200_LQI_CRC_OK_BM;
             const u8 lqi = buf[pkt_len + 2] & (u8) CC1200_LQI_EST_BM;
-
-            /* For now, not dispatching rssi or lqi. */
-            (void) rssi;
-            (void) lqi;
 
             //DBG("len=%i crc_ok=%i", (int)pkt_len, (int)crc_ok);
 
@@ -337,7 +355,7 @@ static void handle_rx(cc_dev_t dev, u8 *buf, u8 len)
                 phy[dev].phy_cfg.rx(dev, pkt_buf, pkt_len);*/
                 assert(buf > (u8 *) 1ul);
                 assert(pkt_len);
-                phy[dev].phy_cfg.rx(dev, &buf[1], pkt_len);
+                phy[dev].phy_cfg.rx(dev, &buf[1], pkt_len, rssi, lqi);
             }
         } else {
             cc_dbg("[%u] c=%u len=%u pkt_len=0", dev, pkt_count, len);
