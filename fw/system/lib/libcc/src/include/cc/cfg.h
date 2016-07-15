@@ -284,7 +284,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},
         {CC1200_PKT_CFG0,          0x20},
-        {CC1200_PA_CFG1,           0x55}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG1,           0x63/*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
         /*!!UNCONFIRMED CHANGE*/{CC1200_IF_MIX_CFG,        0x1C/*0x1C*/}, // IF: highest freq
@@ -309,7 +309,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_REG_DIV_CML,    0x1C},
         {CC1200_FS_SPARE,          0xAC},
         {CC1200_FS_VCO0,           0xB5},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_IFAMP,             0x05/*0x01*//*0x09*/}, // IFAMP (SS) BW 1000kHz -> 300kHz [NOTE: Seems to affect RSSI level, unsure of calibration after this. Keeping because it raises LQI. Also technically breaks the rule outlined in the user guide.]
+        /*!!UNCONFIRMED CHANGE*/{CC1200_IFAMP,             0x09/*0x01*//*0x09*/}, // IFAMP (SS) BW 1000kHz -> 300kHz [NOTE: Seems to affect RSSI level, unsure of calibration after this. Keeping because it raises LQI. Also technically breaks the rule outlined in the user guide.]
         {CC1200_XOSC5,             0x0E},
         {CC1200_XOSC1,             0x03},
 }; 

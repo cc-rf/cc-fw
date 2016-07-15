@@ -39,7 +39,7 @@ mac_cfg_t cc_mac_cfg = {
 
 #define MODE_TX     1
 #define MODE_RX     2
-#define MODE        MODE_RX
+#define MODE        MODE_TX
 
 #include <itm.h>
 #include <util/uart.h>
@@ -166,7 +166,7 @@ static void main_task(void *param)
 
     printf("<main task>\r\n");
 
-    uart = uart_init(0, 230400);
+    //uart = uart_init(0, 230400);
 
 
     xQueueHandle input_queue = xQueueCreate(32, sizeof(uart_frame_t));
@@ -179,9 +179,13 @@ static void main_task(void *param)
     if (xTaskCreate(input_task, "input", TASK_STACK_SIZE_DEFAULT, (void *)input_queue, TASK_PRIO_HIGH, NULL) != pdPASS) goto done;
     //if (xTaskCreate(output_task, "output", TASK_STACK_SIZE_DEFAULT, (void *)output_queue, TASK_PRIO_HIGHEST, NULL) != pdPASS) goto done;
 
+    const u32 t0 = pit_get_current(xsec_timer);
     if (!mac_init(&cc_mac_cfg)) {
         goto done;
     }
+    const u32 t1 = t0 - pit_get_current(xsec_timer);
+
+    printf("init time: %lu usec\r\n", t1);
 
 #if MODE == MODE_TX
 
@@ -208,7 +212,7 @@ static void main_task(void *param)
         if (dev == CC_DEV_MIN) LED_A_TOGGLE();
         else LED_C_TOGGLE();
 
-        vTaskDelay(250 / portTICK_PERIOD_MS);
+        //vTaskDelay(250 / portTICK_PERIOD_MS);
         dev = (cc_dev_t)((dev + 1) % CC_NUM_DEVICES);
 
         //printf("tx: chan=%u,%u duration=%luus count=%lu\r\n", chan, chan_cur_id, xsec, tx_data.seq);

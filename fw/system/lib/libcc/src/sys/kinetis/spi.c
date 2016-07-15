@@ -7,16 +7,23 @@
 #include <FreeRTOS.h>
 #include <semphr.h>
 
+//#define CC_SPI_DMA
+
 
 // TODO: see if CC1200 will accept 8-bit addresses with leading zeroes in upper 8 bits
 
+#ifdef CC_SPI_DMA
+static void spi_dma_callback(SPI_Type *base, dspi_master_edma_handle_t *handle, status_t status, void *userData);
+#else
 static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData);
+#endif
 
 static struct {
 #ifdef CC_SPI_DMA
     dspi_master_edma_handle_t edma_handle;
     edma_handle_t rx_handle;
     edma_handle_t tx_handle;
+    edma_handle_t im_handle;
 #else
     dspi_master_handle_t master_handle;
 #endif
@@ -62,21 +69,38 @@ void cc_spi_init(cc_dev_t dev)
     else if (cfg->spi == SPI5) { dreq_rx = kDmaRequestMux0SPI5Rx; dreq_tx = kDmaRequestMux0SPI5Tx; }
 #endif
 
+    /*
     status = DMAMGR_RequestChannel(dreq_rx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].tx_handle);
     assert(status == kStatus_Success);
 
+    // What to do here? The examples don't configure DMAMUX for intermediary...
+    //status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].im_handle);
+    //assert(status == kStatus_Success);
+    //DMAMUX_DisableChannel(DMAMUX0, spi[dev].im_handle.channel); // ?
+    EDMA_CreateHandle(&spi[dev].im_handle, DMA0, 21+dev);
+
     status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].rx_handle);
     assert(status == kStatus_Success);
+     */
+
+    DMAMUX_SetSource(DMAMUX0, (dev*3u)+0u, dreq_rx);
+    DMAMUX_EnableChannel(DMAMUX0, (dev*3u)+0u);
+    DMAMUX_SetSource(DMAMUX0, (dev*3u)+1u, dreq_tx);
+    DMAMUX_EnableChannel(DMAMUX0, (dev*3u)+1u);
+
+    EDMA_CreateHandle(&spi[dev].rx_handle, DMA0, (dev*3u)+0u);
+    EDMA_CreateHandle(&spi[dev].im_handle, DMA0, (dev*3u)+2u);
+    EDMA_CreateHandle(&spi[dev].tx_handle, DMA0, (dev*3u)+1u);
 
     NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
     NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+    //NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].im_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
 
     DSPI_MasterTransferCreateHandleEDMA(
-            cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *)dev,
+            cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *) spi[dev].sem,
+            &spi[dev].rx_handle, &spi[dev].im_handle, &spi[dev].tx_handle
     );
 #else
-
-#endif
 
     DSPI_MasterTransferCreateHandle(
             cfg->spi, &spi[dev].master_handle, spi_irq_callback, (void *) spi[dev].sem
@@ -103,6 +127,8 @@ void cc_spi_init(cc_dev_t dev)
     }
 
     NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+
+#endif
 
     cc_dbg_v("[%u] initialized", dev);
 }
@@ -157,10 +183,17 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
     cc_dbg_printf_v("tx="); print_hex(xbuf, xlen);
 #endif
 
+#ifdef CC_SPI_DMA
+    xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
+    DSPI_MasterTransferEDMA(cfg->spi, &spi[dev].edma_handle, &xfer);
+    xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
+    xSemaphoreGive(spi[dev].mtx);
+#else
     xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
     DSPI_MasterTransferNonBlocking(cfg->spi, &spi[dev].master_handle, &xfer);
     xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
     xSemaphoreGive(spi[dev].mtx);
+#endif
 
     if (rx && len) {
         memcpy(rx, &xbuf[hlen], len);
@@ -170,9 +203,22 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
     return st;
 }
 
+#ifdef CC_SPI_DMA
+
+static void spi_dma_callback(SPI_Type *base, dspi_master_edma_handle_t *handle, status_t status, void *userData)
+{
+    BaseType_t xHigherPriorityTaskWoken;
+    xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
+    portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
+}
+
+#else
+
 static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData)
 {
     BaseType_t xHigherPriorityTaskWoken;
     xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
+
+#endif
