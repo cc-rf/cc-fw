@@ -9,6 +9,13 @@
 #include <queue.h>
 #include <semphr.h>
 
+/**
+ * New ISR Handling:
+ * - No task
+ * - One listener per source (port) -- might be a problem
+ * - Fast dispatch, listener is other (app) task, only queue event
+ */
+
 
 #define PORT_IRQ_HANDLER(P) \
         static volatile u32 isr_count_##P, isr_flag_##P;\
