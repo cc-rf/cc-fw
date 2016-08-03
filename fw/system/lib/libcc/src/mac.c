@@ -269,12 +269,13 @@ void mac_tx_begin(cc_dev_t dev, chan_t chan)
         mac_rx_disable();
     }
 
-    amp_ctrl(dev, AMP_HGM, false);
+    amp_ctrl(dev, AMP_HGM, true);
     amp_ctrl(dev, AMP_PA, true);
 
     cc_strobe(dev, CC1200_SIDLE);
     mac[dev].chan_cur = chan;
     chan_select(&channels[dev].group, chan); // NOTE: not in IDLE!
+    //printf("tx begin: chan=%u f=%u\r\n", chan, channels[dev].group)
     mac_unlock(dev);
 }
 

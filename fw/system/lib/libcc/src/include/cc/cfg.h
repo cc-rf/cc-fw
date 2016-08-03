@@ -256,10 +256,10 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
 // Whitening = false
 
 static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
-        //{CC1200_SYNC3,             0x6F},
-        //{CC1200_SYNC2,             0x4E},
-        //{CC1200_SYNC1,             0x90}, // Sync Word Configuration [15:8]
-        //{CC1200_SYNC0,             0x4E}, // Sync Word Configuration [7:0]
+        {CC1200_SYNC3,             0x6F},
+        {CC1200_SYNC2,             0x4E},
+        {CC1200_SYNC1,             0x90}, // Sync Word Configuration [15:8]
+        {CC1200_SYNC0,             0x4E}, // Sync Word Configuration [7:0]
 
         {CC1200_SYNC_CFG1,         0xA7/*0xA9*//*0xA8*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         0x33/*0x13*/}, // bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
@@ -284,7 +284,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},
         {CC1200_PKT_CFG0,          0x20},
-        {CC1200_PA_CFG1,           0x63/*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG1,           0x77/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
         /*!!UNCONFIRMED CHANGE*/{CC1200_IF_MIX_CFG,        0x1C/*0x1C*/}, // IF: highest freq

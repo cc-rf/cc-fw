@@ -39,7 +39,7 @@ mac_cfg_t cc_mac_cfg = {
 
 #define MODE_TX     1
 #define MODE_RX     2
-#define MODE        MODE_TX
+#define MODE        MODE_RX
 
 #include <itm.h>
 #include <util/uart.h>
@@ -166,7 +166,7 @@ static void main_task(void *param)
 
     printf("<main task>\r\n");
 
-    //uart = uart_init(0, 230400);
+    uart = uart_init(0, 230400);
 
 
     xQueueHandle input_queue = xQueueCreate(32, sizeof(uart_frame_t));
@@ -225,16 +225,13 @@ static void main_task(void *param)
 
 #elif MODE == MODE_RX
 
-    //printf("rx: f=%lusr=%lut=%luus\r\n", cc_get_freq(DEVICE),  cc_get_symbol_rate(DEVICE), (u32)(cc_get_rx_timeout(DEVICE)/1000));
-
     cc_set(0, CC1200_AGC_GAIN_ADJUST, (u8)rssi_adj/*56*//*61*/);
     cc_set(1, CC1200_AGC_GAIN_ADJUST, (u8)rssi_adj/*56*//*61*/);
 
     mac_rx_enable();
     mac_set_rx_channel(0, 10);
     mac_set_rx_channel(1, 13);
-
-
+    printf("rx: f[0]=%lu f[1]=%lu\r\n", cc_get_freq(0),  cc_get_freq(1));
     printf("[0] mde = 0x%02X  [1] mde = 0x%02X\r\n", cc_get(0, CC1200_MODCFG_DEV_E), cc_get(1, CC1200_MODCFG_DEV_E));
 
     uart_frame_t frame;
@@ -362,7 +359,7 @@ pit_tick_t pkt_tmr_0[CC_NUM_DEVICES] = {0}, pkt_tmr_1[CC_NUM_DEVICES] = {0};
 
 static void mac_rx(cc_dev_t dev, u8 *buf, u8 len, s8 rssi, u8 lqi)
 {
-    printf("%s[%u/%i/%i/%u]\r\n", dev!=0 ? "\t\t" : "", dev, rssi, (s16)rssi - (s16)rssi_adj, lqi);
+    /*printf("%s[%u/%i/%i/%u]\r\n", dev!=0 ? "\t\t" : "", dev, rssi, (s16)rssi - (s16)rssi_adj, lqi);
 
     if (dev == CC_DEV_MIN) {
         LED_A_TOGGLE();
@@ -374,9 +371,9 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len, s8 rssi, u8 lqi)
         else LED_D_OFF();
     }
 
-    return;
+    return;*/
 
-    /*if (!pkt_count[dev]) {
+    if (!pkt_count[dev]) {
         pkt_tmr_0[dev] = pit_get_elapsed(xsec_timer);
     }
 
@@ -398,7 +395,7 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len, s8 rssi, u8 lqi)
         if (!(pkt_count[dev] % 12)) LED_A_TOGGLE();
     } else {
         if (!(pkt_count[dev] % 12)) LED_B_TOGGLE();
-    }*/
+    }
 
     /*uart_frame_t const frame = {
             .data = buf,

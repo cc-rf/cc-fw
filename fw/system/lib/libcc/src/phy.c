@@ -129,9 +129,9 @@ static bool phy_setup(cc_dev_t dev)
     //    }
     //}
 
-    if (dev != CC_DEV_MIN) {
+    /*if (dev != CC_DEV_MIN) {
         cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_DSSS_PN, 0);
-    }
+    }*/
 
     if (!cc_cfg_regs(dev, CC_CFG_PHY, COUNT_OF(CC_CFG_PHY))) {
         cc_dbg("[%u] error: could not configure", dev);
