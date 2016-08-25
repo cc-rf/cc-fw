@@ -126,6 +126,12 @@ typedef struct __packed uart_frame {
 
 } uart_frame_t;
 
+typedef struct __packed uart_frame_buf {
+    size_t len;
+    u8 data[];
+
+} uart_frame_buf_t;
+
 typedef struct __packed ucmd_hdr {
     u8 cmd;
 
@@ -397,13 +403,15 @@ static void mac_rx(cc_dev_t dev, u8 *buf, u8 len, s8 rssi, u8 lqi)
         if (!(pkt_count[dev] % 12)) LED_B_TOGGLE();
     }
 
-    /*uart_frame_t const frame = {
-            .data = buf,
-            .len = len
-    };
+    uart_frame_buf_t *frame = malloc(len + sizeof(uart_frame_buf_t));
+    frame->len = len;
+    memcpy(frame->data, buf, len);
 
-    xQueueSend(output_queue, &frame, portMAX_DELAY);*/
-    uart_write(uart, buf, len);
+    /*xQueueSend(output_queue, &frame, portMAX_DELAY);*/
+    //uart_write(uart, buf, len);
+
+    uart_write(uart, frame, len + sizeof(uart_frame_buf_t));
+    free(frame);
 }
 
 
