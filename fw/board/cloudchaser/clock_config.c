@@ -104,12 +104,12 @@ const clock_config_t g_defaultClockConfigRun = {
 
             .frdiv = 5U,
             .drs = kMCG_DrsLow,         /* Low frequency range */
-            .dmx32 = kMCG_Dmx32Default, /* DCO has a default range of 25% */
+            .dmx32 = kMCG_Dmx32Fine,    /* DCO has a default range of 25% */
             .oscsel = kMCG_OscselOsc,   /* Select OSC */
 
             .pll0Config =
                 {
-                    .enableMode = kMCG_PllEnableIndependent, .prdiv = 0x01U, .vdiv = 0x04U,
+                    .enableMode = 0, .prdiv = 0x01U, .vdiv = 0x04U,
                 },
             .pllcs = kMCG_PllClkSelPll0,
         },
@@ -126,9 +126,9 @@ const clock_config_t g_defaultClockConfigRun = {
                   .workMode = kOSC_ModeOscLowPower,
                   .oscerConfig =
                       {
-                          .enableMode = kOSC_ErClkEnable,
+                          .enableMode = kOSC_ErClkEnable | kOSC_ErClkEnableInStop,
 #if (defined(FSL_FEATURE_OSC_HAS_EXT_REF_CLOCK_DIVIDER) && FSL_FEATURE_OSC_HAS_EXT_REF_CLOCK_DIVIDER)
-                          .erclkDiv = 0U,
+                          .erclkDiv = 1,
 #endif
                       }},
     .coreClock = 120000000U, /* Core clock frequency */
@@ -182,7 +182,7 @@ const clock_config_t g_defaultClockConfigOchsrun = {
             .ircs = kMCG_IrcFast,                      /* Select IRC32k.*/
             .fcrdiv = 0U,                              /* FCRDIV is 0. */
 
-            .frdiv = 4U,
+            .frdiv = 5U,
             .drs = kMCG_DrsHigh,        /* High frequency range. */
             .dmx32 = kMCG_Dmx32Fine,    /* DCO has a default range of 25%. */
             .oscsel = kMCG_OscselOsc,   /* Select OSC. */
