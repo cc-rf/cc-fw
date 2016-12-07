@@ -1,7 +1,0 @@
-add_subdirectory(board)
-add_subdirectory(cmsis)
-add_subdirectory(cpu)
-add_subdirectory(driver)
-add_subdirectory(freertos)
-add_subdirectory(middleware)
-add_subdirectory(util)
