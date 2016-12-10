@@ -2,14 +2,13 @@ set(NAME fw_project_usb)
 
 add_library(
         ${NAME} STATIC
+        fault.c
         main.c
         usb/usb_device_cdc_acm.c
         usb/usb_device_ch9.c
         usb/usb_device_class.c
         usb/usb_device_descriptor.c
         usb/virtual_com.c
-        bno055.c
-        bno055_support.c
 )
 
 #set_source_files_properties(main.c PROPERTIES COMPILE_FLAGS "-Wa,-a,-ad")
