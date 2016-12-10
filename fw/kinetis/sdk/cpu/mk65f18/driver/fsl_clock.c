@@ -28,7 +28,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "fsl_common.h"
 #include "fsl_clock.h"
 
 /*******************************************************************************
@@ -124,7 +123,6 @@ static uint32_t s_extPllFreq = 0U;
 
 /* External XTAL0 (OSC0) clock frequency. */
 uint32_t g_xtal0Freq;
-
 /* External XTAL32K clock frequency. */
 uint32_t g_xtal32Freq;
 
@@ -578,7 +576,30 @@ bool CLOCK_EnableUsbfs0Clock(clock_usb_src_t src, uint32_t freq)
 
 bool CLOCK_EnableUsbhs0Clock(clock_usb_src_t src, uint32_t freq)
 {
+    /* Source and freq are not used for USB HS. */
+    src = src;
+    freq = freq;
+
+    SIM->SCGC3 |= SIM_SCGC3_USBHS_MASK;
+
+    SIM->USBPHYCTL = ((SIM->USBPHYCTL & ~(SIM_USBPHYCTL_USB3VOUTTRG_MASK)) | SIM_USBPHYCTL_USB3VOUTTRG(6U) /* 3.310V */
+                      | SIM_USBPHYCTL_USBVREGSEL_MASK); /* VREG_IN1 */
+
+    USBPHY->PLL_SIC |= USBPHY_PLL_SIC_PLL_EN_USB_CLKS_MASK; /* Enable USB clock output from USB PHY PLL */
+
+    return true;
+}
+
+void CLOCK_DisableUsbhs0Clock(void)
+{
+    USBPHY->PLL_SIC &= ~USBPHY_PLL_SIC_PLL_EN_USB_CLKS_MASK; /* Disable USB clock output from USB PHY PLL */
+    SIM->SCGC3 &= ~SIM_SCGC3_USBHS_MASK;
+}
+
+bool CLOCK_EnableUsbhs0PhyPllClock(clock_usb_phy_src_t src, uint32_t freq)
+{
     volatile uint32_t i;
+    uint32_t phyPllDiv = 0U;
 
     /*
      * In order to bring up the internal 480MHz USB PLL clock, should make sure:
@@ -589,12 +610,28 @@ bool CLOCK_EnableUsbhs0Clock(clock_usb_src_t src, uint32_t freq)
     assert(!(MCG->C2 & MCG_C2_IRCS_MASK));
     assert(OSC0->CR & OSC_CR_ERCLKEN_MASK);
 
+    if (24000000U == freq)
+    {
+        phyPllDiv = USBPHY_PLL_SIC_PLL_DIV_SEL(0U);
+    }
+    else if (16000000U == freq)
+    {
+        phyPllDiv = USBPHY_PLL_SIC_PLL_DIV_SEL(1U);
+    }
+    else if (12000000U == freq)
+    {
+        phyPllDiv = USBPHY_PLL_SIC_PLL_DIV_SEL(2U);
+    }
+    else
+    {
+        return false;
+    }
+
     /* Source and freq are not used for USB HS. */
     src = src;
-    freq = freq;
 
+    SIM->SCGC3 |= SIM_SCGC3_USBHSPHY_MASK;
     SIM->SOPT2 |= SIM_SOPT2_USBREGEN_MASK;
-    SIM->SCGC3 |= (SIM_SCGC3_USBHS_MASK | SIM_SCGC3_USBHSPHY_MASK);
 
     i = 500000U;
     while (i--)
@@ -602,10 +639,64 @@ bool CLOCK_EnableUsbhs0Clock(clock_usb_src_t src, uint32_t freq)
         __NOP();
     }
 
-    SIM->USBPHYCTL = ((SIM->USBPHYCTL & ~(SIM_USBPHYCTL_USB3VOUTTRG_MASK)) | SIM_USBPHYCTL_USB3VOUTTRG(6U) /* 3.310V */
-                      | SIM_USBPHYCTL_USBVREGSEL_MASK); /* VREG_IN1 */
+    USBPHY->TRIM_OVERRIDE_EN = 0x01U;                 /* Override the trim. */
+    USBPHY->CTRL &= ~USBPHY_CTRL_SFTRST_MASK;         /* release PHY from reset */
+    USBPHY->PLL_SIC |= USBPHY_PLL_SIC_PLL_POWER_MASK; /* power up PLL */
+    USBPHY->PLL_SIC = (USBPHY->PLL_SIC & ~USBPHY_PLL_SIC_PLL_DIV_SEL_MASK) | phyPllDiv;
+    USBPHY->PLL_SIC &= ~USBPHY_PLL_SIC_PLL_BYPASS_MASK; /* Clear bypass bit */
+    USBPHY->CTRL &= ~USBPHY_CTRL_CLKGATE_MASK;          /* Clear to 0U to run clocks */
+
+    /* Wait for lock. */
+    while (!(USBPHY->PLL_SIC & USBPHY_PLL_SIC_PLL_LOCK_MASK))
+    {
+    }
 
     return true;
+}
+
+void CLOCK_DisableUsbhs0PhyPllClock(void)
+{
+    USBPHY->CTRL |= USBPHY_CTRL_CLKGATE_MASK;          /* Set to 1U to gate clocks */
+    USBPHY->PLL_SIC &= ~USBPHY_PLL_SIC_PLL_POWER_MASK; /* Power down PLL */
+    SIM->SOPT2 &= ~SIM_SOPT2_USBREGEN_MASK;
+    SIM->SCGC3 &= ~SIM_SCGC3_USBHSPHY_MASK;
+}
+
+void CLOCK_EnableUsbhs0PfdClock(uint8_t frac, clock_usb_pfd_src_t src)
+{
+    assert((frac <= 35U) && (frac >= 18U));
+    uint32_t fracFreq = (480000U * 18U / frac) * 1000U;
+
+    USBPHY->ANACTRL = (USBPHY->ANACTRL & ~(USBPHY_ANACTRL_PFD_FRAC_MASK | USBPHY_ANACTRL_PFD_CLK_SEL_MASK)) |
+                      (USBPHY_ANACTRL_PFD_FRAC(frac) | USBPHY_ANACTRL_PFD_CLK_SEL(src));
+
+    USBPHY->ANACTRL &= ~USBPHY_ANACTRL_PFD_CLKGATE_MASK;
+    while (!(USBPHY->ANACTRL & USBPHY_ANACTRL_PFD_STABLE_MASK))
+    {
+    }
+
+    if (kCLOCK_UsbPfdSrcExt == src)
+    {
+        s_extPllFreq = g_xtal0Freq;
+    }
+    else if (kCLOCK_UsbPfdSrcFracDivBy4 == src)
+    {
+        s_extPllFreq = fracFreq / 4U;
+    }
+    else if (kCLOCK_UsbPfdSrcFracDivBy2 == src)
+    {
+        s_extPllFreq = fracFreq / 2U;
+    }
+    else
+    {
+        s_extPllFreq = fracFreq;
+    }
+}
+
+void CLOCK_DisableUsbhs0PfdClock(void)
+{
+    USBPHY->ANACTRL |= USBPHY_ANACTRL_PFD_CLKGATE_MASK;
+    s_extPllFreq = 0U;
 }
 
 uint32_t CLOCK_GetOutClkFreq(void)
@@ -709,6 +800,12 @@ uint32_t CLOCK_GetPll0Freq(void)
     }
 
     mcgpll0clk = CLOCK_GetPll0RefFreq();
+
+    /*
+     * Please call CLOCK_SetXtal0Freq base on board setting before using OSC0 clock.
+     * Please call CLOCK_SetXtal1Freq base on board setting before using OSC1 clock.
+     */
+    assert(mcgpll0clk);
 
     mcgpll0clk /= (FSL_FEATURE_MCG_PLL_PRDIV_BASE + MCG_C5_PRDIV0_VAL);
     mcgpll0clk *= (FSL_FEATURE_MCG_PLL_VDIV_BASE + MCG_C6_VDIV0_VAL);
@@ -937,6 +1034,14 @@ void CLOCK_EnablePll0(mcg_pll_config_t const *config)
 
     /* Wait for PLL lock. */
     while (!(MCG->S & MCG_S_LOCK0_MASK))
+    {
+    }
+}
+
+void CLOCK_SetPllClkSel(mcg_pll_clk_select_t pllcs)
+{
+    MCG->C11 = ((MCG->C11 & ~MCG_C11_PLLCS_MASK)) | MCG_C11_PLLCS(pllcs);
+    while (pllcs != MCG_S2_PLLCST_VAL)
     {
     }
 }
@@ -1284,7 +1389,7 @@ mcg_mode_t CLOCK_GetMode(void)
     return mode;
 }
 
-status_t CLOCK_SetFeiMode(mcg_drs_t drs, void (*fllStableDelay)(void))
+status_t CLOCK_SetFeiMode(mcg_dmx32_t dmx32, mcg_drs_t drs, void (*fllStableDelay)(void))
 {
     uint8_t mcg_c4;
     bool change_drs = false;
@@ -1328,7 +1433,7 @@ status_t CLOCK_SetFeiMode(mcg_drs_t drs, void (*fllStableDelay)(void))
     }
 
     /* In FEI mode, the MCG_C4[DMX32] is set to 0U. */
-    MCG->C4 = (mcg_c4 & ~(MCG_C4_DMX32_MASK | MCG_C4_DRST_DRS_MASK)) | (MCG_C4_DRST_DRS(drs));
+    MCG->C4 = (mcg_c4 & ~(MCG_C4_DMX32_MASK | MCG_C4_DRST_DRS_MASK)) | (MCG_C4_DMX32(dmx32) | MCG_C4_DRST_DRS(drs));
 
     /* Check MCG_S[CLKST] */
     while (kMCG_ClkOutStatFll != MCG_S_CLKST_VAL)
@@ -1411,7 +1516,7 @@ status_t CLOCK_SetFeeMode(uint8_t frdiv, mcg_dmx32_t dmx32, mcg_drs_t drs, void 
     return kStatus_Success;
 }
 
-status_t CLOCK_SetFbiMode(mcg_drs_t drs, void (*fllStableDelay)(void))
+status_t CLOCK_SetFbiMode(mcg_dmx32_t dmx32, mcg_drs_t drs, void (*fllStableDelay)(void))
 {
     uint8_t mcg_c4;
     bool change_drs = false;
@@ -1464,7 +1569,7 @@ status_t CLOCK_SetFbiMode(mcg_drs_t drs, void (*fllStableDelay)(void))
     {
     }
 
-    MCG->C4 = (mcg_c4 & ~(MCG_C4_DMX32_MASK | MCG_C4_DRST_DRS_MASK)) | (MCG_C4_DRST_DRS(drs));
+    MCG->C4 = (mcg_c4 & ~(MCG_C4_DMX32_MASK | MCG_C4_DRST_DRS_MASK)) | (MCG_C4_DMX32(dmx32) | MCG_C4_DRST_DRS(drs));
 
     /* Wait for FLL stable time. */
     if (fllStableDelay)
@@ -1579,6 +1684,12 @@ status_t CLOCK_SetBlpeMode(void)
 
 status_t CLOCK_SetPbeMode(mcg_pll_clk_select_t pllcs, mcg_pll_config_t const *config)
 {
+    /* If external PLL is used, then the config could be NULL. */
+    if (kMCG_PllClkSelExtPll != pllcs)
+    {
+        assert(config);
+    }
+
     /*
        This function is designed to change MCG to PBE mode from PEE/BLPE/FBE,
        but with this workflow, the source mode could be all modes except PEI/PBI.
@@ -1606,13 +1717,15 @@ status_t CLOCK_SetPbeMode(mcg_pll_clk_select_t pllcs, mcg_pll_config_t const *co
         CLOCK_EnablePll0(config);
     }
 
+    /* Change to PLL mode. */
+    MCG->C6 |= MCG_C6_PLLS_MASK;
+
     MCG->C11 = ((MCG->C11 & ~MCG_C11_PLLCS_MASK)) | MCG_C11_PLLCS(pllcs);
     while (pllcs != MCG_S2_PLLCST_VAL)
     {
     }
 
-    /* Change to PLL mode. */
-    MCG->C6 |= MCG_C6_PLLS_MASK;
+    /* Wait for PLL mode changed. */
     while (!(MCG->S & MCG_S_PLLST_MASK))
     {
     }
@@ -1687,9 +1800,9 @@ status_t CLOCK_InternalModeToFbiModeQuick(void)
     return kStatus_Success;
 }
 
-status_t CLOCK_BootToFeiMode(mcg_drs_t drs, void (*fllStableDelay)(void))
+status_t CLOCK_BootToFeiMode(mcg_dmx32_t dmx32, mcg_drs_t drs, void (*fllStableDelay)(void))
 {
-    return CLOCK_SetFeiMode(drs, fllStableDelay);
+    return CLOCK_SetFeiMode(dmx32, drs, fllStableDelay);
 }
 
 status_t CLOCK_BootToFeeMode(
@@ -1740,7 +1853,11 @@ status_t CLOCK_BootToBlpeMode(mcg_oscsel_t oscsel)
 
 status_t CLOCK_BootToPeeMode(mcg_oscsel_t oscsel, mcg_pll_clk_select_t pllcs, mcg_pll_config_t const *config)
 {
-    assert(config);
+    /* If external PLL is used, then the config could be NULL. */
+    if (kMCG_PllClkSelExtPll != pllcs)
+    {
+        assert(config);
+    }
 
     CLOCK_SetExternalRefClkConfig(oscsel);
 
@@ -1798,7 +1915,7 @@ status_t CLOCK_SetMcgConfig(const mcg_config_t *config)
         if (!(MCG->S & MCG_S_IRCST_MASK))
         {
             CLOCK_ExternalModeToFbeModeQuick();
-            CLOCK_SetFeiMode(config->drs, (void (*)(void))0);
+            CLOCK_SetFeiMode(config->dmx32, config->drs, (void (*)(void))0);
         }
 
         CLOCK_SetExternalRefClkConfig(config->oscsel);
@@ -1810,7 +1927,7 @@ status_t CLOCK_SetMcgConfig(const mcg_config_t *config)
         MCG->C2 &= ~MCG_C2_LP_MASK; /* Disable lowpower. */
 
         {
-            CLOCK_SetFeiMode(config->drs, CLOCK_FllStableDelay);
+            CLOCK_SetFeiMode(config->dmx32, config->drs, CLOCK_FllStableDelay);
         }
     }
 
@@ -1826,13 +1943,13 @@ status_t CLOCK_SetMcgConfig(const mcg_config_t *config)
         switch (next_mode)
         {
             case kMCG_ModeFEI:
-                status = CLOCK_SetFeiMode(config->drs, CLOCK_FllStableDelay);
+                status = CLOCK_SetFeiMode(config->dmx32, config->drs, CLOCK_FllStableDelay);
                 break;
             case kMCG_ModeFEE:
                 status = CLOCK_SetFeeMode(config->frdiv, config->dmx32, config->drs, CLOCK_FllStableDelay);
                 break;
             case kMCG_ModeFBI:
-                status = CLOCK_SetFbiMode(config->drs, (void (*)(void))0);
+                status = CLOCK_SetFbiMode(config->dmx32, config->drs, (void (*)(void))0);
                 break;
             case kMCG_ModeFBE:
                 status = CLOCK_SetFbeMode(config->frdiv, config->dmx32, config->drs, (void (*)(void))0);

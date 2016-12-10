@@ -8,6 +8,8 @@ add_library(
         queue.c
         tasks.c
         timers.c
+        portable/GCC/ARM_CM4F/fsl_tickless_lptmr.c
+        portable/GCC/ARM_CM4F/fsl_tickless_systick.c
         portable/GCC/ARM_CM4F/port.c
         portable/MemMang/heap_1.c
         driver/fsl_i2c_freertos.c
