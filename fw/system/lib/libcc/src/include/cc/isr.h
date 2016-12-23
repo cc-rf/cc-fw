@@ -22,8 +22,7 @@ enum __packed isr_edge {
     ISR_EDGE_LOW
 };
 
-typedef void (* isr_t)(cc_dev_t dev);
+typedef void *isr_handle_t;
 
-bool cc_isr_init(cc_dev_t dev);
-enum isr_pin cc_isr(cc_dev_t dev, enum isr_pin pin, enum isr_edge edge, isr_t isr);
-bool cc_isr_state(cc_dev_t dev, enum isr_pin pin);
+isr_handle_t cc_isr_setup(cc_dev_t dev, enum isr_pin *pin, enum isr_edge edge);
+void cc_isr_wait(isr_handle_t isr_handle);

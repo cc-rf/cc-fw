@@ -11,8 +11,7 @@ add_library(
         src/io.c
         src/chan.c
         src/freq.c
-        src/phy.c
-        src/mac.c
+        src/nphy.c
 )
 
 target_include_directories(

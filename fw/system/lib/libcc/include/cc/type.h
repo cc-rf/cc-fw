@@ -9,3 +9,8 @@ typedef u8      cc_dev_t;
 typedef u64     nsec_t;
 
 
+typedef struct __attribute__((packed)) {
+    u8 len;
+    u8 data[];
+
+} cc_pkt_t;

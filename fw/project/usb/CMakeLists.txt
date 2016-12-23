@@ -29,6 +29,7 @@ target_link_libraries(
         PUBLIC kinetis_middleware_dma_manager
         PUBLIC fw_system_framework_trace
         PUBLIC util_uart
+        PUBLIC libcc
 )
 
 add_library(kinetis_freertos_config INTERFACE)

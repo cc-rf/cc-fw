@@ -312,7 +312,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         /*!!UNCONFIRMED CHANGE*/{CC1200_IFAMP,             0x09/*0x01*//*0x09*/}, // IFAMP (SS) BW 1000kHz -> 300kHz [NOTE: Seems to affect RSSI level, unsure of calibration after this. Keeping because it raises LQI. Also technically breaks the rule outlined in the user guide.]
         {CC1200_XOSC5,             0x0E},
         {CC1200_XOSC1,             0x03},
-}; 
+};
 
 // Address Config = No address check
 // Bit Rate = 30 (was 38.4)
@@ -376,4 +376,4 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_NB[] = {
         {CC1200_IFAMP,             0x09},
         {CC1200_XOSC5,             0x0E},
         {CC1200_XOSC1,             0x03},
-}; 
+};

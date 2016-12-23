@@ -7,6 +7,21 @@
 #include <stdio.h>
 #include <itm.h>
 
+
+#include <cc/spi.h>
+#include <cc/io.h>
+#include <cc/nphy.h>
+#include <cc/freq.h>
+#include <cc/cc1200.h>
+#include <cc/isr.h>
+#include <cc/tmr.h>
+#include <cc/mac.h>
+#include <cc/chan.h>
+#include <core_cm4.h>
+#include <cc/sys/kinetis/pit.h>
+#include <cc/type.h>
+
+
 extern void vcom_init(void);
 
 static void main_task(void *param);
@@ -37,17 +52,64 @@ int main(void)
     );
 
     xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
-    vTaskStartScheduler();
+
+    //vcom_init();
 
     LED_A_ON();
-    //vcom_init();
+
+    // Theoretically this will make sure the sub-priority on all interrupt configs is zero.
+    //   Not sure it's actually really needed or what it does in the long run.
+    //   See comment in FreeRTOS port.c.
+    //NVIC_SetPriorityGrouping(0);
+
+    vTaskStartScheduler();
 }
 
 static void main_task(void *param)
 {
     (void)param;
     printf("<main task>\r\n");
+
+    #if 1
+    if (nphy_init()) {
+        printf("nphy init successful.\r\n");
+
+        cc_set_freq(0, 915000000);
+
+        #if 0
+
+        while (1) {
+            cc_pkt_t *pkt = nphy_rx();
+
+            if (!pkt->len) {
+                printf("rx: <null>\r\n");
+            } else {
+                printf("rx:");
+
+                for (u8 i = 0; i < pkt->len; ++i)
+                    printf(" %02X", pkt->data[i]);
+
+                printf("\r\n");
+            }
+        }
+
+        #else
+
+        static cc_pkt_t pkt = { .len = 1, .data = { '!' }};
+
+        while (1) {
+            nphy_tx(&pkt);
+            printf("tx: sent\r\n");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+
+        #endif
+    }
+    #endif
+
+    vTaskDelay(portMAX_DELAY);
     vTaskDelete(NULL);
+    while (1) {}
 }
 
 
