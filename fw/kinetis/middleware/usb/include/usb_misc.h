@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -46,7 +46,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
-//extern int DbgConsole_Printf(char *fmt_s, ...);
+//extern int DbgConsole_Printf(const char *fmt_s, ...);
 
 #if defined(__cplusplus)
 }
@@ -209,26 +209,44 @@ extern "C" {
 #define USB_SHORT_FROM_BIG_ENDIAN_ADDRESS(n) ((uint32_t)(((uint32_t)n[0] << 8U) | ((uint32_t)n[1] << 0U)))
 #endif
 
+/*
+ * The following MACROs (USB_GLOBAL, USB_BDT, USB_RAM_ADDRESS_ALIGNMENT_512) are only used for USB device stack.
+ * The USB device global variables are put into the section m_usb_global or m_usb_bdt by using the MACRO
+ * USB_GLOBAL and USB_BDT. In this way, the USB device global variables can be linked into USB dadicated RAM
+ * by changing the linker file. This feature can only be enabled when the USB dadicated RAM is not less than 2K Bytes.
+ */
 #if defined(__ICCARM__)
 
 #define USB_GLOBAL _Pragma("location = \"m_usb_global\"")
 #define USB_BDT _Pragma("location = \"m_usb_bdt\"")
-#define USB_RAM_ADDRESS_ALGINMENT_512 _Pragma("data_alignment = 512U")
+
+/* disable misra 19.13 */
+_Pragma("diag_suppress=Pm120")
+#define USB_ALIGN_PRAGMA(x) _Pragma(#x)
+    _Pragma("diag_default=Pm120")
+
+#define USB_RAM_ADDRESS_ALIGNMENT(n) USB_ALIGN_PRAGMA(data_alignment = n)
 
 #elif defined(__CC_ARM)
 
 #define USB_GLOBAL __attribute__((section("m_usb_global"))) __attribute__((zero_init))
 #define USB_BDT __attribute__((section("m_usb_bdt"))) __attribute__((zero_init))
-#define USB_RAM_ADDRESS_ALGINMENT_512 __attribute__((aligned(512U)))
+#define USB_RAM_ADDRESS_ALIGNMENT(n) __attribute__((aligned(n)))
 
 #elif defined(__GNUC__)
 
-#define USB_GLOBAL __attribute__((section("m_usb_global")))
-#define USB_BDT __attribute__((section("m_usb_bdt")))
-#define USB_RAM_ADDRESS_ALGINMENT_512 __attribute__((aligned(512U)))
+#define USB_GLOBAL __attribute__((section("m_usb_global, \"aw\", %nobits @")))
+#define USB_BDT __attribute__((section("m_usb_bdt, \"aw\", %nobits @")))
+#define USB_RAM_ADDRESS_ALIGNMENT(n) __attribute__((aligned(n)))
 
 #else
 #error The tool-chain is not supported.
+#endif
+
+#if ((defined USB_DEVICE_CONFIG_LPCIP3511FS) && (USB_DEVICE_CONFIG_LPCIP3511FS))
+#define USB_DATA_ALIGNMENT USB_RAM_ADDRESS_ALIGNMENT(64)
+#else
+#define USB_DATA_ALIGNMENT
 #endif
 
 #endif /* __USB_MISC_H__ */

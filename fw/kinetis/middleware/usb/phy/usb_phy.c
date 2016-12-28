@@ -46,33 +46,57 @@
 uint32_t USB_EhciPhyInit(uint8_t controllerId, uint32_t freq)
 {
 #if ((defined FSL_FEATURE_SOC_USBPHY_COUNT) && (FSL_FEATURE_SOC_USBPHY_COUNT > 0U))
-    USBPHY->TRIM_OVERRIDE_EN = 0x001fU;               /* override IFR value */
-    USBPHY->CTRL &= ~USBPHY_CTRL_SFTRST_MASK;         /* release PHY from reset */
-    USBPHY->PLL_SIC |= USBPHY_PLL_SIC_PLL_POWER_MASK; /* power up PLL */
-    if (freq == 24000000U)
-    {
-        USBPHY->PLL_SIC |= USBPHY_PLL_SIC_PLL_DIV_SEL(0U);
-    }
-    else if (freq == 16000000U)
-    {
-        USBPHY->PLL_SIC |= USBPHY_PLL_SIC_PLL_DIV_SEL(1U);
-    }
-    else if (freq == 12000000U)
-    {
-        USBPHY->PLL_SIC |= USBPHY_PLL_SIC_PLL_DIV_SEL(2U);
-    }
-    else
-    {
-        return kStatus_USB_Error; /* error */
-    }
-    USBPHY->PLL_SIC &= ~USBPHY_PLL_SIC_PLL_BYPASS_MASK;     /* clear bypass bit */
-    USBPHY->PLL_SIC |= USBPHY_PLL_SIC_PLL_EN_USB_CLKS_MASK; /* enable USB clock output from USB PHY PLL */
-    USBPHY->CTRL &= ~USBPHY_CTRL_CLKGATE_MASK;              /* Clear to 0U to run clocks */
+    USBPHY->TRIM_OVERRIDE_EN = 0x001fU; /* override IFR value */
 
     USBPHY->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL2_MASK; /* support LS device. */
     USBPHY->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL3_MASK; /* support external FS Hub with LS device connected. */
     /* PWD register provides overall control of the PHY power state */
     USBPHY->PWD = 0U;
+
+    /* Decode to trim the nominal 17.78mA current source for the High Speed TX drivers on USB_DP and USB_DM. */
+    USBPHY->TX = ((USBPHY->TX & (~USBPHY_TX_D_CAL_MASK)) | USBPHY_TX_D_CAL(0xcU));
+#endif
+
+    return kStatus_USB_Success;
+}
+
+/*!
+ * @brief ehci phy initialization for suspend and resume.
+ *
+ * This function initialize ehci phy IP for suspend and resume.
+ *
+ * @param[in] controllerId   ehci controller id, please reference to #usb_controller_index_t.
+ * @param[in] freq            the external input clock.
+ *                            for example: if the external input clock is 16M, the parameter freq should be 16000000.
+ *
+ * @retval kStatus_USB_Success      cancel successfully.
+ * @retval kStatus_USB_Error        the freq value is incorrect.
+ */
+uint32_t USB_EhciLowPowerPhyInit(uint8_t controllerId, uint32_t freq)
+{
+#if ((defined FSL_FEATURE_SOC_USBPHY_COUNT) && (FSL_FEATURE_SOC_USBPHY_COUNT > 0U))
+    USBPHY->TRIM_OVERRIDE_EN = 0x001fU; /* override IFR value */
+
+    USBPHY->CTRL |=
+        USBPHY_CTRL_AUTORESUME_EN_MASK | USBPHY_CTRL_ENAUTOCLR_CLKGATE_MASK | USBPHY_CTRL_ENAUTOCLR_PHY_PWD_MASK;
+    USBPHY->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL2_MASK; /* support LS device. */
+    USBPHY->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL3_MASK; /* support external FS Hub with LS device connected. */
+    /* PWD register provides overall control of the PHY power state */
+    USBPHY->PWD = 0U;
+
+    /* now the 480MHz USB clock is up, then configure fractional divider after PLL with PFD
+     * pfd clock = 480MHz*18/N, where N=18~35
+     * Please note that USB1PFDCLK has to be less than 180MHz for RUN or HSRUN mode
+     */
+    USBPHY->ANACTRL |= USBPHY_ANACTRL_PFD_FRAC(24);   /* N=24 */
+    USBPHY->ANACTRL |= USBPHY_ANACTRL_PFD_CLK_SEL(1); /* div by 4 */
+
+    USBPHY->ANACTRL &= ~USBPHY_ANACTRL_DEV_PULLDOWN_MASK;
+    USBPHY->ANACTRL &= ~USBPHY_ANACTRL_PFD_CLKGATE_MASK;
+    while (!(USBPHY->ANACTRL & USBPHY_ANACTRL_PFD_STABLE_MASK))
+    {
+    }
+
     /* Decode to trim the nominal 17.78mA current source for the High Speed TX drivers on USB_DP and USB_DM. */
     USBPHY->TX = ((USBPHY->TX & (~USBPHY_TX_D_CAL_MASK)) | USBPHY_TX_D_CAL(0xcU));
 #endif

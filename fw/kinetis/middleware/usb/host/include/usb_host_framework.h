@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -48,7 +48,7 @@ typedef enum _usb_host_request_type
     kRequestEndpoint,    /*!< Control request object is endpoint */
 } usb_host_request_type_t;
 
-/*! @brief For USB_REQUSET_STANDARD_CLEAR_FEATURE and USB_REQUSET_STANDARD_SET_FEATURE */
+/*! @brief For USB_REQUEST_STANDARD_CLEAR_FEATURE and USB_REQUEST_STANDARD_SET_FEATURE */
 typedef struct _usb_host_process_feature_param
 {
     uint8_t requestType;         /*!< See the #usb_host_request_type_t */
@@ -56,7 +56,7 @@ typedef struct _usb_host_process_feature_param
     uint8_t interfaceOrEndpoint; /*!< Interface or end pointer */
 } usb_host_process_feature_param_t;
 
-/*! @brief For USB_REQUSET_STANDARD_GET_DESCRIPTOR and USB_REQUSET_STANDARD_SET_DESCRIPTOR */
+/*! @brief For USB_REQUEST_STANDARD_GET_DESCRIPTOR and USB_REQUEST_STANDARD_SET_DESCRIPTOR */
 typedef struct _usb_host_process_descriptor_param
 {
     uint8_t descriptorType;    /*!< See the usb_spec.h, such as the USB_DESCRIPTOR_TYPE_DEVICE */
@@ -69,29 +69,29 @@ typedef struct _usb_host_process_descriptor_param
     uint16_t descriptorLength; /*!< Buffer data length */
 } usb_host_process_descriptor_param_t;
 
-/*! @brief For USB_REQUSET_STANDARD_GET_INTERFACE */
+/*! @brief For USB_REQUEST_STANDARD_GET_INTERFACE */
 typedef struct _usb_host_get_interface_param
 {
     uint8_t interface;                 /*!< Interface number */
     uint8_t *alternateInterfaceBuffer; /*!< Save the transfer result */
 } usb_host_get_interface_param_t;
 
-/*! @brief For USB_REQUSET_STANDARD_GET_STATUS */
+/*! @brief For USB_REQUEST_STANDARD_GET_STATUS */
 typedef struct _usb_host_get_status_param
 {
-    uint8_t requestType;         /*!< See the #usb_host_request_type_t */
-    uint8_t interfaceOrEndpoint; /*!< Interface number or the end pointer number */
-    uint8_t *statusBuffer;       /*!< Save the transfer result */
+    uint16_t statusSelector; /*!< Interface number, the end pointer number or OTG status selector */
+    uint8_t requestType;     /*!< See the #usb_host_request_type_t */
+    uint8_t *statusBuffer;   /*!< Save the transfer result */
 } usb_host_get_status_param_t;
 
-/*! @brief For USB_REQUSET_STANDARD_SET_INTERFACE */
+/*! @brief For USB_REQUEST_STANDARD_SET_INTERFACE */
 typedef struct _usb_host_set_interface_param
 {
     uint8_t alternateSetting; /*!< Alternate setting value */
     uint8_t interface;        /*!< Interface number */
 } usb_host_set_interface_param_t;
 
-/*! @brief For USB_REQUSET_STANDARD_SYNCH_FRAME */
+/*! @brief For USB_REQUEST_STANDARD_SYNCH_FRAME */
 typedef struct _usb_host_synch_frame_param
 {
     uint8_t endpoint;           /*!< Endpoint number */

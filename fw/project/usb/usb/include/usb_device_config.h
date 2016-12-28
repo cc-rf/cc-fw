@@ -31,6 +31,8 @@
 #ifndef _USB_DEVICE_CONFIG_H_
 #define _USB_DEVICE_CONFIG_H_
 
+// TODO: change max power from 100mA and maybe make it a setting
+
 /*******************************************************************************
 * Definitions
 ******************************************************************************/
@@ -90,7 +92,7 @@
 /* @} */
 
 /*! @brief Whether device is self power. 1U supported, 0U not supported */
-#define USB_DEVICE_CONFIG_SELF_POWER (1U)
+#define USB_DEVICE_CONFIG_SELF_POWER (/*1U*/0U)
 
 /*! @brief Whether device remote wakeup supported. 1U supported, 0U not supported */
 #define USB_DEVICE_CONFIG_REMOTE_WAKEUP (0U)
@@ -99,7 +101,7 @@
 #define USB_DEVICE_CONFIG_ENDPOINTS (4U)
 
 /*! @brief Whether the device task is enabled. */
-#define USB_DEVICE_CONFIG_USE_TASK (0U)
+#define USB_DEVICE_CONFIG_USE_TASK (/*0U*/1U)
 
 /*! @brief How many the notification message are supported when the device task enabled. */
 #define USB_DEVICE_CONFIG_MAX_MESSAGES (8U)
@@ -109,14 +111,14 @@
 /*! @brief The MAX buffer length for the KHCI DMA workaround.*/
 #define USB_DEVICE_CONFIG_KHCI_DMA_ALIGN_BUFFER_LENGTH (64U)
 /*! @brief Whether handle the USB KHCI bus error. */
-#define USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING (0U)
+#define USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING (/*0U*/1U)
 #endif
 
 #if ((defined(USB_DEVICE_CONFIG_EHCI)) && (USB_DEVICE_CONFIG_EHCI > 0U))
 /*! @brief How many the DTD are supported. */
 #define USB_DEVICE_CONFIG_EHCI_MAX_DTD (16U)
 /*! @brief Whether handle the USB EHCI bus error. */
-#define USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING (0U)
+#define USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING (/*0U*/1U)
 /*! @brief Whether test mode enabled. */
 #define USB_DEVICE_CONFIG_EHCI_TEST_MODE (0U)
 /*! @brief Whether the EHCI ID pin detect feature enabled. */
@@ -124,7 +126,7 @@
 #endif
 
 /*! @brief Whether the keep alive feature enabled. */
-#define USB_DEVICE_CONFIG_KEEP_ALIVE_MODE (0U)
+#define USB_DEVICE_CONFIG_KEEP_ALIVE_MODE (/*0U*/1U)
 
 /*! @brief Whether the transfer buffer is cache-enabled or not. */
 #define USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE (0U)
@@ -133,7 +135,7 @@
 #define USB_DEVICE_CONFIG_LOW_POWER_MODE (0U)
 
 /*! @brief Whether the device detached feature is enabled or not. */
-#define USB_DEVICE_CONFIG_DETACH_ENABLE (0U)
+#define USB_DEVICE_CONFIG_DETACH_ENABLE (/*0U*/1U)
 
 /* @} */
 

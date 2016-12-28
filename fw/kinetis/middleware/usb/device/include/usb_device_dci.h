@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -77,6 +77,7 @@ typedef enum _usb_device_control_type
     kUSB_DeviceControlSetDeviceAddress,  /*!< Set device address */
     kUSB_DeviceControlGetSynchFrame,     /*!< Get current frame */
     kUSB_DeviceControlResume,            /*!< Drive controller to generate a resume signal in USB bus */
+    kUSB_DeviceControlSuspend,           /*!< Drive controller to enetr into suspend mode */
     kUSB_DeviceControlSetDefaultStatus,  /*!< Set controller to default status */
     kUSB_DeviceControlGetSpeed,          /*!< Get current speed */
     kUSB_DeviceControlGetOtgStatus,      /*!< Get OTG status */
@@ -127,6 +128,9 @@ typedef struct _usb_device_controller_interface_struct
 /*! @brief USB device status structure */
 typedef struct _usb_device_struct
 {
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+    volatile uint64_t hwTick; /*!< Current hw tick(ms)*/
+#endif
     usb_device_controller_handle controllerHandle;                       /*!< Controller handle */
     const usb_device_controller_interface_struct_t *controllerInterface; /*!< Controller interface handle */
 #if USB_DEVICE_CONFIG_USE_TASK
@@ -138,6 +142,10 @@ typedef struct _usb_device_struct
     uint8_t deviceAddress;                                   /*!< Current device address */
     uint8_t controllerId;                                    /*!< Controller ID */
     uint8_t state;                                           /*!< Current device state */
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+    uint8_t remotewakeup; /*!< Remote wakeup is enabled or not */
+#endif
+    uint8_t isResetting; /*!< Is doing device reset or not */
 } usb_device_struct_t;
 
 /*******************************************************************************

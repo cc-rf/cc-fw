@@ -138,6 +138,12 @@ typedef struct _usb_host_phdc_instance
     transfer_callback_t controlCallbackFn;     /*!< The control callback function */
     void *controlCallbackParam;                /*!< The first parameter of the control callback function */
     usb_host_transfer_t *controlTransfer;      /*!< The control transfer pointer */
+
+#if ((defined USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL) && USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL)
+    uint8_t *stallDataBuffer; /*!< keep the data buffer for stall transfer's data*/
+    uint32_t stallDataLength; /*!< keep the data length for stall transfer's data*/
+#endif
+
     usb_host_ep_t interruptInEndpointInformation; /*!< The interrupt in information */
     usb_host_ep_t bulkInEndpointInformation;      /*!< The bulk in information */
     usb_host_ep_t bulkOutEndpointInformation;     /*!< The bulk out information */

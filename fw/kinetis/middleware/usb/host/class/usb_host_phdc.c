@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -108,6 +108,83 @@ static char const metaDataMsgPreambleSignature[] = "PhdcQoSSignature";
  * Code
  ******************************************************************************/
 
+#if ((defined USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL) && USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL)
+
+static void USB_HostPhdcClearInHaltCallback(void *param, usb_host_transfer_t *transfer, usb_status_t status)
+{
+    usb_host_phdc_instance_t *phdcInstance = (usb_host_phdc_instance_t *)param;
+
+    phdcInstance->controlTransfer = NULL;
+    /* Reduces the number of bulk transfer to 0 to expect new message preamble transfer */
+    phdcInstance->numberTransferBulkIn = 0U;
+    if (phdcInstance->inCallbackFn != NULL)
+    {
+        /* callback to application */
+        phdcInstance->inCallbackFn(phdcInstance->inCallbackParam, phdcInstance->stallDataBuffer,
+                                   phdcInstance->stallDataLength, kStatus_USB_TransferStall);
+    }
+    USB_HostFreeTransfer(phdcInstance->hostHandle, transfer);
+}
+
+static void USB_HostPhdcClearOutHaltCallback(void *param, usb_host_transfer_t *transfer, usb_status_t status)
+{
+    usb_host_phdc_instance_t *phdcInstance = (usb_host_phdc_instance_t *)param;
+
+    phdcInstance->controlTransfer = NULL;
+    if (phdcInstance->outCallbackFn != NULL)
+    {
+        /* callback to application */
+        phdcInstance->outCallbackFn(phdcInstance->outCallbackParam, phdcInstance->stallDataBuffer,
+                                    phdcInstance->stallDataLength, kStatus_USB_TransferStall);
+    }
+    USB_HostFreeTransfer(phdcInstance->hostHandle, transfer);
+}
+
+static usb_status_t USB_HostPhdcClearHalt(usb_host_phdc_instance_t *phdcInstance,
+                                          usb_host_transfer_t *stallTransfer,
+                                          host_inner_transfer_callback_t callbackFn,
+                                          uint8_t endpoint)
+{
+    usb_status_t status;
+    usb_host_transfer_t *transfer;
+
+    /* malloc one transfer */
+    status = USB_HostMallocTransfer(phdcInstance->hostHandle, &transfer);
+    if (status != kStatus_USB_Success)
+    {
+#ifdef HOST_ECHO
+        usb_echo("allocate transfer error\r\n");
+#endif
+        return status;
+    }
+    phdcInstance->stallDataBuffer = stallTransfer->transferBuffer;
+    phdcInstance->stallDataLength = stallTransfer->transferSofar;
+    /* save the application callback function */
+    phdcInstance->controlCallbackFn = NULL;
+    phdcInstance->controlCallbackParam = NULL;
+    /* initialize transfer */
+    transfer->callbackFn = callbackFn;
+    transfer->callbackParam = phdcInstance;
+    transfer->transferBuffer = NULL;
+    transfer->transferLength = 0;
+    transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_CLEAR_FEATURE;
+    transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
+    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT);
+    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(endpoint);
+    transfer->setupPacket.wLength = 0;
+    status = USB_HostSendSetup(phdcInstance->hostHandle, phdcInstance->controlPipe, transfer);
+
+    if (status != kStatus_USB_Success)
+    {
+        USB_HostFreeTransfer(phdcInstance->hostHandle, transfer);
+    }
+    phdcInstance->controlTransfer = transfer;
+
+    return status;
+}
+
+#endif
+
 /*!
  * @brief phdc control pipe transfer callback.
  *
@@ -144,7 +221,7 @@ static void USB_HostPhdcControlPipeCallback(void *param, usb_host_transfer_t *tr
 }
 
 /*!
- * @brief phdc set and clear feature endpoint halt callback.
+ * @brief phdc set and clear feature endpoint halt callback for meta-data message preamble error.
  *
  * @param param       callback parameter.
  * @param transfer    callback transfer.
@@ -158,20 +235,20 @@ static void USB_HostPhdcSetClearFeatureEndpointHaltCallback(void *param,
     phdcInstance->controlTransfer = NULL;
     if (kStatus_USB_Success == status)
     {
-        if ((transfer->setupPacket.bRequest == USB_REQUSET_STANDARD_SET_FEATURE) &&
+        if ((transfer->setupPacket.bRequest == USB_REQUEST_STANDARD_SET_FEATURE) &&
             (transfer->setupPacket.bmRequestType == USB_REQUEST_TYPE_RECIPIENT_ENDPOINT) &&
             (transfer->setupPacket.wValue ==
-             USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUSET_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT)) &&
+             USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT)) &&
             (transfer->setupPacket.wIndex ==
              USB_SHORT_TO_LITTLE_ENDIAN(phdcInstance->bulkInEndpointInformation.epDesc->bEndpointAddress)))
         {
             /* The host shall issue CLEAR_FEATURE ENDPOINT_HALT request to the device */
             usb_host_process_feature_param_t featureParam;
             featureParam.requestType = kRequestEndpoint;
-            featureParam.featureSelector = USB_REQUSET_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT;
+            featureParam.featureSelector = USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT;
             featureParam.interfaceOrEndpoint = phdcInstance->bulkInEndpointInformation.epDesc->bEndpointAddress;
             if (kStatus_USB_Success != USB_HostPhdcSetClearFeatureEndpointHalt(phdcInstance->hostHandle,
-                                                                               USB_REQUSET_STANDARD_CLEAR_FEATURE,
+                                                                               USB_REQUEST_STANDARD_CLEAR_FEATURE,
                                                                                &featureParam, NULL, NULL))
             {
 #ifdef HOST_ECHO
@@ -179,10 +256,10 @@ static void USB_HostPhdcSetClearFeatureEndpointHaltCallback(void *param,
 #endif
             }
         }
-        if ((transfer->setupPacket.bRequest == USB_REQUSET_STANDARD_CLEAR_FEATURE) &&
+        if ((transfer->setupPacket.bRequest == USB_REQUEST_STANDARD_CLEAR_FEATURE) &&
             (transfer->setupPacket.bmRequestType == USB_REQUEST_TYPE_RECIPIENT_ENDPOINT) &&
             (transfer->setupPacket.wValue ==
-             USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUSET_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT)) &&
+             USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT)) &&
             (transfer->setupPacket.wIndex ==
              USB_SHORT_TO_LITTLE_ENDIAN(phdcInstance->bulkInEndpointInformation.epDesc->bEndpointAddress)))
         {
@@ -209,6 +286,20 @@ static void USB_HostPhdcSetClearFeatureEndpointHaltCallback(void *param,
 static void USB_HostPhdcInterruptPipeCallback(void *param, usb_host_transfer_t *transfer, usb_status_t status)
 {
     usb_host_phdc_instance_t *phdcInstance = (usb_host_phdc_instance_t *)param;
+
+#if ((defined USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL) && USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL)
+    if (status == kStatus_USB_TransferStall)
+    {
+        if (USB_HostPhdcClearHalt(
+                phdcInstance, transfer, USB_HostPhdcClearInHaltCallback,
+                (USB_REQUEST_TYPE_DIR_IN | ((usb_host_pipe_t *)phdcInstance->interruptPipe)->endpointAddress)) ==
+            kStatus_USB_Success)
+        {
+            USB_HostFreeTransfer(phdcInstance->hostHandle, transfer);
+            return;
+        }
+    }
+#endif
     if (NULL != phdcInstance->inCallbackFn)
     {
         phdcInstance->inCallbackFn(phdcInstance->inCallbackParam, transfer->transferBuffer, transfer->transferSofar,
@@ -227,6 +318,20 @@ static void USB_HostPhdcInterruptPipeCallback(void *param, usb_host_transfer_t *
 static void USB_HostPhdcBulkInPipeCallback(void *param, usb_host_transfer_t *transfer, usb_status_t status)
 {
     usb_host_phdc_instance_t *phdcInstance = (usb_host_phdc_instance_t *)param;
+
+#if ((defined USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL) && USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL)
+    if (status == kStatus_USB_TransferStall)
+    {
+        if (USB_HostPhdcClearHalt(
+                phdcInstance, transfer, USB_HostPhdcClearInHaltCallback,
+                (USB_REQUEST_TYPE_DIR_IN | ((usb_host_pipe_t *)phdcInstance->bulkInPipe)->endpointAddress)) ==
+            kStatus_USB_Success)
+        {
+            USB_HostFreeTransfer(phdcInstance->hostHandle, transfer);
+            return;
+        }
+    }
+#endif
     if (status == kStatus_USB_Success)
     {
         /* The meta-data message preamble is implemented and enabled */
@@ -277,12 +382,12 @@ static void USB_HostPhdcBulkInPipeCallback(void *param, usb_host_transfer_t *tra
                         /* The host shall issue SET_FEATURE ENDPOINT_HALT request to the device */
                         usb_host_process_feature_param_t featureParam;
                         featureParam.requestType = kRequestEndpoint;
-                        featureParam.featureSelector = USB_REQUSET_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT;
+                        featureParam.featureSelector = USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT;
                         featureParam.interfaceOrEndpoint =
                             phdcInstance->bulkInEndpointInformation.epDesc->bEndpointAddress;
                         if (kStatus_USB_Success !=
                             USB_HostPhdcSetClearFeatureEndpointHalt(
-                                phdcInstance->hostHandle, USB_REQUSET_STANDARD_SET_FEATURE, &featureParam, NULL, NULL))
+                                phdcInstance->hostHandle, USB_REQUEST_STANDARD_SET_FEATURE, &featureParam, NULL, NULL))
                         {
 #ifdef HOST_ECHO
                             usb_echo(
@@ -319,6 +424,20 @@ static void USB_HostPhdcBulkInPipeCallback(void *param, usb_host_transfer_t *tra
 static void USB_HostPhdcBulkOutPipeCallback(void *param, usb_host_transfer_t *transfer, usb_status_t status)
 {
     usb_host_phdc_instance_t *phdcInstance = (usb_host_phdc_instance_t *)param;
+
+#if ((defined USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL) && USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL)
+    if (status == kStatus_USB_TransferStall)
+    {
+        if (USB_HostPhdcClearHalt(
+                phdcInstance, transfer, USB_HostPhdcClearOutHaltCallback,
+                (USB_REQUEST_TYPE_DIR_OUT | ((usb_host_pipe_t *)phdcInstance->bulkOutPipe)->endpointAddress)) ==
+            kStatus_USB_Success)
+        {
+            USB_HostFreeTransfer(phdcInstance->hostHandle, transfer);
+            return;
+        }
+    }
+#endif
     if (NULL != phdcInstance->outCallbackFn)
     {
         phdcInstance->outCallbackFn(phdcInstance->outCallbackParam, transfer->transferBuffer, transfer->transferSofar,
@@ -534,6 +653,10 @@ usb_status_t USB_HostPhdcSetInterface(usb_host_class_handle classHandle,
     phdcInstance->interfaceHandle = interfaceHandle;
 
     status = USB_HostOpenDeviceInterface(phdcInstance->deviceHandle, interfaceHandle);
+    if (status != kStatus_USB_Success)
+    {
+        return status;
+    }
 
     /* Cancel interrupt transfers */
     if (NULL != phdcInstance->interruptPipe)
@@ -593,7 +716,7 @@ usb_status_t USB_HostPhdcSetInterface(usb_host_class_handle classHandle,
         /* Initialize transfer */
         transfer->callbackFn = USB_HostPhdcSetInterfaceCallback;
         transfer->callbackParam = phdcInstance;
-        transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_SET_INTERFACE;
+        transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
         transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
         transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
             ((usb_host_interface_t *)phdcInstance->interfaceHandle)->interfaceDesc->bInterfaceNumber);
@@ -638,6 +761,7 @@ usb_status_t USB_HostPhdcInit(usb_host_handle deviceHandle, usb_host_class_handl
     }
     /* Initialize PHDC instance */
     phdcInstance->deviceHandle = deviceHandle;
+    phdcInstance->interfaceHandle = NULL;
     USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetHostHandle, &infoValue);
     phdcInstance->hostHandle = (usb_host_handle)infoValue;
     USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetDeviceControlPipe, &infoValue);
@@ -1038,7 +1162,7 @@ usb_status_t USB_HostPhdcSendControlRequest(usb_host_class_handle classHandle,
 }
 
 /*!
- * @brief phdc set and clear feature endpoint halt request.
+ * @brief phdc set and clear feature endpoint halt request for meta-data message preamble error.
  *
  * @param classHandle   the class handle.
  * @param request       setup packet request.
@@ -1088,7 +1212,7 @@ usb_status_t USB_HostPhdcSetClearFeatureEndpointHalt(usb_host_class_handle class
     /* Initialize the transfer request */
     transfer->callbackFn = USB_HostPhdcSetClearFeatureEndpointHaltCallback;
     transfer->callbackParam = phdcInstance;
-    if (USB_HostRequestControl(phdcInstance->hostHandle, request, transfer, param))
+    if (USB_HostRequestControl(phdcInstance->deviceHandle, request, transfer, param))
     {
 #ifdef HOST_ECHO
         usb_echo("fail for USB_HostRequestControl\r\n");

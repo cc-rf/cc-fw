@@ -5,7 +5,7 @@ set(FW_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 include(armgcc)
 
 set(CFLAGS_STD "-std=gnu11 -Wall")
-set(CFLAGS_STD_DEBUG "-O2 -g3 -D_DEBUG=1 -DDEBUG")
+set(CFLAGS_STD_DEBUG "-O0 -g3 -D_DEBUG=1 -DDEBUG")
 set(CFLAGS_STD_RELEASE "-Os -g0 -D_DEBUG=0")
 set(CFLAGS_FW "-flto")
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -84,6 +84,8 @@ usb_status_t USB_HostAudioInit(usb_device_handle deviceHandle, usb_host_class_ha
     }
 
     audioPtr->deviceHandle = deviceHandle;
+    audioPtr->controlIntfHandle = NULL;
+    audioPtr->streamIntfHandle = NULL;
     USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetHostHandle, &info_value);
     audioPtr->hostHandle = (usb_host_handle)info_value;
     USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetDeviceControlPipe, &info_value);
@@ -382,7 +384,7 @@ static usb_status_t _USB_HostAudioOpenInterface(audio_instance_t *audioPtr)
         }
         else
         {
-             return kStatus_USB_Error;
+            return kStatus_USB_Error;
         }
     }
 
@@ -453,6 +455,10 @@ usb_status_t USB_HostAudioStreamSetInterface(usb_host_class_handle classHandle,
     audioPtr->streamIntfHandle = interfaceHandle;
 
     status = USB_HostOpenDeviceInterface(audioPtr->deviceHandle, interfaceHandle);
+    if (status != kStatus_USB_Success)
+    {
+        return status;
+    }
 
     if (audioPtr->isoInPipe != NULL)
     {
@@ -543,7 +549,7 @@ usb_status_t USB_HostAudioStreamSetInterface(usb_host_class_handle classHandle,
         /* initialize transfer */
         transfer->callbackFn = _USB_HostAudioSetInterfaceCallback;
         transfer->callbackParam = audioPtr;
-        transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_SET_INTERFACE;
+        transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
         transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
         transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
             ((usb_host_interface_t *)audioPtr->streamIntfHandle)->interfaceDesc->bInterfaceNumber);
@@ -606,6 +612,10 @@ usb_status_t USB_HostAudioControlSetInterface(usb_host_class_handle classHandle,
     interface_ptr = (usb_host_interface_t *)interfaceHandle;
 
     status = USB_HostOpenDeviceInterface(audioPtr->deviceHandle, interfaceHandle);
+    if (status != kStatus_USB_Success)
+    {
+        return status;
+    }
     ptr1.bufr = interface_ptr->interfaceExtension;
 
     length = 0U;
@@ -671,7 +681,7 @@ usb_status_t USB_HostAudioControlSetInterface(usb_host_class_handle classHandle,
         /* initialize transfer */
         transfer->callbackFn = _USB_HostAudioControlCallback;
         transfer->callbackParam = audioPtr;
-        transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_SET_INTERFACE;
+        transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
         transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
         transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
             ((usb_host_interface_t *)audioPtr->controlIntfHandle)->interfaceDesc->bInterfaceNumber);

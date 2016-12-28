@@ -123,6 +123,7 @@
 #define EHCI_TASK_EVENT_DEVICE_DETACH (0x04U)
 #define EHCI_TASK_EVENT_PORT_CHANGE (0x08U)
 #define EHCI_TASK_EVENT_TIMER0 (0x10U)
+#define EHCI_TASK_EVENT_TIMER1 (0x20U)
 
 #define USB_HostEhciLock() USB_OsaMutexLock(ehciInstance->ehciMutex)
 #define USB_HostEhciUnlock() USB_OsaMutexUnlock(ehciInstance->ehciMutex)
@@ -170,6 +171,16 @@
 #define USB_HOST_EHCI_ISO_BOUNCE_UFRAME_NUMBER (16U)
 /*! @brief Control or bulk transaction timeout value (unit: 100 ms) */
 #define USB_HOST_EHCI_CONTROL_BULK_TIME_OUT_VALUE (20U)
+
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+typedef enum _bus_ehci_suspend_request_state
+{
+    kBus_EhciIdle = 0U,
+    kBus_EhciStartSuspend,
+    kBus_EhciSuspended,
+    kBus_EhciStartResume,
+} bus_ehci_suspend_request_state_t;
+#endif
 
 /*! @brief EHCI state for device attachment/detachment. */
 typedef enum _host_ehci_device_state_
@@ -300,7 +311,7 @@ typedef struct _usb_host_ehci_instance
     uint32_t *ehciUnitBase;                  /*!< Keep the QH/QTD/ITD/SITD buffer pointer for release*/
     usb_host_ehci_qh_t *ehciQhList;          /*!< Idle QH list pointer */
     usb_host_ehci_qtd_t *ehciQtdHead;        /*!< Idle QTD list pointer head */
-    usb_host_ehci_qtd_t *ehciQtdTail;        /*!< Idle QTD list pointer tail (recently used qTD will be used at last)*/
+    usb_host_ehci_qtd_t *ehciQtdTail;        /*!< Idle QTD list pointer tail (recently used qTD will be used)*/
     usb_host_ehci_itd_t *ehciItdList;        /*!< Idle ITD list pointer*/
     usb_host_ehci_sitd_t *ehciSitdIndexBase; /*!< SITD buffer's start pointer*/
     usb_host_ehci_sitd_t *ehciSitdList;      /*!< Idle SITD list pointer*/
@@ -312,12 +323,18 @@ typedef struct _usb_host_ehci_instance
     usb_host_ehci_pipe_t *ehciRunningPipeList; /*!< Running pipe list pointer*/
     usb_osa_mutex_handle ehciMutex;            /*!< EHCI mutex*/
     usb_osa_event_handle taskEventHandle;      /*!< EHCI task event*/
-    uint8_t controllerId;                      /*!< EHCI controller ID*/
-    uint8_t deviceAttached;   /*!< Device attach/detach state, please reference to #host_ehci_device_state_t */
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    uint64_t matchTick;
+#endif
+    uint8_t controllerId;     /*!< EHCI controller ID*/
+    uint8_t deviceAttached;   /*!< Device attach/detach state, see #host_ehci_device_state_t */
     uint8_t firstDeviceSpeed; /*!< The first device's speed, the controller's work speed*/
     uint8_t ehciItdNumber;    /*!< Idle ITD number*/
     uint8_t ehciSitdNumber;   /*!< Idle SITD number*/
     uint8_t ehciQtdNumber;    /*!< Idle QTD number*/
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    bus_ehci_suspend_request_state_t busSuspendStatus; /*!< Bus Suspend Status*/
+#endif
 } usb_host_ehci_instance_t;
 
 /*******************************************************************************
@@ -338,12 +355,12 @@ extern "C" {
  * This function initializes the USB host EHCI controller driver.
  *
  * @param[in] controllerId      The controller ID of the USB IP. Please refer to the enumeration usb_controller_index_t.
- * @param[in] upperLayerHandle  the host level handle.
+ * @param[in] upperLayerHandle  The host level handle.
  * @param[out] controllerHandle return the controller instance handle.
  *
  * @retval kStatus_USB_Success              The host is initialized successfully.
- * @retval kStatus_USB_AllocFail            allocate memory fail.
- * @retval kStatus_USB_Error                host mutex create fail, KHCI/EHCI mutex or KHCI/EHCI event create fail.
+ * @retval kStatus_USB_AllocFail            Allocating memory failed.
+ * @retval kStatus_USB_Error                Host mutex create fail, KHCI/EHCI mutex or KHCI/EHCI event create fail.
  *                                          Or, KHCI/EHCI IP initialize fail.
  */
 extern usb_status_t USB_HostEhciCreate(uint8_t controllerId,
@@ -353,7 +370,7 @@ extern usb_status_t USB_HostEhciCreate(uint8_t controllerId,
 /*!
  * @brief Destroys the USB host EHCI instance.
  *
- * This function de-initializes the USB host EHCI controller driver.
+ * This function de-initializes The USB host EHCI controller driver.
  *
  * @param[in] controllerHandle  The controller handle.
  *
@@ -371,7 +388,7 @@ extern usb_status_t USB_HostEhciDestory(usb_host_controller_handle controllerHan
  * @param[in] pipeInit         It is used to initialize the pipe.
  *
  * @retval kStatus_USB_Success              The host is initialized successfully.
- * @retval kStatus_USB_Error                there is no idle pipe.
+ * @retval kStatus_USB_Error                There is no idle pipe.
  *                                          Or, there is no idle QH for EHCI.
  *                                          Or, bandwidth allocate fail for EHCI.
  */
@@ -384,8 +401,8 @@ extern usb_status_t USB_HostEhciOpenPipe(usb_host_controller_handle controllerHa
  *
  * This function closes a pipe and releases related resources.
  *
- * @param[in] controllerHandle the controller handle.
- * @param[in] pipeHandle       the closing pipe handle.
+ * @param[in] controllerHandle The controller handle.
+ * @param[in] pipeHandle       The closing pipe handle.
  *
  * @retval kStatus_USB_Success              The host is initialized successfully.
  */

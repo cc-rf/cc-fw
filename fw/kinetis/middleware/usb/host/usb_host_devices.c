@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -169,6 +169,8 @@ extern usb_status_t USB_HostHubRemovePort(uint8_t hubNumber, uint8_t portNumber)
  * Variables
  ******************************************************************************/
 
+extern usb_host_instance_t g_UsbHostInstance[USB_HOST_CONFIG_MAX_HOST];
+
 /*! @brief enumeration step process array */
 static const usb_host_enum_process_entry_t s_EnumEntries[] = \
 {
@@ -246,8 +248,8 @@ static void USB_HostEnumerationTransferCallback(void *param, usb_host_transfer_t
         }
         else
         {
-#ifdef HOST_ECHO
-            usb_echo("enumeration fail\r\n");
+#if ((defined USB_HOST_CONFIG_COMPLIANCE_TEST) && (USB_HOST_CONFIG_COMPLIANCE_TEST))
+            usb_echo("Device No Response\r\n");
 #endif
             return;
         }
@@ -287,8 +289,8 @@ static void USB_HostEnumerationTransferCallback(void *param, usb_host_transfer_t
                 }
                 else
                 {
-#ifdef HOST_ECHO
-                    usb_echo("enumeration fail\r\n");
+#if ((defined USB_HOST_CONFIG_COMPLIANCE_TEST) && (USB_HOST_CONFIG_COMPLIANCE_TEST))
+                    usb_echo("Device No Response\r\n");
 #endif
                     return; /* unrecoverable fail */
                 }
@@ -346,11 +348,11 @@ static usb_status_t USB_HostProcessState(usb_host_device_instance_t *deviceInsta
             getDescriptorParam.languageId = 0;
 
             transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
-            transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_GET_DESCRIPTOR;
+            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
             status = USB_HostStandardSetGetDescriptor(deviceInstance, transfer, &getDescriptorParam);
             break;
         case kStatus_DEV_SetAddress: /* set address state */
-            transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_SET_ADDRESS;
+            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_ADDRESS;
             status = USB_HostStandardSetAddress(deviceInstance, transfer, &deviceInstance->allocatedAddress);
             break;
 
@@ -362,7 +364,7 @@ static usb_status_t USB_HostProcessState(usb_host_device_instance_t *deviceInsta
             getDescriptorParam.languageId = 0;
 
             transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
-            transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_GET_DESCRIPTOR;
+            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
             status = USB_HostStandardSetGetDescriptor(deviceInstance, transfer, &getDescriptorParam);
             break;
 
@@ -374,14 +376,14 @@ static usb_status_t USB_HostProcessState(usb_host_device_instance_t *deviceInsta
             getDescriptorParam.languageId = 0;
 
             transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
-            transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_GET_DESCRIPTOR;
+            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
             status = USB_HostStandardSetGetDescriptor(deviceInstance, transfer, &getDescriptorParam);
             break;
 
         case kStatus_DEV_SetCfg: /* set configuration state */
             transfer->setupPacket.wValue =
                 USB_SHORT_TO_LITTLE_ENDIAN(deviceInstance->configuration.configurationDesc->bConfigurationValue);
-            transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_SET_CONFIGURATION;
+            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_CONFIGURATION;
             status = USB_HostCh9RequestCommon(deviceInstance, transfer, NULL, 0);
             break;
 
@@ -465,6 +467,21 @@ static usb_status_t USB_HostProcessCallback(usb_host_device_instance_t *deviceIn
             }
 
             status = USB_HostNotifyDevice(deviceInstance, kUSB_HostEventAttach);
+
+            if (status != kStatus_USB_Success)
+            {
+                /* next configuration */
+                if (deviceInstance->configurationValue < deviceInstance->deviceDescriptor.bNumConfigurations)
+                {
+                    return kStatus_USB_Retry;
+                }
+                else
+                {
+                    USB_HostNotifyDevice(deviceInstance,
+                                         kUSB_HostEventNotSupported); /* notify application device is not supported */
+                    return kStatus_USB_NotSupported;
+                }
+            }
             break;
 
         case kStatus_DEV_SetCfg:
@@ -590,12 +607,10 @@ static usb_status_t USB_HostRemoveDeviceInstance(usb_host_handle hostHandle, usb
     }
 
     /* search and remove device instance */
-    USB_HostLock();
     prevInstance = (usb_host_device_instance_t *)hostInstance->deviceList;
     if (prevInstance == deviceHandle)
     {
         hostInstance->deviceList = prevInstance->next;
-        USB_HostUnlock();
         return kStatus_USB_Success;
     }
     else
@@ -608,22 +623,27 @@ static usb_status_t USB_HostRemoveDeviceInstance(usb_host_handle hostHandle, usb
         if (currentInstance == deviceHandle)
         {
             prevInstance->next = currentInstance->next;
-            USB_HostUnlock();
             return kStatus_USB_Success;
         }
         prevInstance = currentInstance;
         currentInstance = currentInstance->next;
     }
 
-    USB_HostUnlock();
     return kStatus_USB_Success;
 }
 
 static void USB_HostReleaseDeviceResource(usb_host_instance_t *hostInstance, usb_host_device_instance_t *deviceInstance)
 {
-    /* remove device instance from host */
-    USB_HostRemoveDeviceInstance(hostInstance, deviceInstance);
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+    uint8_t level = 0;
+#endif
 
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    if (deviceInstance == hostInstance->suspendedDevice)
+    {
+        hostInstance->suspendedDevice = NULL;
+    }
+#endif
     /* release device's address */
     if (deviceInstance->setAddress != 0)
     {
@@ -656,11 +676,23 @@ static void USB_HostReleaseDeviceResource(usb_host_instance_t *hostInstance, usb
         USB_OsaMemoryFree(deviceInstance->configurationDesc);
     }
 
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+    level = deviceInstance->level;
+#endif
+
     /* free device instance buffer */
     USB_OsaMemoryFree(deviceInstance);
 
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+    /* enable controller attach if root hub */
+    if (level == 1)
+    {
+        USB_HostControlBus(hostInstance, kUSB_HostBusEnableAttach);
+    }
+#else
     /* enable controller attach */
     USB_HostControlBus(hostInstance, kUSB_HostBusEnableAttach);
+#endif
 }
 
 static usb_status_t USB_HostParseDeviceConfigurationDescriptor(usb_device_handle deviceHandle)
@@ -1063,6 +1095,9 @@ usb_status_t USB_HostDetachDeviceInternal(usb_host_handle hostHandle, usb_device
             {
                 USB_HostCancelTransfer(hostInstance, deviceInstance->controlPipe, NULL);
             }
+
+            /* remove device instance from host */
+            USB_HostRemoveDeviceInstance(hostInstance, deviceInstance);
             USB_HostReleaseDeviceResource(hostInstance, deviceInstance);
         }
         else /* enumeration has be done and notifed application */
@@ -1082,13 +1117,11 @@ uint8_t USB_HostGetDeviceAttachState(usb_device_handle deviceHandle)
 usb_status_t USB_HostValidateDevice(usb_host_handle hostHandle, usb_device_handle deviceHandle)
 {
     usb_host_device_instance_t *searchDev;
-    usb_host_instance_t *hostInstance = (usb_host_instance_t *)hostHandle;
 
     if (deviceHandle == NULL)
     {
         return kStatus_USB_InvalidParameter;
     }
-    USB_HostLock();
     /* search for the device */
     searchDev = (usb_host_device_instance_t *)((usb_host_instance_t *)hostHandle)->deviceList;
     while ((searchDev != NULL) && ((usb_device_handle)searchDev != deviceHandle))
@@ -1098,10 +1131,8 @@ usb_status_t USB_HostValidateDevice(usb_host_handle hostHandle, usb_device_handl
 
     if (searchDev)
     {
-        USB_HostUnlock();
         return kStatus_USB_Success;
     }
-    USB_HostUnlock();
     return kStatus_USB_Error;
 }
 
@@ -1126,6 +1157,7 @@ usb_status_t USB_HostOpenDeviceInterface(usb_device_handle deviceHandle, usb_hos
     usb_host_device_instance_t *deviceInstance = (usb_host_device_instance_t *)deviceHandle;
     usb_host_instance_t *hostInstance = NULL;
     uint8_t interfaceIndex;
+    uint8_t index = 0;
 
     if ((deviceHandle == NULL) || (interfaceHandle == NULL))
     {
@@ -1134,6 +1166,27 @@ usb_status_t USB_HostOpenDeviceInterface(usb_device_handle deviceHandle, usb_hos
 
     hostInstance = (usb_host_instance_t *)deviceInstance->hostHandle;
     USB_HostLock();
+    /* check host_instance valid? */
+    for (; index < USB_HOST_CONFIG_MAX_HOST; ++index)
+    {
+        if ((g_UsbHostInstance[index].occupied == 1) &&
+            ((usb_host_instance_t *)(&g_UsbHostInstance[index]) == (hostInstance)))
+        {
+            break;
+        }
+    }
+    if (index >= USB_HOST_CONFIG_MAX_HOST)
+    {
+        USB_HostUnlock();
+        return kStatus_USB_Error;
+    }
+
+    /* check deviceHandle valid? */
+    if (USB_HostValidateDevice(hostInstance, deviceHandle) != kStatus_USB_Success)
+    {
+        USB_HostUnlock();
+        return kStatus_USB_Error;
+    }
 
     /* search interface and set the interface as opened */
     for (interfaceIndex = 0; interfaceIndex < deviceInstance->configuration.interfaceCount; ++interfaceIndex)
@@ -1155,6 +1208,7 @@ usb_status_t USB_HostCloseDeviceInterface(usb_device_handle deviceHandle, usb_ho
     usb_host_instance_t *hostInstance = NULL;
     uint8_t interfaceIndex;
     uint8_t removeLabel = 1;
+    uint8_t index = 0;
 
     if (deviceHandle == NULL)
     {
@@ -1163,6 +1217,28 @@ usb_status_t USB_HostCloseDeviceInterface(usb_device_handle deviceHandle, usb_ho
 
     hostInstance = (usb_host_instance_t *)deviceInstance->hostHandle;
     USB_HostLock();
+    /* check host_instance valid? */
+    for (; index < USB_HOST_CONFIG_MAX_HOST; ++index)
+    {
+        if ((g_UsbHostInstance[index].occupied == 1) &&
+            ((usb_host_instance_t *)(&g_UsbHostInstance[index]) == (hostInstance)))
+        {
+            break;
+        }
+    }
+    if (index >= USB_HOST_CONFIG_MAX_HOST)
+    {
+        USB_HostUnlock();
+        return kStatus_USB_Error;
+    }
+
+    /* check deviceHandle valid? */
+    if (USB_HostValidateDevice(hostInstance, deviceHandle) != kStatus_USB_Success)
+    {
+        USB_HostUnlock();
+        return kStatus_USB_Error;
+    }
+
     if (interfaceHandle != NULL)
     {
         /* search interface and set the interface as detached */
@@ -1188,14 +1264,14 @@ usb_status_t USB_HostCloseDeviceInterface(usb_device_handle deviceHandle, usb_ho
                 break;
             }
         }
-        if ((removeLabel == 1) && (deviceInstance->deviceAttachState != kStatus_device_Released))
+        if (removeLabel == 1)
         {
-            deviceInstance->deviceAttachState = kStatus_device_Released;
-            removeLabel = 2;
+            /* remove device instance from host */
+            USB_HostRemoveDeviceInstance(hostInstance, deviceInstance);
         }
         USB_HostUnlock();
 
-        if (removeLabel == 2)
+        if (removeLabel == 1)
         {
             USB_HostReleaseDeviceResource((usb_host_instance_t *)deviceInstance->hostHandle,
                                           deviceInstance); /* release device resource */
@@ -1258,6 +1334,8 @@ usb_status_t USB_HostRemoveDevice(usb_host_handle hostHandle, usb_device_handle 
                         break;
                     }
                 }
+                /* remove device instance from host */
+                USB_HostRemoveDeviceInstance(hostInstance, deviceInstance);
                 USB_HostReleaseDeviceResource(hostInstance, deviceInstance); /* release resource */
             }
         }

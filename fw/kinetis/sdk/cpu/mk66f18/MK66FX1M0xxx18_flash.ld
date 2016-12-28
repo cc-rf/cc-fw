@@ -48,10 +48,10 @@
 /* Entry Point */
 ENTRY(Reset_Handler)
 
-/* Phillip: Increasing defaults (chip has 256K SRAM, 2M Flash). Old values are both 0x0400 (1024).
+/* Phillip: Increasing defaults (chip has 260K SRAM, 1M/1280K Flash). Old values are both 0x0400 (1024).
 */
-HEAP_SIZE  = DEFINED(__heap_size__)  ? __heap_size__  : 0x00020000; /* 128 Kb */
-STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x00008000; /* 32 Kb */
+HEAP_SIZE  = DEFINED(__heap_size__)  ? __heap_size__  : 0x00008000; /* 128 Kb */
+STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x00004000; /* 32 Kb */
 
 M_VECTOR_RAM_SIZE = DEFINED(__ram_vector_table__) ? 0x0400 : 0x0;
 
@@ -203,8 +203,7 @@ SECTIONS
   text_end = ORIGIN(m_text) + LENGTH(m_text);
   ASSERT(__DATA_END <= text_end, "region m_text overflowed with text and data")
 
-  USB_RAM_GAP = DEFINED(__usb_ram_size__) ? __usb_ram_size__ : 0x00;
-  /* Uninitialized data section */
+    /* Uninitialized data section */
   .bss :
   {
     /* This is used by the startup in order to initialize the .bss section */
@@ -214,8 +213,8 @@ SECTIONS
     *(.bss)
     *(.bss*)
     . = ALIGN(512);
-    USB_RAM_START = .;
-    . += USB_RAM_GAP;
+    *(m_usb_bdt)
+    *(m_usb_global)
     *(COMMON)
     . = ALIGN(4);
     __bss_end__ = .;
@@ -238,17 +237,6 @@ SECTIONS
     . = ALIGN(8);
     . += STACK_SIZE;
   } > m_data_2
-
-  m_usb_bdt USB_RAM_START (NOLOAD) :
-  {
-    *(m_usb_bdt)
-    USB_RAM_BDT_END = .;
-  }
-
-  m_usb_global USB_RAM_BDT_END (NOLOAD) :
-  {
-    *(m_usb_global)
-  }
 
   /* Initializes stack on the end of block */
   __StackTop   = ORIGIN(m_data_2) + LENGTH(m_data_2);

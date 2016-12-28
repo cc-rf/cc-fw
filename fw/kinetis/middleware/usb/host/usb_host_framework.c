@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -182,6 +182,7 @@ usb_status_t USB_HostStandardGetStatus(usb_host_device_instance_t *deviceInstanc
                                        void *param)
 {
     usb_host_get_status_param_t *statusParam;
+    uint8_t length;
 
     /* initialize transfer */
     statusParam = (usb_host_get_status_param_t *)param;
@@ -198,9 +199,14 @@ usb_status_t USB_HostStandardGetStatus(usb_host_device_instance_t *deviceInstanc
     {
         transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
     }
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(statusParam->interfaceOrEndpoint);
+    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(statusParam->statusSelector);
 
-    return USB_HostCh9RequestCommon(deviceInstance, transfer, statusParam->statusBuffer, 2);
+    length = 2;
+    if (statusParam->statusSelector == USB_REQUEST_STANDARD_GET_STATUS_OTG_STATUS_SELECTOR)
+    {
+        length = 1;
+    }
+    return USB_HostCh9RequestCommon(deviceInstance, transfer, statusParam->statusBuffer, length);
 }
 
 usb_status_t USB_HostStandardSetClearFeature(usb_host_device_instance_t *deviceInstance,
@@ -324,48 +330,48 @@ usb_status_t USB_HostRequestControl(usb_device_handle deviceHandle,
 
     switch (usbRequest)
     {
-        case USB_REQUSET_STANDARD_GET_STATUS: /* standard get status request */
+        case USB_REQUEST_STANDARD_GET_STATUS: /* standard get status request */
             status = USB_HostStandardGetStatus(deviceInstance, transfer, param);
             break;
 
-        case USB_REQUSET_STANDARD_CLEAR_FEATURE: /* standard clear status request */
-        case USB_REQUSET_STANDARD_SET_FEATURE:   /* standard set feature request */
+        case USB_REQUEST_STANDARD_CLEAR_FEATURE: /* standard clear status request */
+        case USB_REQUEST_STANDARD_SET_FEATURE:   /* standard set feature request */
             status = USB_HostStandardSetClearFeature(deviceInstance, transfer, param);
             break;
 
-        case USB_REQUSET_STANDARD_SET_ADDRESS: /* standard set address request */
+        case USB_REQUEST_STANDARD_SET_ADDRESS: /* standard set address request */
             status = USB_HostStandardSetAddress(deviceInstance, transfer, param);
             break;
 
-        case USB_REQUSET_STANDARD_GET_DESCRIPTOR: /* standard get descriptor request */
-        case USB_REQUSET_STANDARD_SET_DESCRIPTOR: /* standard set descriptor request */
-            if (usbRequest == USB_REQUSET_STANDARD_GET_DESCRIPTOR)
+        case USB_REQUEST_STANDARD_GET_DESCRIPTOR: /* standard get descriptor request */
+        case USB_REQUEST_STANDARD_SET_DESCRIPTOR: /* standard set descriptor request */
+            if (usbRequest == USB_REQUEST_STANDARD_GET_DESCRIPTOR)
             {
                 transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
             }
             status = USB_HostStandardSetGetDescriptor(deviceInstance, transfer, param);
             break;
 
-        case USB_REQUSET_STANDARD_GET_CONFIGURATION: /* standard get configuration descriptor request */
+        case USB_REQUEST_STANDARD_GET_CONFIGURATION: /* standard get configuration descriptor request */
             transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
             status =
                 USB_HostCh9RequestCommon((usb_host_device_instance_t *)deviceHandle, transfer, (uint8_t *)param, 1);
             break;
 
-        case USB_REQUSET_STANDARD_SET_CONFIGURATION: /* standard set configuration request */
+        case USB_REQUEST_STANDARD_SET_CONFIGURATION: /* standard set configuration request */
             transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(*((uint8_t *)param));
             status = USB_HostCh9RequestCommon((usb_host_device_instance_t *)deviceHandle, transfer, NULL, 0);
             break;
 
-        case USB_REQUSET_STANDARD_GET_INTERFACE: /* standard get interface request */
+        case USB_REQUEST_STANDARD_GET_INTERFACE: /* standard get interface request */
             status = USB_HostStandardGetInterface(deviceInstance, transfer, param);
             break;
 
-        case USB_REQUSET_STANDARD_SET_INTERFACE: /* standard set interface request */
+        case USB_REQUEST_STANDARD_SET_INTERFACE: /* standard set interface request */
             status = USB_HostStandardSetInterface(deviceInstance, transfer, param);
             break;
 
-        case USB_REQUSET_STANDARD_SYNCH_FRAME: /* standard synch frame request */
+        case USB_REQUEST_STANDARD_SYNCH_FRAME: /* standard synch frame request */
             status = USB_HostStandardSyncFrame(deviceInstance, transfer, param);
             break;
 

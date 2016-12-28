@@ -142,6 +142,10 @@ typedef struct _usb_host_hub_instance
     uint8_t portProcess;                                         /*!< The port that is processing*/
     uint8_t primeStatus;                                         /*!< Data prime transfer status*/
     uint8_t invalid; /*!< 0/1, when invalid, cannot send transfer to the class*/
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    uint8_t supportRemoteWakeup; /*!< The HUB supports remote wakeup or not*/
+    uint8_t controlRetry;        /*!< Retry count for set remote wakeup feature*/
+#endif
 } usb_host_hub_instance_t;
 
 /*******************************************************************************

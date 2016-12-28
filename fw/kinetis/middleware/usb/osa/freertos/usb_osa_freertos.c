@@ -40,6 +40,60 @@
 #define MSEC_TO_TICK(msec) ((1000L + ((uint32_t)configTICK_RATE_HZ * (uint32_t)(msec - 1U))) / 1000L)
 #define TICKS_TO_MSEC(tick) ((tick)*1000uL / (uint32_t)configTICK_RATE_HZ)
 
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+
+#define USB_OSA_FREERTOS_EVENT_COUNT (2U)
+#define USB_OSA_FREERTOS_SEM_COUNT (1U)
+#define USB_OSA_FREERTOS_MUTEX_COUNT (1U)
+#define USB_OSA_FREERTOS_MSGQ_COUNT (1U)
+#define USB_OSA_FREERTOS_MSG_COUNT (8U)
+#define USB_OSA_FREERTOS_MSG_SIZE (4U)
+
+/* FreeRTOS Event status structure */
+typedef struct _usb_osa_event_struct
+{
+    EventGroupHandle_t handle; /* The event handle */
+    uint32_t flag;             /* Event flags, includes auto clear flag */
+    StaticEventGroup_t event;  /* Event buffer */
+    uint8_t isUsed;            /* Is used */
+} usb_osa_event_struct_t;
+
+/* FreeRTOS semaphore/mutex status structure */
+typedef struct _usb_osa_sem_struct
+{
+    SemaphoreHandle_t handle; /* Semaphore handle */
+    StaticSemaphore_t sem;    /* Semaphore buffer */
+    uint8_t isUsed;           /* Is used */
+} usb_osa_sem_struct_t;
+
+/* BM msg status structure */
+typedef struct _usb_osa_msg_struct
+{
+    uint32_t msg[USB_OSA_FREERTOS_MSG_SIZE]; /* Message entity pointer */
+} usb_osa_msg_struct_t;
+
+/* FreeRTOS msgq status structure */
+typedef struct _usb_osa_msgq_struct
+{
+    QueueHandle_t handle;                                  /* MSGQ handle */
+    usb_osa_msg_struct_t msgs[USB_OSA_FREERTOS_MSG_COUNT]; /* Message entity list */
+    StaticQueue_t queue;                                   /* queue struct */
+    uint8_t isUsed;                                        /* Is used */
+} usb_osa_msgq_struct_t;
+
+/* event struct */
+static usb_osa_event_struct_t s_UsbFreertosEventStruct[USB_OSA_FREERTOS_EVENT_COUNT];
+
+/* sem struct */
+static usb_osa_sem_struct_t s_UsbFreertosSemStruct[USB_OSA_FREERTOS_SEM_COUNT];
+
+/* mutex struct */
+static usb_osa_sem_struct_t s_UsbFreertosMutexStruct[USB_OSA_FREERTOS_MUTEX_COUNT];
+
+/* msgq struct */
+static usb_osa_msgq_struct_t s_UsbFreertosMsgqStruct[USB_OSA_FREERTOS_MSGQ_COUNT];
+
+#else
 /* FreeRTOS Event status structure */
 typedef struct _usb_osa_event_struct
 {
@@ -47,6 +101,7 @@ typedef struct _usb_osa_event_struct
     uint32_t flag;             /* Event flags, includes auto clear flag */
 } usb_osa_event_struct_t;
 
+#endif
 /*******************************************************************************
  * Prototypes
  ******************************************************************************/
@@ -103,24 +158,53 @@ void USB_OsaExitCritical(uint8_t sr)
 
 usb_osa_status_t USB_OsaEventCreate(usb_osa_event_handle *handle, uint32_t flag)
 {
-    usb_osa_event_struct_t *event;
+    usb_osa_event_struct_t *event = NULL;
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    USB_OSA_SR_ALLOC();
+#endif
 
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
+
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    USB_OSA_ENTER_CRITICAL();
+    for (uint32_t index = 0; index < USB_OSA_FREERTOS_EVENT_COUNT; index++)
+    {
+        if (0 == s_UsbFreertosEventStruct[index].isUsed)
+        {
+            event = &s_UsbFreertosEventStruct[index];
+            event->isUsed = 1U;
+            break;
+        }
+    }
+    USB_OSA_EXIT_CRITICAL();
+#else
     event = (usb_osa_event_struct_t *)USB_OsaMemoryAllocate(sizeof(usb_osa_event_struct_t));
+#endif
     if (NULL == event)
     {
         return kStatus_USB_OSA_Error;
     }
 
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    event->handle = xEventGroupCreateStatic(&event->event);
+    if (NULL == event->handle)
+    {
+        USB_OSA_ENTER_CRITICAL();
+        event->isUsed = 0U;
+        USB_OSA_EXIT_CRITICAL();
+        return kStatus_USB_OSA_Error;
+    }
+#else
     event->handle = xEventGroupCreate();
     if (NULL == event->handle)
     {
         USB_OsaMemoryFree(event);
         return kStatus_USB_OSA_Error;
     }
+#endif
     event->flag = flag;
     *handle = event;
     return kStatus_USB_OSA_Success;
@@ -129,13 +213,23 @@ usb_osa_status_t USB_OsaEventCreate(usb_osa_event_handle *handle, uint32_t flag)
 usb_osa_status_t USB_OsaEventDestroy(usb_osa_event_handle handle)
 {
     usb_osa_event_struct_t *event = (usb_osa_event_struct_t *)handle;
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    USB_OSA_SR_ALLOC();
+#endif
+
     if (handle)
     {
         if (event->handle)
         {
             vEventGroupDelete(event->handle);
         }
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+        USB_OSA_ENTER_CRITICAL();
+        event->isUsed = 0U;
+        USB_OSA_EXIT_CRITICAL();
+#else
         USB_OsaMemoryFree(handle);
+#endif
         return kStatus_USB_OSA_Success;
     }
     return kStatus_USB_OSA_Error;
@@ -151,7 +245,9 @@ usb_osa_status_t USB_OsaEventSet(usb_osa_event_handle handle, uint32_t bitMask)
         {
             if (pdPASS == xEventGroupSetBitsFromISR(event->handle, (EventBits_t)bitMask, &taskToWake))
             {
+                MISRAC_DISABLE
                 portYIELD_FROM_ISR(taskToWake);
+                MISRAC_ENABLE
             }
         }
         else
@@ -259,24 +355,67 @@ usb_osa_status_t USB_OsaEventClear(usb_osa_event_handle handle, uint32_t bitMask
 
 usb_osa_status_t USB_OsaSemCreate(usb_osa_sem_handle *handle, uint32_t count)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_sem_struct_t *sem = NULL;
+    USB_OSA_SR_ALLOC();
+#endif
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
 
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    USB_OSA_ENTER_CRITICAL();
+    for (uint32_t index = 0; index < USB_OSA_FREERTOS_SEM_COUNT; index++)
+    {
+        if (0 == s_UsbFreertosSemStruct[index].isUsed)
+        {
+            sem = &s_UsbFreertosSemStruct[index];
+            sem->isUsed = 1U;
+            break;
+        }
+    }
+    USB_OSA_EXIT_CRITICAL();
+    if (NULL == sem)
+    {
+        return kStatus_USB_OSA_Error;
+    }
+    sem->handle = xSemaphoreCreateCountingStatic(0xFFU, count, &sem->sem);
+    if (NULL == (sem->handle))
+    {
+        USB_OSA_ENTER_CRITICAL();
+        sem->isUsed = 0U;
+        USB_OSA_EXIT_CRITICAL();
+        return kStatus_USB_OSA_Error;
+    }
+    *handle = (usb_osa_sem_handle)sem;
+#else
     *handle = (usb_osa_sem_handle)xSemaphoreCreateCounting(0xFFU, count);
     if (NULL == (*handle))
     {
         return kStatus_USB_OSA_Error;
     }
+#endif
+
     return kStatus_USB_OSA_Success;
 }
 
 usb_osa_status_t USB_OsaSemDestroy(usb_osa_sem_handle handle)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_sem_struct_t *sem = (usb_osa_sem_struct_t *)handle;
+    USB_OSA_SR_ALLOC();
+#endif
     if (handle)
     {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+        vSemaphoreDelete(sem->handle);
+        USB_OSA_ENTER_CRITICAL();
+        sem->isUsed = 0U;
+        USB_OSA_EXIT_CRITICAL();
+#else
         vSemaphoreDelete(handle);
+#endif
         return kStatus_USB_OSA_Success;
     }
     return kStatus_USB_OSA_Error;
@@ -284,7 +423,12 @@ usb_osa_status_t USB_OsaSemDestroy(usb_osa_sem_handle handle)
 
 usb_osa_status_t USB_OsaSemPost(usb_osa_sem_handle handle)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_sem_struct_t *osaSem = (usb_osa_sem_struct_t *)handle;
+    xSemaphoreHandle sem;
+#else
     xSemaphoreHandle sem = (xSemaphoreHandle)handle;
+#endif
     portBASE_TYPE taskToWake = pdFALSE;
 
     if (!handle)
@@ -292,11 +436,16 @@ usb_osa_status_t USB_OsaSemPost(usb_osa_sem_handle handle)
         return kStatus_USB_OSA_Error;
     }
 
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    sem = (xSemaphoreHandle)osaSem->handle;
+#endif
     if (__get_IPSR())
     {
         if (pdPASS == xSemaphoreGiveFromISR(sem, &taskToWake))
         {
+            MISRAC_DISABLE
             portYIELD_FROM_ISR(taskToWake);
+            MISRAC_ENABLE
             return kStatus_USB_OSA_Success;
         }
     }
@@ -312,13 +461,20 @@ usb_osa_status_t USB_OsaSemPost(usb_osa_sem_handle handle)
 
 usb_osa_status_t USB_OsaSemWait(usb_osa_sem_handle handle, uint32_t timeout)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_sem_struct_t *osaSem = (usb_osa_sem_struct_t *)handle;
+    xSemaphoreHandle sem;
+#else
     xSemaphoreHandle sem = (xSemaphoreHandle)handle;
+#endif
 
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
-
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    sem = (xSemaphoreHandle)osaSem->handle;
+#endif
     if (!timeout)
     {
         timeout = portMAX_DELAY;
@@ -337,37 +493,86 @@ usb_osa_status_t USB_OsaSemWait(usb_osa_sem_handle handle, uint32_t timeout)
 
 usb_osa_status_t USB_OsaMutexCreate(usb_osa_mutex_handle *handle)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_sem_struct_t *mutex;
+    USB_OSA_SR_ALLOC();
+#endif
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
-    *handle = (usb_osa_mutex_handle)xSemaphoreCreateRecursiveMutex();
-    if (NULL == *handle)
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    USB_OSA_ENTER_CRITICAL();
+    for (uint32_t index = 0; index < USB_OSA_FREERTOS_MUTEX_COUNT; index++)
+    {
+        if (0 == s_UsbFreertosMutexStruct[index].isUsed)
+        {
+            mutex = &s_UsbFreertosMutexStruct[index];
+            mutex->isUsed = 1U;
+            break;
+        }
+    }
+    USB_OSA_EXIT_CRITICAL();
+    if (NULL == mutex)
     {
         return kStatus_USB_OSA_Error;
     }
+    mutex->handle = xSemaphoreCreateRecursiveMutexStatic(&mutex->sem);
+    if (NULL == (mutex->handle))
+    {
+        USB_OSA_ENTER_CRITICAL();
+        mutex->isUsed = 0U;
+        USB_OSA_EXIT_CRITICAL();
+        return kStatus_USB_OSA_Error;
+    }
+    *handle = (usb_osa_sem_handle)mutex;
+#else
+    *handle = (usb_osa_sem_handle)xSemaphoreCreateRecursiveMutex();
+    if (NULL == (*handle))
+    {
+        return kStatus_USB_OSA_Error;
+    }
+#endif
     return kStatus_USB_OSA_Success;
 }
 
 usb_osa_status_t USB_OsaMutexDestroy(usb_osa_mutex_handle handle)
 {
-    if (!handle)
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_sem_struct_t *mutex = (usb_osa_sem_struct_t *)handle;
+    USB_OSA_SR_ALLOC();
+#endif
+    if (handle)
     {
-        return kStatus_USB_OSA_Error;
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+        vSemaphoreDelete(mutex->handle);
+        USB_OSA_ENTER_CRITICAL();
+        mutex->isUsed = 0U;
+        USB_OSA_EXIT_CRITICAL();
+#else
+        vSemaphoreDelete(handle);
+#endif
+        return kStatus_USB_OSA_Success;
     }
-    vSemaphoreDelete((xSemaphoreHandle)handle);
-    return kStatus_USB_OSA_Success;
+    return kStatus_USB_OSA_Error;
 }
 
 usb_osa_status_t USB_OsaMutexLock(usb_osa_mutex_handle handle)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_sem_struct_t *osaMutex = (usb_osa_sem_struct_t *)handle;
+    xSemaphoreHandle mutex;
+#else
     xSemaphoreHandle mutex = (xSemaphoreHandle)handle;
+#endif
 
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
-
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    mutex = (xSemaphoreHandle)osaMutex->handle;
+#endif
     if (xSemaphoreTakeRecursive(mutex, portMAX_DELAY) == pdFALSE)
     {
         return kStatus_USB_OSA_TimeOut;
@@ -378,13 +583,20 @@ usb_osa_status_t USB_OsaMutexLock(usb_osa_mutex_handle handle)
 
 usb_osa_status_t USB_OsaMutexUnlock(usb_osa_mutex_handle handle)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_sem_struct_t *osaMutex = (usb_osa_sem_struct_t *)handle;
+    xSemaphoreHandle mutex;
+#else
     xSemaphoreHandle mutex = (xSemaphoreHandle)handle;
+#endif
 
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
-
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    mutex = (xSemaphoreHandle)osaMutex->handle;
+#endif
     if (xSemaphoreGiveRecursive(mutex) == pdFALSE)
     {
         return kStatus_USB_OSA_Error;
@@ -394,32 +606,81 @@ usb_osa_status_t USB_OsaMutexUnlock(usb_osa_mutex_handle handle)
 
 usb_osa_status_t USB_OsaMsgqCreate(usb_osa_msgq_handle *handle, uint32_t count, uint32_t size)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_msgq_struct_t *msgq = NULL;
+    USB_OSA_SR_ALLOC();
+#endif
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
-    *handle = xQueueCreate(count, size * sizeof(uint32_t));
-    if (NULL == *handle)
+
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    USB_OSA_ENTER_CRITICAL();
+    for (uint32_t index = 0; index < USB_OSA_FREERTOS_MSGQ_COUNT; index++)
+    {
+        if (0 == s_UsbFreertosMsgqStruct[index].isUsed)
+        {
+            msgq = &s_UsbFreertosMsgqStruct[index];
+            msgq->isUsed = 1U;
+            break;
+        }
+    }
+    USB_OSA_EXIT_CRITICAL();
+    if (NULL == msgq)
     {
         return kStatus_USB_OSA_Error;
     }
+    msgq->handle = xQueueCreateStatic(count, size * sizeof(uint32_t), (uint8_t *)&msgq->msgs[0], &msgq->queue);
+    if (NULL == (msgq->handle))
+    {
+        USB_OSA_ENTER_CRITICAL();
+        msgq->isUsed = 0U;
+        USB_OSA_EXIT_CRITICAL();
+        return kStatus_USB_OSA_Error;
+    }
+    *handle = (usb_osa_msgq_handle)msgq;
+#else
+    *handle = (usb_osa_msgq_handle)xQueueCreate(count, size * sizeof(uint32_t));
+    if (NULL == (*handle))
+    {
+        return kStatus_USB_OSA_Error;
+    }
+#endif
 
     return kStatus_USB_OSA_Success;
 }
 
 usb_osa_status_t USB_OsaMsgqDestroy(usb_osa_msgq_handle handle)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_msgq_struct_t *msgq = (usb_osa_msgq_struct_t *)handle;
+    USB_OSA_SR_ALLOC();
+#endif
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
+
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    vQueueDelete((xQueueHandle)(msgq->handle));
+    USB_OSA_ENTER_CRITICAL();
+    msgq->isUsed = 0U;
+    USB_OSA_EXIT_CRITICAL();
+#else
     vQueueDelete((xQueueHandle)handle);
+#endif
     return kStatus_USB_OSA_Success;
 }
 
 usb_osa_status_t USB_OsaMsgqSend(usb_osa_msgq_handle handle, void *msg)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_msgq_struct_t *osaMsgq = (usb_osa_msgq_struct_t *)handle;
+    xQueueHandle msgq;
+#else
     xQueueHandle msgq = (xQueueHandle)handle;
+#endif
     portBASE_TYPE taskToWake = pdFALSE;
 
     if (!handle)
@@ -427,11 +688,17 @@ usb_osa_status_t USB_OsaMsgqSend(usb_osa_msgq_handle handle, void *msg)
         return kStatus_USB_OSA_Error;
     }
 
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    msgq = osaMsgq->handle;
+#endif
+
     if (__get_IPSR())
     {
         if (pdPASS == xQueueSendToBackFromISR(msgq, msg, &taskToWake))
         {
+            MISRAC_DISABLE
             portYIELD_FROM_ISR(taskToWake);
+            MISRAC_ENABLE
             return kStatus_USB_OSA_Success;
         }
     }
@@ -447,12 +714,21 @@ usb_osa_status_t USB_OsaMsgqSend(usb_osa_msgq_handle handle, void *msg)
 
 usb_osa_status_t USB_OsaMsgqRecv(usb_osa_msgq_handle handle, void *msg, uint32_t timeout)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_msgq_struct_t *osaMsgq = (usb_osa_msgq_struct_t *)handle;
+    xQueueHandle msgq;
+#else
     xQueueHandle msgq = (xQueueHandle)handle;
+#endif
 
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
+
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    msgq = osaMsgq->handle;
+#endif
 
     if (!timeout)
     {
@@ -471,12 +747,21 @@ usb_osa_status_t USB_OsaMsgqRecv(usb_osa_msgq_handle handle, void *msg, uint32_t
 
 usb_osa_status_t USB_OsaMsgqCheck(usb_osa_msgq_handle handle, void *msg)
 {
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    usb_osa_msgq_struct_t *osaMsgq = (usb_osa_msgq_struct_t *)handle;
+    xQueueHandle msgq;
+#else
     xQueueHandle msgq = (xQueueHandle)handle;
+#endif
 
     if (!handle)
     {
         return kStatus_USB_OSA_Error;
     }
+
+#if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
+    msgq = osaMsgq->handle;
+#endif
 
     if (uxQueueMessagesWaiting(msgq))
     {

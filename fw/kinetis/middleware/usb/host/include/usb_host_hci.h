@@ -61,7 +61,9 @@ typedef enum _usb_host_bus_control
     kUSB_HostBusReset = 1U,    /*!< Reset bus */
     kUSB_HostBusRestart,       /*!< Restart bus */
     kUSB_HostBusEnableAttach,  /*!< Enable attach */
-    kUSB_HostBusDisableAttach, /*!< Disable attach*/
+    kUSB_HostBusDisableAttach, /*!< Disable attach */
+    kUSB_HostBusSuspend,       /*!< Suspend BUS */
+    kUSB_HostBusResume,        /*!< Resume BUS */
 } usb_host_bus_control_t;
 
 /*! @brief USB host controller interface structure */
@@ -107,6 +109,10 @@ typedef struct _usb_host_instance
     usb_host_transfer_t *transferHead;                               /*!< Idle transfer head*/
     const usb_host_controller_interface_t *controllerTable;          /*!< KHCI/EHCI interface*/
     void *deviceList;                                                /*!< Device list*/
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    void *suspendedDevice;    /*!< Suspended device handle*/
+    volatile uint64_t hwTick; /*!< Current hw tick(ms)*/
+#endif
     uint8_t addressBitMap[16]; /*!< Used for address allocation. The first bit is the address 1, second bit is the
                                   address 2*/
     uint8_t occupied;          /*!< 0 - the instance is not occupied; 1 - the instance is occupied*/

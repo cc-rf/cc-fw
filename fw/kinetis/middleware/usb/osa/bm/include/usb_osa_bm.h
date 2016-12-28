@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -35,9 +35,9 @@
  * Definitions
  ******************************************************************************/
 
-#define USB_OSA_SR_ALLOC()
-#define USB_OSA_ENTER_CRITICAL() USB_BmEnterCritical()
-#define USB_OSA_EXIT_CRITICAL() USB_BmExitCritical()
+#define USB_OSA_SR_ALLOC() uint32_t usbOsaCurrentSr;
+#define USB_OSA_ENTER_CRITICAL() USB_OsaEnterCritical(&usbOsaCurrentSr)
+#define USB_OSA_EXIT_CRITICAL() USB_OsaExitCritical(usbOsaCurrentSr)
 
 /*******************************************************************************
  * API
@@ -47,8 +47,8 @@
 extern "C" {
 #endif
 
-extern void USB_BmEnterCritical(void);
-extern void USB_BmExitCritical(void);
+extern void USB_OsaEnterCritical(uint32_t *sr);
+extern void USB_OsaExitCritical(uint32_t sr);
 
 #if defined(__cplusplus)
 }

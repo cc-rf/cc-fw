@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -202,6 +202,7 @@ usb_status_t USB_HostHubInit(usb_device_handle deviceHandle, usb_host_class_hand
 
     /* initialize hub instance structure */
     hubInstance->deviceHandle = deviceHandle;
+    hubInstance->interfaceHandle = NULL;
     USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetHostHandle, &infoValue);
     hubInstance->hostHandle = (usb_host_handle)infoValue;
     USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetDeviceControlPipe, &infoValue);
@@ -235,6 +236,10 @@ usb_status_t USB_HostHubSetInterface(usb_host_class_handle classHandle,
 
     /* notify the host driver that the interface is used by class */
     status = USB_HostOpenDeviceInterface(hubInstance->deviceHandle, interfaceHandle);
+    if (status != kStatus_USB_Success)
+    {
+        return status;
+    }
 
     /* close opened hub interrupt pipe */
     if (hubInstance->interruptPipe != NULL)
@@ -419,7 +424,7 @@ usb_status_t USB_HostHubSendPortReset(usb_host_class_handle classHandle, uint8_t
     transfer->callbackParam = hubInstance;
     transfer->setupPacket.bmRequestType =
         USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER;
-    transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_SET_FEATURE;
+    transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_FEATURE;
     transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(PORT_RESET);
     transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(portNumber);
     transfer->setupPacket.wLength = 0;
@@ -461,7 +466,7 @@ usb_status_t USB_HostHubGetDescriptor(usb_host_class_handle classHandle,
 {
     return USB_HostHubClassRequestCommon(
         classHandle, USB_REQUEST_TYPE_DIR_IN | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_DEVICE,
-        USB_REQUSET_STANDARD_GET_DESCRIPTOR, 0x00, 0, buffer, bufferLength, callbackFn, callbackParam);
+        USB_REQUEST_STANDARD_GET_DESCRIPTOR, 0x00, 0, buffer, bufferLength, callbackFn, callbackParam);
 }
 
 /*!
@@ -487,7 +492,7 @@ usb_status_t USB_HostHubClearFeature(usb_host_class_handle classHandle,
                                      void *callbackParam)
 {
     return USB_HostHubClassRequestCommon(classHandle, USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS,
-                                         USB_REQUSET_STANDARD_CLEAR_FEATURE, feature, 0, NULL, 0, callbackFn,
+                                         USB_REQUEST_STANDARD_CLEAR_FEATURE, feature, 0, NULL, 0, callbackFn,
                                          callbackParam);
 }
 
@@ -515,7 +520,7 @@ usb_status_t USB_HostHubGetStatus(usb_host_class_handle classHandle,
                                   void *callbackParam)
 {
     return USB_HostHubClassRequestCommon(classHandle, USB_REQUEST_TYPE_DIR_IN | USB_REQUEST_TYPE_TYPE_CLASS,
-                                         USB_REQUSET_STANDARD_GET_STATUS, 0, 0, buffer, bufferLength, callbackFn,
+                                         USB_REQUEST_STANDARD_GET_STATUS, 0, 0, buffer, bufferLength, callbackFn,
                                          callbackParam);
 }
 
@@ -544,7 +549,7 @@ usb_status_t USB_HostHubSetPortFeature(usb_host_class_handle classHandle,
 {
     return USB_HostHubClassRequestCommon(
         classHandle, USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER,
-        USB_REQUSET_STANDARD_SET_FEATURE, feature, portNumber, NULL, 0, callbackFn, callbackParam);
+        USB_REQUEST_STANDARD_SET_FEATURE, feature, portNumber, NULL, 0, callbackFn, callbackParam);
 }
 
 /*!
@@ -572,7 +577,7 @@ usb_status_t USB_HostHubClearPortFeature(usb_host_class_handle classHandle,
 {
     return USB_HostHubClassRequestCommon(
         classHandle, USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER,
-        USB_REQUSET_STANDARD_CLEAR_FEATURE, feature, portNumber, NULL, 0, callbackFn, callbackParam);
+        USB_REQUEST_STANDARD_CLEAR_FEATURE, feature, portNumber, NULL, 0, callbackFn, callbackParam);
 }
 
 /*!
@@ -601,7 +606,7 @@ usb_status_t USB_HostHubGetPortStatus(usb_host_class_handle classHandle,
 {
     return USB_HostHubClassRequestCommon(
         classHandle, USB_REQUEST_TYPE_DIR_IN | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER,
-        USB_REQUSET_STANDARD_GET_STATUS, 0, portNumber, buffer, bufferLength, callbackFn, callbackParam);
+        USB_REQUEST_STANDARD_GET_STATUS, 0, portNumber, buffer, bufferLength, callbackFn, callbackParam);
 }
 
 #endif /* USB_HOST_CONFIG_HUB */

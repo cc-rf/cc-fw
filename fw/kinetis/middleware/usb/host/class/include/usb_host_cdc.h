@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -40,7 +40,13 @@
  * Definitions
  ******************************************************************************/
 
-/* Class-specific request  PSTN*/
+/* Class-specific request */
+/* CDC 1.2 */
+/*! @brief CDC class-specific request (SEND_ENCAPSULATED_COMMAND) */
+#define USB_HOST_CDC_SEND_ENCAPSULATED_COMMAND 0x00U
+/*! @brief CDC class-specific request (GET_ENCAPSULATED_RESPONSE) */
+#define USB_HOST_CDC_GET_ENCAPSULATED_RESPONSE 0x01U
+/* PSTN */
 /*! @brief CDC class-specific request (SET_LINE_CODING) */
 #define USB_HOST_CDC_SET_LINE_CODING 0x20U
 /*! @brief CDC class-specific request (GET_LINE_CODING) */
@@ -93,7 +99,7 @@
 #define USB_HOST_CDC_DATA_CLASS_CODE 0x0AU
 /* This field is unused for Data Class interfaces and should have a value of 00h.*/
 #define USB_HOST_CDC_DATA_SUBCLASS_CODE 0x00U
-/*No class specific protocol required. See the CDC specification page22*/
+/*No class-specific protocol required. See the CDC specification page22*/
 #define USB_HOST_CDC_DATA_PROTOCOL_CODE 0x00U
 
 /*! @brief CDC GetLineCoding structure according to the 6.3 in PSTN specification */
@@ -142,7 +148,8 @@ typedef struct _usb_host_cdc_call_manage_desc_struct
     uint8_t bDataInterface;     /*!<Interface number of Data Class interface optionally used for call management.*/
 } usb_host_cdc_call_manage_desc_struct_t;
 
-/*! @brief CDC Abstract Control Management Functional Descriptor structure according to the 5.3.2 in PSTN specification */
+/*! @brief CDC Abstract Control Management Functional Descriptor structure according to the 5.3.2 in PSTN specification
+ */
 typedef struct _usb_host_cdc_abstract_control_desc_struct
 {
     uint8_t bFunctionLength;    /*!<Size of this descriptor in bytes.*/
@@ -190,13 +197,14 @@ typedef struct _usb_host_cdc_union_interface_desc_struct
                                    binary-coded decimal.*/
 } usb_host_cdc_union_interface_desc_struct_t;
 
-/*! @brief CDC Telephone Operational Modes Functional Descriptor structure according to the 5.3.5 in PSTN specification */
+/*! @brief CDC Telephone Operational Modes Functional Descriptor structure according to the 5.3.5 in PSTN specification
+ */
 typedef struct _usb_host_cdc_tom_desc_struct
 {
     uint8_t bFunctionLength;    /*!<Size of this descriptor in bytes.*/
     uint8_t bDescriptorType;    /*!<CS_INTERFACE.*/
     uint8_t bDescriptorSubtype; /*!<Telephone Operational Modes functional descriptor subtype.*/
-    uint8_t bmCapabilities;     /*!<operational modes:.*/
+    uint8_t bmCapabilities;     /*!<Operational modes:.*/
 } usb_host_cdc_tom_desc_struct_t;
 
 /*! @brief CDC common Functional Descriptor structure */
@@ -207,7 +215,7 @@ typedef struct _usb_host_cdc_common_desc_struct
     uint8_t bDescriptorSubtype; /*!<Header functional descriptor subtype.*/
 } usb_host_cdc_common_desc_struct_t;
 
-/*! @brief CDC union Functional Descriptor structure for analyse class specific descriptor */
+/*! @brief CDC union Functional Descriptor structure for analyze a class-specific descriptor */
 typedef union _usb_cdc_func_desc_struct
 {
     usb_host_cdc_common_desc_struct_t common;
@@ -245,9 +253,13 @@ typedef struct _usb_host_cdc_instance_struct
     transfer_callback_t interruptCallbackFn; /*!< CDC interrupt transfer callback function pointer*/
     transfer_callback_t outCallbackFn;       /*!< CDC bulk out transfer callback function pointer*/
     transfer_callback_t inCallbackFn;        /*!< CDC bulk in transfer callback function pointer*/
-    uint16_t packetSize;                     /*!< CDC control pipe maximum packet size*/
-    uint16_t bulkOutPacketSize;              /*!< CDC bulk out maximum packet size*/
-    uint16_t bulkInPacketSize;               /*!< CDC bulk in maximum packet size*/
+#if ((defined USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL) && USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL)
+    uint8_t *stallDataBuffer; /*!< Keep the data buffer for stall transfer's data*/
+    uint32_t stallDataLength; /*!< Keep the data length for stall transfer's data*/
+#endif
+    uint16_t packetSize;        /*!< CDC control pipe maximum packet size*/
+    uint16_t bulkOutPacketSize; /*!< CDC bulk out maximum packet size*/
+    uint16_t bulkInPacketSize;  /*!< CDC bulk in maximum packet size*/
 } usb_host_cdc_instance_struct_t;
 
 #ifdef __cplusplus
@@ -269,7 +281,7 @@ extern "C" {
  * This function allocates the resource for the CDC instance.
  *
  * @param deviceHandle       The device handle.
- * @param classHandle return Class handle.
+ * @param classHandle Returns class handle.
  *
  * @retval kStatus_USB_Success        The device is initialized successfully.
  * @retval kStatus_USB_AllocFail      Allocate memory fail.
@@ -422,14 +434,14 @@ extern usb_status_t USB_HostCdcInterruptRecv(usb_host_class_handle classHandle,
 /*!
  * @brief CDC get line coding.
  *
- * This function implements the CDC GetLineCoding request.refer to the PSTN specification.
+ * This function implements the CDC GetLineCoding request. See the PSTN specification.
  *
  * @param classHandle   The class handle.
  * @param uartLineCoding   The line coding pointer.
  * @param callbackFn    This callback is called after this function completes.
  * @param callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.
@@ -442,7 +454,7 @@ extern usb_status_t USB_HostCdcGetAcmLineCoding(usb_host_class_handle classHandl
 /*!
  * @brief CDC setControlLineState.
  *
- * This function implements the CDC etControlLineState request.refer to PSTN specification.
+ * This function implements the CDC etControlLineState request. See PSTN specification.
  *
  * @param classHandle   The class handle.
  * @param dtr           The DRS value.
@@ -450,13 +462,57 @@ extern usb_status_t USB_HostCdcGetAcmLineCoding(usb_host_class_handle classHandl
  * @param callbackFn    This callback is called after this function completes.
  * @param callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.
  */
 extern usb_status_t USB_HostCdcSetAcmCtrlState(
     usb_host_class_handle classHandle, uint8_t dtr, uint8_t rts, transfer_callback_t callbackFn, void *callbackParam);
+
+/*!
+ * @brief cdc send encapsulated command.
+ *
+ * This function implements cdc SEND_ENCAPSULATED_COMMAND request.refer to cdc 1.2 spec.
+ *
+ * @param classHandle    the class handle.
+ * @param buffer         the buffer pointer.
+ * @param bufferLength   the buffer length.
+ * @param callbackFn     this callback is called after this function completes.
+ * @param callbackParam  the first parameter in the callback function.
+ *
+ * @retval kStatus_USB_Success        request successfully.
+ * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
+ * @retval kStatus_USB_Busy           There is no idle transfer.
+ * @retval kStatus_USB_Error          send transfer fail, please reference to USB_HostSendSetup.
+ */
+usb_status_t USB_HostCdcSendEncapsulatedCommand(usb_host_class_handle classHandle,
+                                                uint8_t *buffer,
+                                                uint16_t bufferLength,
+                                                transfer_callback_t callbackFn,
+                                                void *callbackParam);
+
+/*!
+ * @brief cdc get encapsulated response.
+ *
+ * This function implements cdc GET_ENCAPSULATED_RESPONSE request.refer to cdc 1.2 spec.
+ *
+ * @param classHandle    the class handle.
+ * @param buffer         the buffer pointer.
+ * @param bufferLength   the buffer length.
+ * @param callbackFn     this callback is called after this function completes.
+ * @param callbackParam  the first parameter in the callback function.
+ *
+ * @retval kStatus_USB_Success        request successfully.
+ * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
+ * @retval kStatus_USB_Busy           There is no idle transfer.
+ * @retval kStatus_USB_Error          send transfer fail, please reference to USB_HostSendSetup.
+ */
+usb_status_t USB_HostCdcGetEncapsulatedResponse(usb_host_class_handle classHandle,
+                                                uint8_t *buffer,
+                                                uint16_t bufferLength,
+                                                transfer_callback_t callbackFn,
+                                                void *callbackParam);
 
 /*!
  * @brief CDC gets the ACM descriptor.

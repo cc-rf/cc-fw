@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 -2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -62,7 +62,7 @@
 #define USB_KHCI_EVENT_DETACH 0x10
 #define USB_KHCI_EVENT_MSG 0x20
 #define USB_KHCI_EVENT_ISO_MSG 0x40
-#define USB_KHCI_EVENT_NAK_MSG 0x80
+#define USB_KHCI_EVENT_RESUME 0x80
 #define USB_KHCI_EVENT_MASK 0xff
 
 typedef enum _transfer_status
@@ -115,11 +115,22 @@ typedef enum tr_request_state
 typedef enum khci_tr_state
 {
     kKhci_TrGetMsg = 0,
+    kKhci_IsoTrGetMsg,
     kKhci_TrStartTransmit,
     kKhci_TrTransmiting,
     kKhci_TrTransmitDone,
     kKhci_TrNone
 } khci_tr_state_t;
+
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+typedef enum bus_suspend_request_state
+{
+    kBus_Idle = 0,
+    kBus_StartSuspend,
+    kBus_Suspended,
+    kBus_StartResume,
+} bus_suspend_request_state_t;
+#endif
 
 /* Defines the USB KHCI time out value from USB specification */
 #define USB_TIMEOUT_NODATA (500)
@@ -177,12 +188,10 @@ typedef struct _khci_xfer_sts
  */
 
 /*! @brief  The value programmed into the threshold register must reserve enough time to ensure the worst case
-   transaction completes.
-                 In general, the worst case transaction is an IN token followed by a data packet from the target followed
-   by the response from
-                the host. The actual time required is a function of the maximum packet size on the bus. Set the
-   KHCICFG_THSLD_DELAY  to
-                0x65 can meet the worst case.*/
+   transaction completes. In general, the worst case transaction is an IN token followed by a data packet from the target
+   followed by the response from the host. The actual time required is a function of the maximum packet size on the bus. Set the
+   KHCICFG_THSLD_DELAY to 0x65 to meet the worst case.*/
+   
 #define KHCICFG_THSLD_DELAY 0x65
 
 /*! @brief KHCI controller driver instance structure */
@@ -193,17 +202,24 @@ typedef struct _usb_khci_host_state_struct
     usb_host_pipe_t *pipeDescriptorBasePointer; /*!< Pipe descriptor bas pointer*/
     usb_osa_event_handle khciEventPointer;      /*!< KHCI event*/
     usb_osa_mutex_handle khciMutex;             /*!< KHCI mutex*/
-    usb_host_transfer_t *periodicListPointer; /*!< KHCI periodic list pointer, which link is an interrupt and an ISO transfer request*/
-    usb_host_transfer_t *asyncListPointer;    /*!< KHCI async list pointer, which link controls and bulk transfer request*/
-    khci_xfer_sts_t sXferSts;                 /*!< KHCI transfer status structure for the DAM ALIGN workaround */
-    uint8_t *khciSwapBufPointer;              /*!< KHCI swap buffer pointer for the DAM ALIGN workaround*/
-    volatile uint32_t trState;                /*!< KHCI transfer state*/
-    uint8_t asyncListAvtive;                  /*!< KHCI async list is active*/
-    uint8_t periodicListAvtive;               /*!< KHCI periodic list is active*/
-    uint8_t rxBd;                             /*!< RX buffer descriptor toggle bits*/
-    uint8_t txBd;                             /*!< TX buffer descriptor toggle bits*/
-    uint8_t deviceSpeed;                      /*!< Device speed*/
-    int8_t deviceAttached;                    /*!< Device attach/detach state */
+    usb_host_transfer_t
+        *periodicListPointer; /*!< KHCI periodic list pointer, which link is an interrupt and an ISO transfer request*/
+    usb_host_transfer_t *asyncListPointer; /*!< KHCI async list pointer, which link controls and bulk transfer request*/
+    khci_xfer_sts_t sXferSts;              /*!< KHCI transfer status structure for the DAM ALIGN workaround */
+    uint8_t *khciSwapBufPointer;           /*!< KHCI swap buffer pointer for the DAM ALIGN workaround*/
+    volatile uint32_t trState;             /*!< KHCI transfer state*/
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    uint64_t matchTick;
+#endif
+    uint8_t asyncListAvtive;    /*!< KHCI async list is active*/
+    uint8_t periodicListAvtive; /*!< KHCI periodic list is active*/
+    uint8_t rxBd;               /*!< RX buffer descriptor toggle bits*/
+    uint8_t txBd;               /*!< TX buffer descriptor toggle bits*/
+    uint8_t deviceSpeed;        /*!< Device speed*/
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    bus_suspend_request_state_t busSuspendStatus; /*!< Bus Suspend Status*/
+#endif
+    int8_t deviceAttached; /*!< Device attach/detach state */
 } usb_khci_host_state_struct_t, *ptr_usb_host_khci_state_struct_t;
 
 #ifdef __cplusplus
@@ -220,11 +236,11 @@ extern "C" {
  * This function initializes the USB host KHCI controller driver.
  *
  * @param controllerId      The controller ID of the USB IP. See the enumeration usb_controller_index_t.
- * @param hostHandle the host level handle.
- * @param controllerHandle  Return the controller instance handle.
+ * @param hostHandle The host level handle.
+ * @param controllerHandle  Returns the controller instance handle.
  *
  * @retval kStatus_USB_Success              The host is initialized successfully.
- * @retval kStatus_USB_AllocFail            Allocate memory failed.
+ * @retval kStatus_USB_AllocFail            Allocates memory failed.
  * @retval kStatus_USB_Error                Host mutex create failed, KHCI mutex or KHCI event create failed.
  *                                          Or, KHCI IP initialize failed.
  */

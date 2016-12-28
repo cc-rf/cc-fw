@@ -10,7 +10,7 @@
 */                                                                    
 void OnProjectLoad (void) {
 
-  Project.SetDevice ("MK65FN2M0xxx18 (allow security)");
+  Project.SetDevice ("MK66FX1M0xxx18");
   Project.SetHostIF ("USB", "203200983");
   Project.SetTargetIF ("SWD");
   Project.SetTIFSpeed ("10 MHz");

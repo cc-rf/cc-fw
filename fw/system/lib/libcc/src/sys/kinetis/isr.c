@@ -15,7 +15,7 @@
 
 /*TODO: Use _Atomic and/or stdatomic.h functions to check/set atomically*/
 #define PORT_IRQ_HANDLER(P) \
-        /*static*/ /*_Atomic*/ /*volatile?*/ xTaskHandle isr_pending_task_##P[32] = { NULL };\
+        /*static*/ /*_Atomic*/ /*volatile?*/ xTaskHandle isr_pending_task_##P[/*32*/1] = { NULL };\
         __attribute__((interrupt)) void PORT##P##_IRQHandler(void){\
             const u32 flag = GPIO_GetPinsInterruptFlags(GPIO##P); \
             GPIO_ClearPinsInterruptFlags(GPIO##P, flag); \

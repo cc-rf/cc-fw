@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -68,24 +68,34 @@ typedef enum _usb_host_event
     kUSB_HostEventAttach = 1U,     /*!< Device is attached */
     kUSB_HostEventDetach,          /*!< Device is detached */
     kUSB_HostEventEnumerationDone, /*!< Device's enumeration is done and the device is supported */
-    kUSB_HostEventNotSupported     /*!< Device's enumeration is done and the device is not supported */
+    kUSB_HostEventNotSupported,    /*!< Device's enumeration is done and the device is not supported */
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    kUSB_HostEventNotSuspended, /*!< Suspend failed */
+    kUSB_HostEventSuspended,    /*!< Suspend successful */
+    kUSB_HostEventNotResumed,   /*!< Resume failed */
+    kUSB_HostEventDetectResume, /*!< Detect resume signal */
+    kUSB_HostEventResumed,      /*!< Resume successful */
+#endif
 } usb_host_event_t;
 
 /*! @brief USB host device information code */
 typedef enum _usb_host_dev_info
 {
-    kUSB_HostGetDeviceAddress = 1U, /*!< Device's address */
-    kUSB_HostGetDeviceHubNumber,    /*!< Device's first hub address */
-    kUSB_HostGetDevicePortNumber,   /*!< Device's first hub port number */
-    kUSB_HostGetDeviceSpeed,        /*!< Device's speed */
-    kUSB_HostGetDeviceHSHubNumber,  /*!< Device's first high-speed hub address */
-    kUSB_HostGetDeviceHSHubPort,    /*!< Device's first high-speed hub number */
-    kUSB_HostGetDeviceLevel,        /*!< Device's hub level */
-    kUSB_HostGetHostHandle,         /*!< Device's host handle */
-    kUSB_HostGetDeviceControlPipe,  /*!< Device's control pipe handle */
-    kUSB_HostGetDevicePID,          /*!< Device's PID */
-    kUSB_HostGetDeviceVID,          /*!< Device's VID */
-    kUSB_HostGetHubThinkTime        /*!< Device's hub total think time */
+    kUSB_HostGetDeviceAddress = 1U,  /*!< Device's address */
+    kUSB_HostGetDeviceHubNumber,     /*!< Device's first hub address */
+    kUSB_HostGetDevicePortNumber,    /*!< Device's first hub port number */
+    kUSB_HostGetDeviceSpeed,         /*!< Device's speed */
+    kUSB_HostGetDeviceHSHubNumber,   /*!< Device's first high-speed hub address */
+    kUSB_HostGetDeviceHSHubPort,     /*!< Device's first high-speed hub number */
+    kUSB_HostGetDeviceLevel,         /*!< Device's hub level */
+    kUSB_HostGetHostHandle,          /*!< Device's host handle */
+    kUSB_HostGetDeviceControlPipe,   /*!< Device's control pipe handle */
+    kUSB_HostGetDevicePID,           /*!< Device's PID */
+    kUSB_HostGetDeviceVID,           /*!< Device's VID */
+    kUSB_HostGetHubThinkTime,        /*!< Device's hub total think time */
+    kUSB_HostGetDeviceConfigIndex,   /*!< Device's running zero-based config index */
+    kUSB_HostGetConfigurationDes,    /*!< Device's configuration descriptor pointer */
+    kUSB_HostGetConfigurationLength, /*!< Device's configuration descriptor pointer */
 } usb_host_dev_info_t;
 
 /*!
@@ -189,7 +199,7 @@ typedef struct _usb_host_transfer
 #endif
     uint8_t *transferBuffer;                   /*!< Transfer data buffer*/
     uint32_t transferLength;                   /*!< Transfer data length*/
-    uint32_t transferSofar;                    /*!< Have transferred length*/
+    uint32_t transferSofar;                    /*!< Length transferred so far*/
     host_inner_transfer_callback_t callbackFn; /*!< Transfer callback function*/
     void *callbackParam;                       /*!< Transfer callback parameter*/
     usb_host_pipe_t *transferPipe;             /*!< Transfer pipe pointer*/
@@ -245,11 +255,11 @@ extern "C" {
  * This function initializes the USB host module specified by the controllerId.
  *
  * @param[in] controllerId    The controller ID of the USB IP. See the enumeration usb_controller_index_t.
- * @param[out] hostHandle     Return the host handle.
+ * @param[out] hostHandle     Returns the host handle.
  * @param[in] callbackFn      Host callback function notifies device attach/detach.
  *
  * @retval kStatus_USB_Success              The host is initialized successfully.
- * @retval kStatus_USB_InvalidHandle        The host_handle_ptr is a NULL pointer.
+ * @retval kStatus_USB_InvalidHandle        The hostHandle is a NULL pointer.
  * @retval kStatus_USB_ControllerNotFound   Cannot find the controller according to the controller ID.
  * @retval kStatus_USB_AllocFail            Allocation memory fail.
  * @retval kStatus_USB_Error                Host mutex create fail; KHCI/EHCI mutex or KHCI/EHCI event create fail,
@@ -262,7 +272,7 @@ extern usb_status_t USB_HostInit(uint8_t controllerId, usb_host_handle *hostHand
  *
  * This function deinitializes the USB host module specified by the hostHandle.
  *
- * @param[in] hostHandle  the host handle.
+ * @param[in] hostHandle  The host handle.
  *
  * @retval kStatus_USB_Success              The host is initialized successfully.
  * @retval kStatus_USB_InvalidHandle        The hostHandle is a NULL pointer.
@@ -325,7 +335,7 @@ extern usb_status_t USB_HostRemoveDevice(usb_host_handle hostHandle, usb_device_
  * @brief KHCI task function.
  *
  * The function is used to handle the KHCI controller message.
- * In the BM environment, this function should be called periodically in the main function.
+ * In the bare metal environment, this function should be called periodically in the main function.
  * In the RTOS environment, this function should be used as a function entry to create a task.
  *
  * @param[in] hostHandle The host handle.
@@ -336,7 +346,7 @@ extern void USB_HostKhciTaskFunction(void *hostHandle);
  * @brief EHCI task function.
  *
  * The function is used to handle the EHCI controller message.
- * In bare metal environment, this function should be called periodically in the main function.
+ * In the bare metal environment, this function should be called periodically in the main function.
  * In the RTOS environment, this function should be used as a function entry to create a task.
  *
  * @param[in] hostHandle The host handle.
@@ -505,7 +515,7 @@ extern usb_status_t USB_HostFreeTransfer(usb_host_handle hostHandle, usb_host_tr
  * @param[in] deviceHandle    The device handle for control transfer.
  * @param[in] usbRequest      A USB standard request code. Se the usb_spec.h.
  * @param[in] transfer        The used transfer.
- * @param[in] param           The parameter structure is different for different request, please reference to
+ * @param[in] param           The parameter structure is different for different request, see
  * usb_host_framework.h.
  *
  * @retval kStatus_USB_Success              Send successfully.
@@ -557,6 +567,52 @@ extern usb_status_t USB_HostCloseDeviceInterface(usb_device_handle deviceHandle,
  *
  */
 extern void USB_HostGetVersion(uint32_t *version);
+
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+/*!
+ * @brief Send a bus or device suspend request.
+ *
+ * This function is used to send a bus or device suspend request.
+ *
+ * @param[in] hostHandle     The host handle.
+ * @param[in] deviceHandle      The device handle.
+ *
+ * @retval kStatus_USB_Success              Request successfully.
+ * @retval kStatus_USB_InvalidHandle        The hostHandle is a NULL pointer. Or the controller handle is invalid.
+ * @retval kStatus_USB_Error                There is no idle transfer.
+ *                                          Or, the deviceHandle is invalid.
+ *                                          Or, the request is invalid.
+ */
+extern usb_status_t USB_HostSuspendDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle);
+
+/*!
+ * @brief Send a bus or device resume request.
+ *
+ * This function is used to send a bus or device resume request.
+ *
+ * @param[in] hostHandle     The host handle.
+ * @param[in] deviceHandle      The device handle.
+ *
+ * @retval kStatus_USB_Success              Request successfully.
+ * @retval kStatus_USB_InvalidHandle        The hostHandle is a NULL pointer. Or the controller handle is invalid.
+ * @retval kStatus_USB_Error                There is no idle transfer.
+ *                                          Or, the deviceHandle is invalid.
+ *                                          Or, the request is invalid.
+ */
+extern usb_status_t USB_HostResumeDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle);
+
+/*!
+ * @brief Update the hardware tick.
+ *
+ * The function is used to update the hardware tick.
+ *
+ * @param[in] hostHandle The host handle.
+ * @param[in] tick Current hardware tick(uint is ms).
+ *
+ */
+extern usb_status_t USB_HostUpdateHwTick(usb_host_handle hostHandle, uint64_t tick);
+
+#endif
 
 /*! @}*/
 

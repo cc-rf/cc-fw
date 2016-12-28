@@ -44,6 +44,20 @@
 extern uint32_t USB_EhciPhyInit(uint8_t controllerId, uint32_t freq);
 
 /*!
+ * @brief ehci phy initialization for suspend and resume.
+ *
+ * This function initialize ehci phy IP for suspend and resume.
+ *
+ * @param[in] controllerId   ehci controller id, please reference to #usb_controller_index_t.
+ * @param[in] freq            the external input clock.
+ *                            for example: if the external input clock is 16M, the parameter freq should be 16000000.
+ *
+ * @retval kStatus_USB_Success      cancel successfully.
+ * @retval kStatus_USB_Error        the freq value is incorrect.
+ */
+extern uint32_t USB_EhciLowPowerPhyInit(uint8_t controllerId, uint32_t freq);
+
+/*!
  * @brief EHCI PHY deinitialization.
  *
  * This function deinitializes the EHCI PHY IP.

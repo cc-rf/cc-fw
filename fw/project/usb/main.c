@@ -29,7 +29,11 @@ static void main_task(void *param);
 int main(void)
 {
     BOARD_InitPins();
+    LED_A_ON();
+
     BOARD_BootClockRUN();
+    LED_B_ON();
+
     BOARD_InitDebugConsole();
     itm_init();
     printf("<boot>\r\n");
@@ -51,11 +55,11 @@ int main(void)
        CLOCK_GetFreq(kCLOCK_LpoClk)
     );
 
-    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
+    //xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL);
 
-    //vcom_init();
-
-    LED_A_ON();
+    vcom_init();
+    printf("<vcom init>\r\n");
+    LED_C_ON();
 
     // Theoretically this will make sure the sub-priority on all interrupt configs is zero.
     //   Not sure it's actually really needed or what it does in the long run.
@@ -70,7 +74,7 @@ static void main_task(void *param)
     (void)param;
     printf("<main task>\r\n");
 
-    #if 1
+    #if 0
     if (nphy_init()) {
         printf("nphy init successful.\r\n");
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -46,6 +46,11 @@
 #include "usb_device_ehci.h"
 #endif
 
+#if (((defined(USB_DEVICE_CONFIG_LPCIP3511FS)) && (USB_DEVICE_CONFIG_LPCIP3511FS > 0U)) || \
+     ((defined(USB_DEVICE_CONFIG_LPCIP3511HS)) && (USB_DEVICE_CONFIG_LPCIP3511HS > 0U)))
+#include "usb_device_lpcip3511.h"
+#endif
+
 #include "usb_device_ch9.h"
 
 /*******************************************************************************
@@ -66,13 +71,12 @@ static usb_status_t USB_DeviceTransfer(usb_device_handle handle,
 static usb_status_t USB_DeviceControl(usb_device_handle handle, usb_device_control_type_t type, void *param);
 static usb_status_t USB_DeviceResetNotification(usb_device_struct_t *handle,
                                                 usb_device_callback_message_struct_t *message);
-#if ((defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U)) || \
-     (defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U)))
+#if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
 static usb_status_t USB_DeviceSuspendNotification(usb_device_struct_t *handle,
                                                   usb_device_callback_message_struct_t *message);
-static usb_status_t USB_DeviceSuspendNotification(usb_device_struct_t *handle,
-                                                  usb_device_callback_message_struct_t *message);
-#endif
+static usb_status_t USB_DeviceResumeNotification(usb_device_struct_t *handle,
+                                                 usb_device_callback_message_struct_t *message);
+#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 #if (defined(USB_DEVICE_CONFIG_DETACH_ENABLE) && (USB_DEVICE_CONFIG_DETACH_ENABLE > 0U))
 static usb_status_t USB_DeviceDetachNotification(usb_device_struct_t *handle,
                                                  usb_device_callback_message_struct_t *message);
@@ -167,6 +171,14 @@ static const usb_device_controller_interface_struct_t s_UsbDeviceEhciInterface =
     USB_DeviceEhciRecv, USB_DeviceEhciCancel, USB_DeviceEhciControl};
 #endif
 
+#if (((defined(USB_DEVICE_CONFIG_LPCIP3511FS)) && (USB_DEVICE_CONFIG_LPCIP3511FS > 0U)) || \
+     ((defined(USB_DEVICE_CONFIG_LPCIP3511HS)) && (USB_DEVICE_CONFIG_LPCIP3511HS > 0U)))
+/* EHCI device driver interface */
+static const usb_device_controller_interface_struct_t s_UsbDeviceLpc3511IpInterface = {
+    USB_DeviceLpc3511IpInit, USB_DeviceLpc3511IpDeinit, USB_DeviceLpc3511IpSend,
+    USB_DeviceLpc3511IpRecv, USB_DeviceLpc3511IpCancel, USB_DeviceLpc3511IpControl};
+#endif
+
 /*!
  * @brief Get the controller interface handle.
  *
@@ -201,6 +213,17 @@ static usb_status_t USB_DeviceGetControllerInterface(
             *controllerInterface = (const usb_device_controller_interface_struct_t *)&s_UsbDeviceEhciInterface;
             break;
 #endif
+#if (((defined(USB_DEVICE_CONFIG_LPCIP3511FS)) && (USB_DEVICE_CONFIG_LPCIP3511FS > 0U)) || \
+     ((defined(USB_DEVICE_CONFIG_LPCIP3511HS)) && (USB_DEVICE_CONFIG_LPCIP3511HS > 0U)))
+        /* Get the EHCI controller driver interface */
+        case kUSB_ControllerLpcIp3511Fs0:
+        case kUSB_ControllerLpcIp3511Fs1:
+        case kUSB_ControllerLpcIp3511Hs0:
+        case kUSB_ControllerLpcIp3511Hs1:
+            error = kStatus_USB_Success;
+            *controllerInterface = (const usb_device_controller_interface_struct_t *)&s_UsbDeviceLpc3511IpInterface;
+            break;
+#endif
         default:
             break;
     }
@@ -230,6 +253,9 @@ static usb_status_t USB_DeviceTransfer(usb_device_handle handle,
 {
     usb_device_struct_t *deviceHandle = (usb_device_struct_t *)handle;
     usb_status_t error = kStatus_USB_Error;
+    uint8_t endpoint = endpointAddress & USB_ENDPOINT_NUMBER_MASK;
+    uint8_t direction = (endpointAddress & USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_MASK) >>
+                        USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_SHIFT;
 
     if (NULL == deviceHandle)
     {
@@ -238,6 +264,11 @@ static usb_status_t USB_DeviceTransfer(usb_device_handle handle,
 
     if (NULL != deviceHandle->controllerInterface)
     {
+        if (deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy)
+        {
+            return kStatus_USB_Busy;
+        }
+        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 1U;
         if (endpointAddress & USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_MASK)
         {
 #if (defined(USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE) && (USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
@@ -320,6 +351,12 @@ static usb_status_t USB_DeviceControl(usb_device_handle handle, usb_device_contr
 static usb_status_t USB_DeviceResetNotification(usb_device_struct_t *handle,
                                                 usb_device_callback_message_struct_t *message)
 {
+    handle->isResetting = 1U;
+
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+    /* Clear remote wakeup feature */
+    handle->remotewakeup = 0U;
+#endif
     /* Set the controller to default status. */
     USB_DeviceControl(handle, kUSB_DeviceControlSetDefaultStatus, NULL);
 
@@ -330,16 +367,17 @@ static usb_status_t USB_DeviceResetNotification(usb_device_struct_t *handle,
     {
         handle->endpointCallback[count].callbackFn = (usb_device_endpoint_callback_t)NULL;
         handle->endpointCallback[count].callbackParam = NULL;
+        handle->endpointCallback[count].isBusy = 0U;
     }
 
     /* Call device callback to notify the application that the USB bus reset signal detected. */
     handle->deviceCallback(handle, kUSB_DeviceEventBusReset, NULL);
 
+    handle->isResetting = 0U;
     return kStatus_USB_Success;
 }
 
-#if ((defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U)) || \
-     (defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U)))
+#if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
 /*!
  * @brief Handle the suspend notification.
  *
@@ -374,7 +412,7 @@ static usb_status_t USB_DeviceResumeNotification(usb_device_struct_t *handle,
     return handle->deviceCallback(handle, kUSB_DeviceEventResume, NULL);
 }
 
-#endif
+#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 
 #if (defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) || \
     (defined(USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING) && USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING)
@@ -443,7 +481,7 @@ static usb_status_t USB_DeviceNotification(usb_device_struct_t *handle, usb_devi
         case kUSB_DeviceNotifyBusReset:
             error = USB_DeviceResetNotification(handle, message);
             break;
-#if ((USB_DEVICE_CONFIG_LOW_POWER_MODE) || (USB_DEVICE_CONFIG_REMOTE_WAKEUP))
+#if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
         case kUSB_DeviceNotifySuspend:
             error = USB_DeviceSuspendNotification(handle, message);
             break;
@@ -476,6 +514,15 @@ static usb_status_t USB_DeviceNotification(usb_device_struct_t *handle, usb_devi
                     endpointCallbackMessage.buffer = message->buffer;
                     endpointCallbackMessage.length = message->length;
                     endpointCallbackMessage.isSetup = message->isSetup;
+                    if (message->isSetup)
+                    {
+                        handle->endpointCallback[0].isBusy = 0U;
+                        handle->endpointCallback[1].isBusy = 0U;
+                    }
+                    else
+                    {
+                        handle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
+                    }
                     /* Call endpoint callback */
                     error = handle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn(
                         handle, &endpointCallbackMessage,
@@ -514,7 +561,15 @@ usb_status_t USB_DeviceNotificationTrigger(void *handle, void *msg)
     }
 
 #if USB_DEVICE_CONFIG_USE_TASK
-    /* Add the message to message queue when the device task enabled. */
+    if (deviceHandle->isResetting)
+    {
+        if ((message->code & USB_ENDPOINT_NUMBER_MASK) && (!(message->code & 0x70U)))
+        {
+            return USB_DeviceNotification(deviceHandle, message);
+        }
+    }
+
+    /* Add the message to message queue when the device task is enabled. */
     if (kStatus_USB_OSA_Success != USB_OsaMsgqSend(deviceHandle->notificationQueue, (void *)message))
     {
         return kStatus_USB_Busy;
@@ -529,10 +584,10 @@ usb_status_t USB_DeviceNotificationTrigger(void *handle, void *msg)
 /*!
  * @brief Initialize the USB device stack.
  *
- * This function initizlizes the USB device module specified by the controllerId.
+ * This function initializes the USB device module specified by the controllerId.
  *
  * @param controllerId   The controller id of the USB IP. Please refer to the enumeration usb_controller_index_t.
- * @param deviceCallback Fucntion pointer of the device callback.
+ * @param deviceCallback Function pointer of the device callback.
  * @param handle          It is out parameter, is used to return pointer of the device handle to the caller.
  *
  * @retval kStatus_USB_Success              The device is initialized successfully.
@@ -570,12 +625,15 @@ usb_status_t USB_DeviceInit(uint8_t controllerId, usb_device_callback_t deviceCa
     deviceHandle->controllerId = controllerId;
     /* Clear the device address */
     deviceHandle->deviceAddress = 0U;
+    /* Clear the device reset state */
+    deviceHandle->isResetting = 0U;
 
     /* Initialize the enpoints */
     for (count = 0U; count < (USB_DEVICE_CONFIG_ENDPOINTS * 2U); count++)
     {
         deviceHandle->endpointCallback[count].callbackFn = (usb_device_endpoint_callback_t)NULL;
         deviceHandle->endpointCallback[count].callbackParam = NULL;
+        deviceHandle->endpointCallback[count].isBusy = 0U;
     }
 
     /* Get the controller interface according to the controller id */
@@ -837,6 +895,7 @@ usb_status_t USB_DeviceInitEndpoint(usb_device_handle handle,
             endpointCallback->callbackFn;
         deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackParam =
             endpointCallback->callbackParam;
+        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
     }
     else
     {
@@ -877,6 +936,7 @@ usb_status_t USB_DeviceDeinitEndpoint(usb_device_handle handle, uint8_t endpoint
         deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn =
             (usb_device_endpoint_callback_t)NULL;
         deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackParam = NULL;
+        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
     }
     else
     {
@@ -986,6 +1046,13 @@ usb_status_t USB_DeviceGetStatus(usb_device_handle handle, usb_device_status_t t
         case kUSB_DeviceStatusSynchFrame:
             error = USB_DeviceControl(handle, kUSB_DeviceControlGetSynchFrame, param);
             break;
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+        case kUSB_DeviceStatusRemoteWakeup:
+            temp8 = (uint8_t *)param;
+            error = kStatus_USB_Success;
+            *temp8 = ((usb_device_struct_t *)handle)->remotewakeup;
+            break;
+#endif
         default:
             break;
     }
@@ -1043,8 +1110,20 @@ usb_status_t USB_DeviceSetStatus(usb_device_handle handle, usb_device_status_t t
                                           &((usb_device_struct_t *)handle)->deviceAddress);
             }
             break;
-        case kUSB_DeviceStatusBus:
+        case kUSB_DeviceStatusBusResume:
             error = USB_DeviceControl(handle, kUSB_DeviceControlResume, param);
+            break;
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+        case kUSB_DeviceStatusRemoteWakeup:
+            if (NULL != param)
+            {
+                error = kStatus_USB_Success;
+                ((usb_device_struct_t *)handle)->remotewakeup = (uint8_t)(*(uint8_t *)param);
+            }
+            break;
+#endif
+        case kUSB_DeviceStatusBusSuspend:
+            error = USB_DeviceControl(handle, kUSB_DeviceControlSuspend, param);
             break;
         default:
             break;
@@ -1094,4 +1173,31 @@ void USB_DeviceGetVersion(uint32_t *version)
             (uint32_t)USB_MAKE_VERSION(USB_STACK_VERSION_MAJOR, USB_STACK_VERSION_MINOR, USB_STACK_VERSION_BUGFIX);
     }
 }
+
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+/*!
+ * @brief Update the hardware tick.
+ *
+ * The function is used to update the hardware tick.
+ *
+ * @param[in] handle The device handle got from #USB_DeviceInit.
+ * @param[in] tick Current hardware tick.
+ *
+ */
+usb_status_t USB_DeviceUpdateHwTick(usb_device_handle handle, uint64_t tick)
+{
+    usb_device_struct_t *deviceHandle;
+    usb_status_t status = kStatus_USB_Success;
+
+    if (handle == NULL)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    deviceHandle = (usb_device_struct_t *)handle;
+
+    deviceHandle->hwTick = tick;
+
+    return status;
+}
+#endif
 #endif /* USB_DEVICE_CONFIG_NUM */

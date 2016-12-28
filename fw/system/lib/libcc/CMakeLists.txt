@@ -9,7 +9,6 @@ endif()
 add_library(
         ${NAME} STATIC
         src/io.c
-        src/chan.c
         src/freq.c
         src/nphy.c
 )

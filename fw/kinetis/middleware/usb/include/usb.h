@@ -45,11 +45,11 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-/*! @brief Defines USB stack version major*/
+/*! @brief Defines USB stack major version */
 #define USB_STACK_VERSION_MAJOR (1U)
-/*! @brief Defines USB stack version minor*/
-#define USB_STACK_VERSION_MINOR (0U)
-/*! @brief Defines USB stack version bugfix*/
+/*! @brief Defines USB stack minor version */
+#define USB_STACK_VERSION_MINOR (4U)
+/*! @brief Defines USB stack bugfix version */
 #define USB_STACK_VERSION_BUGFIX (0U)
 
 /*! @brief USB stack version definition */
@@ -73,7 +73,7 @@ typedef enum _usb_status
     kStatus_USB_TransferStall,  /*!< Transfer stalled */
     kStatus_USB_TransferFailed, /*!< Transfer failed */
     kStatus_USB_AllocFail,      /*!< Allocation failed */
-    kStatus_USB_LackSwapBuffer, /*!< Lack the swap buffer for KHCI */
+    kStatus_USB_LackSwapBuffer, /*!< Insufficient swap buffer for KHCI */
     kStatus_USB_TransferCancel, /*!< The transfer cancelled */
     kStatus_USB_BandwidthFail,  /*!< Allocate bandwidth failed */
     kStatus_USB_MSDStatusFail,  /*!< For MSD, the CSW status means fail */
@@ -93,11 +93,21 @@ typedef void *usb_otg_handle;
 typedef enum _usb_controller_index
 {
     kUSB_ControllerKhci0 = 0U, /*!< KHCI 0U */
-    kUSB_ControllerKhci1, /*!< KHCI 1U, Currently, there are no any platforms which have two KHCI IPs, this is reserved
-                             to be used in future. */
-    kUSB_ControllerEhci0, /*!< EHCI 0U */
-    kUSB_ControllerEhci1, /*!< EHCI 1U, Currently, there are no any platforms which have two KHCI IPs, this is reserved
-                             to be used in future. */
+    kUSB_ControllerKhci1 = 1U, /*!< KHCI 1U, Currently, there are no platforms which have two KHCI IPs, this is reserved
+                                  to be used in the future. */
+    kUSB_ControllerEhci0 = 2U, /*!< EHCI 0U */
+    kUSB_ControllerEhci1 = 3U, /*!< EHCI 1U, Currently, there are no platforms which have two KHCI IPs, this is reserved
+                                  to be used in the future. */
+
+    kUSB_ControllerLpcIp3511Fs0 = 4U, /*!< LPC USB IP3511 FS controller 0 */
+    kUSB_ControllerLpcIp3511Fs1 =
+        5U, /*!< LPC USB IP3511 FS controller 1, there are no platforms which have two IP3511 IPs, this is reserved
+              to be used in the future. */
+
+    kUSB_ControllerLpcIp3511Hs0 = 6U, /*!< LPC USB IP3511 HS controller 0 */
+    kUSB_ControllerLpcIp3511Hs1 =
+        7U, /*!< LPC USB IP3511 HS controller 1, there are no platforms which have two IP3511 IPs, this is reserved
+              to be used in the future. */
 } usb_controller_index_t;
 
 /**

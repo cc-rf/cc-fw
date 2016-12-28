@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -83,7 +83,6 @@ typedef struct _usb_osa_msgq_struct
  * Variables
  ******************************************************************************/
 
-USB_GLOBAL static uint8_t s_UsbBmCriticalLevel;
 USB_GLOBAL static usb_osa_sem_struct_t s_UsbBmSemStruct[USB_OSA_BM_SEM_COUNT];
 USB_GLOBAL static usb_osa_event_struct_t s_UsbBmEventStruct[USB_OSA_BM_EVENT_COUNT];
 USB_GLOBAL static usb_osa_msgq_struct_t s_UsbBmMsgqStruct[USB_OSA_BM_MSGQ_COUNT];
@@ -111,33 +110,15 @@ void USB_OsaMemoryFree(void *p)
     free(p);
 }
 
-void USB_BmEnterCritical(void)
+void USB_OsaEnterCritical(uint32_t *sr)
 {
-    if (0U == s_UsbBmCriticalLevel)
-    {
-#ifdef __CC_ARM
-        __disable_irq();
-#else
-        __ASM("CPSID i");
-#endif
-    }
-    s_UsbBmCriticalLevel++;
+    *sr = __get_PRIMASK();
+    __ASM("CPSID I");
 }
 
-void USB_BmExitCritical(void)
+void USB_OsaExitCritical(uint32_t sr)
 {
-    if (s_UsbBmCriticalLevel)
-    {
-        s_UsbBmCriticalLevel--;
-    }
-    if (0U == s_UsbBmCriticalLevel)
-    {
-#ifdef __CC_ARM
-        __enable_irq();
-#else
-        __ASM("CPSIE i");
-#endif
-    }
+    __set_PRIMASK(sr);
 }
 
 usb_osa_status_t USB_OsaEventCreate(usb_osa_event_handle *handle, uint32_t flag)

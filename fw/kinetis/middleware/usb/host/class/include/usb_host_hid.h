@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -91,6 +91,10 @@ typedef struct _usb_host_hid_instance
     transfer_callback_t controlCallbackFn;     /*!< HID control transfer callback function pointer*/
     void *controlCallbackParam;                /*!< HID control transfer callback parameter*/
     usb_host_transfer_t *controlTransfer;      /*!< Ongoing control transfer*/
+#if ((defined USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL) && USB_HOST_CONFIG_CLASS_AUTO_CLEAR_STALL)
+    uint8_t *stallDataBuffer; /*!< keep the data buffer for stall transfer's data*/
+    uint32_t stallDataLength; /*!< keep the data length for stall transfer's data*/
+#endif
 
     uint16_t inPacketSize;  /*!< HID interrupt in maximum packet size*/
     uint16_t outPacketSize; /*!< HID interrupt out maximum packet size*/
@@ -203,7 +207,7 @@ extern uint16_t USB_HostHidGetPacketsize(usb_host_class_handle classHandle, uint
  * @param[in] callbackFn    This callback is called after this function completes.
  * @param[in] callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.
@@ -271,7 +275,7 @@ extern usb_status_t USB_HostHidSend(usb_host_class_handle classHandle,
  * @param[in] callbackFn    This callback is called after this function completes.
  * @param[in] callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.
@@ -293,7 +297,7 @@ extern usb_status_t USB_HostHidGetIdle(usb_host_class_handle classHandle,
  * @param[in] callbackFn    This callback is called after this function completes.
  * @param[in] callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.
@@ -314,7 +318,7 @@ extern usb_status_t USB_HostHidSetIdle(usb_host_class_handle classHandle,
  * @param[in] callbackFn    This callback is called after this function completes.
  * @param[in] callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.
@@ -334,7 +338,7 @@ extern usb_status_t USB_HostHidGetProtocol(usb_host_class_handle classHandle,
  * @param[in] callbackFn    This callback is called after this function completes.
  * @param[in] callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.
@@ -357,7 +361,7 @@ extern usb_status_t USB_HostHidSetProtocol(usb_host_class_handle classHandle,
  * @param[in] callbackFn    This callback is called after this function completes.
  * @param[in] callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.
@@ -373,7 +377,7 @@ extern usb_status_t USB_HostHidGetReport(usb_host_class_handle classHandle,
 /*!
  * @brief HID set report.
  *
- * This function implements the HID class specific request (set report).
+ * This function implements the HID class-specific request (set report).
  *
  * @param[in] classHandle   The class handle.
  * @param[in] reportId      Report ID.
@@ -383,7 +387,7 @@ extern usb_status_t USB_HostHidGetReport(usb_host_class_handle classHandle,
  * @param[in] callbackFn    This callback is called after this function completes.
  * @param[in] callbackParam The first parameter in the callback function.
  *
- * @retval kStatus_USB_Success        Request successfully.
+ * @retval kStatus_USB_Success        Request successful.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           There is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSendSetup.

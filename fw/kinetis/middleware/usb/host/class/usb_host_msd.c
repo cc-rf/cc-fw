@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -245,9 +245,9 @@ static usb_status_t USB_HostMsdClearHalt(usb_host_msd_instance_t *msdInstance,
     transfer->callbackParam = msdInstance;
     transfer->transferBuffer = NULL;
     transfer->transferLength = 0;
-    transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_CLEAR_FEATURE;
+    transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_CLEAR_FEATURE;
     transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUSET_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT);
+    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT);
     transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(endpoint);
     transfer->setupPacket.wLength = 0;
     status = USB_HostSendSetup(msdInstance->hostHandle, msdInstance->controlPipe, transfer);
@@ -399,28 +399,12 @@ static void USB_HostMsdCswCallback(void *param, usb_host_transfer_t *transfer, u
         }
         else
         {
-            if (msdInstance->msdCommand.retryTime > 0)
+            /* mass reset recovery to end ufi command */
+            msdInstance->internalResetRecovery = 1;
+            msdInstance->commandStatus = kMSD_CommandErrorDone;
+            if (USB_HostMsdMassStorageReset(msdInstance, NULL, NULL) != kStatus_USB_Success)
             {
-                msdInstance->msdCommand.retryTime--; /* retry reduce when error */
-            }
-            if (msdInstance->msdCommand.retryTime > 0)
-            {
-                /* mass reset recovery to continue ufi command */
-                msdInstance->internalResetRecovery = 1;
-                if (USB_HostMsdMassStorageReset(msdInstance, NULL, NULL) != kStatus_USB_Success)
-                {
-                    USB_HostMsdCommandDone(msdInstance, kStatus_USB_Error);
-                }
-            }
-            else
-            {
-                /* mass reset recovery to continue ufi command */
-                msdInstance->internalResetRecovery = 1;
-                msdInstance->commandStatus = kMSD_CommandErrorDone;
-                if (USB_HostMsdMassStorageReset(msdInstance, NULL, NULL) != kStatus_USB_Success)
-                {
-                    USB_HostMsdCommandDone(msdInstance, kStatus_USB_Error);
-                }
+                USB_HostMsdCommandDone(msdInstance, kStatus_USB_Error);
             }
         }
     }
@@ -930,6 +914,7 @@ usb_status_t USB_HostMsdInit(usb_device_handle deviceHandle, usb_host_class_hand
 
     /* initialize msd instance */
     msdInstance->deviceHandle = deviceHandle;
+    msdInstance->interfaceHandle = NULL;
     USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetHostHandle, &infoValue);
     msdInstance->hostHandle = (usb_host_handle)infoValue;
     USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetDeviceControlPipe, &infoValue);
@@ -964,8 +949,12 @@ usb_status_t USB_HostMsdSetInterface(usb_host_class_handle classHandle,
         return kStatus_USB_InvalidHandle;
     }
 
-    USB_HostOpenDeviceInterface(msdInstance->deviceHandle,
-                                interfaceHandle); /* notify host driver the interface is open */
+    status = USB_HostOpenDeviceInterface(msdInstance->deviceHandle,
+                                         interfaceHandle); /* notify host driver the interface is open */
+    if (status != kStatus_USB_Success)
+    {
+        return status;
+    }
     msdInstance->interfaceHandle = interfaceHandle;
 
     /* cancel transfers */
@@ -1014,7 +1003,7 @@ usb_status_t USB_HostMsdSetInterface(usb_host_class_handle classHandle,
         /* initialize transfer */
         transfer->callbackFn = USB_HostMsdSetInterfaceCallback;
         transfer->callbackParam = msdInstance;
-        transfer->setupPacket.bRequest = USB_REQUSET_STANDARD_SET_INTERFACE;
+        transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
         transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
         transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
             ((usb_host_interface_t *)msdInstance->interfaceHandle)->interfaceDesc->bInterfaceNumber);

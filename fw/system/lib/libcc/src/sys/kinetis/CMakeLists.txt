@@ -3,7 +3,7 @@ set(NAME libcc_kinetis)
 add_library(
         ${NAME} STATIC
         amp.c
-        isr.c
+        isrd.c
         kinetis.c
         pit.c
         spi.c

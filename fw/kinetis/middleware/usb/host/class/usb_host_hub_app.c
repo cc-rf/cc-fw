@@ -33,6 +33,7 @@
 
 #include "usb_host.h"
 #include "usb_host_hub.h"
+#include "usb_host_hci.h"
 #include "usb_host_hub_app.h"
 #include "usb_host_devices.h"
 
@@ -103,6 +104,19 @@ void USB_HostHubControlCallback(void *param, uint8_t *data, uint32_t data_len, u
  */
 void USB_HostHubInterruptInCallback(void *param, uint8_t *data, uint32_t data_len, usb_status_t status);
 
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+
+static usb_host_hub_instance_t *USB_HostHubGetHubDeviceHandle(uint8_t parentHubNo);
+
+static usb_status_t USB_HostSendHubRequest(usb_device_handle deviceHandle,
+                                           uint8_t requestType,
+                                           uint8_t request,
+                                           uint16_t wvalue,
+                                           uint16_t windex,
+                                           host_inner_transfer_callback_t callbackFn,
+                                           void *callbackParam);
+
+#endif
 /*******************************************************************************
  * Variables
  ******************************************************************************/
@@ -110,6 +124,10 @@ void USB_HostHubInterruptInCallback(void *param, uint8_t *data, uint32_t data_le
 static usb_device_handle s_HubDeviceHandle;
 static usb_host_interface_handle s_HubInterfaceHandle;
 static usb_host_hub_global_t s_HubGlobal;
+
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+static usb_host_configuration_t *s_HubConfiguration;
+#endif
 
 /*******************************************************************************
  * Code
@@ -181,9 +199,18 @@ static void USB_HostHubProcess(usb_host_hub_instance_t *hubInstance)
 
             /* get the hub think time */
             USB_HostHelperGetPeripheralInformation(hubInstance->deviceHandle, kUSB_HostGetHubThinkTime, &tmp);
-            hubInstance->totalThinktime = tmp + (((uint32_t)hubDescriptor->whubcharacteristics[0] &
-                                                  USB_HOST_HUB_DESCRIPTOR_CHARACTERISTICS_THINK_TIME_MASK) >>
-                                                 USB_HOST_HUB_DESCRIPTOR_CHARACTERISTICS_THINK_TIME_SHIFT);
+            hubInstance->totalThinktime = tmp;
+            tmp = ((((uint32_t)hubDescriptor->whubcharacteristics[0] &
+                     USB_HOST_HUB_DESCRIPTOR_CHARACTERISTICS_THINK_TIME_MASK) >>
+                    USB_HOST_HUB_DESCRIPTOR_CHARACTERISTICS_THINK_TIME_SHIFT));
+            /*
+            00 - 8 FS bit times;
+            01 - 16 FS bit times;
+            10 - 24 FS bit times;
+            11 - 32 FS bit times;
+            */
+            tmp = (tmp + 1) << 3;
+            hubInstance->totalThinktime += tmp;
 
             /* get hub port number */
             hubInstance->portCount = hubDescriptor->bnrports;
@@ -283,6 +310,7 @@ static void USB_HostHubProcess(usb_host_hub_instance_t *hubInstance)
                     kStatus_USB_Success)
                 {
                     hubInstance->primeStatus = kPrimeHubControl;
+                    hubInstance->hubStatus = kHubRunClearDone;
                     processSuccess = 1;
                 }
                 else
@@ -297,6 +325,7 @@ static void USB_HostHubProcess(usb_host_hub_instance_t *hubInstance)
                 {
                     hubInstance->primeStatus = kPrimeHubControl;
                     processSuccess = 1;
+                    hubInstance->hubStatus = kHubRunClearDone;
                 }
                 else
                 {
@@ -307,6 +336,11 @@ static void USB_HostHubProcess(usb_host_hub_instance_t *hubInstance)
             {
                 needPrimeInterrupt = 1;
             }
+            break;
+
+        case kHubRunClearDone:
+            hubInstance->hubStatus = kHubRunIdle;
+            needPrimeInterrupt = 1;
             break;
 
         default:
@@ -539,7 +573,6 @@ static void USB_HostHubProcessPortAttach(usb_host_hub_instance_t *hubInstance)
             portInstance->resetCount = USB_HOST_HUB_PORT_RESET_TIMES;
             USB_HostHubGetInterruptStatus(hubInstance);
             break;
-
         default:
             break;
     }
@@ -558,6 +591,9 @@ static void USB_HostHubProcessPortAttach(usb_host_hub_instance_t *hubInstance)
 static void USB_HostHubProcessPortDetach(usb_host_hub_instance_t *hubInstance)
 {
     usb_host_hub_port_instance_t *portInstance = &hubInstance->portList[hubInstance->portProcess - 1];
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    usb_host_instance_t *hostPointer = (usb_host_instance_t *)hubInstance->hostHandle;
+#endif
     uint8_t processSuccess = 0;
     uint32_t specStatus;
 
@@ -566,7 +602,9 @@ static void USB_HostHubProcessPortDetach(usb_host_hub_instance_t *hubInstance)
         case kPortRunIdle:
         case kPortRunInvalid:
             break;
-
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+        case kPortRunPortSuspended:
+#endif
         case kPortRunPortAttached: /* (1) port is changed, then get port status */
             portInstance->portStatus = kPortRunCheckPortDetach;
             /* get port status */
@@ -601,11 +639,24 @@ static void USB_HostHubProcessPortDetach(usb_host_hub_instance_t *hubInstance)
                 }
                 break;
             }
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+            else if ((1 << C_PORT_SUSPEND) & specStatus)
+            {
+                /* clear C_PORT_SUSPEND */
+                if (USB_HostHubClearPortFeature(hubInstance, hubInstance->portProcess, C_PORT_SUSPEND,
+                                                USB_HostHubControlCallback, hubInstance) == kStatus_USB_Success)
+                {
+                    portInstance->portStatus = kPortRunClearCPortSuspend; /* update as next state */
+                    hubInstance->primeStatus = kPrimePortControl;
+                    processSuccess = 1;
+                    break;
+                }
+            }
+#endif
             else
             {
                 /* don't break to check CONNECTION bit */
             }
-
         case kPortRunGetConnectionBit: /* (3) get port status */
             portInstance->portStatus = kPortRunCheckConnectionBit;
             if (USB_HostHubGetPortStatus(hubInstance, hubInstance->portProcess, hubInstance->portStatusBuffer, 4,
@@ -637,6 +688,34 @@ static void USB_HostHubProcessPortDetach(usb_host_hub_instance_t *hubInstance)
                 USB_HostHubGetInterruptStatus(hubInstance);
             }
             break;
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+        case kPortRunClearCPortSuspend:
+            portInstance->portStatus = kPortRunCheckPortSuspend; /* update as next state */
+            /* get port status bits */
+            if (USB_HostHubGetPortStatus(hubInstance, hubInstance->portProcess, hubInstance->portStatusBuffer, 4,
+                                         USB_HostHubControlCallback, hubInstance) == kStatus_USB_Success)
+            {
+                hubInstance->primeStatus = kPrimePortControl;
+                processSuccess = 1;
+            }
+            break;
+        case kPortRunCheckPortSuspend:
+            specStatus = USB_LONG_FROM_LITTLE_ENDIAN_ADDRESS(hubInstance->portStatusBuffer);
+            if ((1 << PORT_SUSPEND) & specStatus)
+            {
+                portInstance->portStatus = kPortRunPortSuspended; /* update as next state */
+                hostPointer->deviceCallback(hostPointer->suspendedDevice, NULL,
+                                            kUSB_HostEventSuspended); /* call host callback function */
+            }
+            else
+            {
+                portInstance->portStatus = kPortRunPortAttached; /* update as next state */
+                hostPointer->deviceCallback(hostPointer->suspendedDevice, NULL,
+                                            kUSB_HostEventResumed); /* call host callback function */
+                hostPointer->suspendedDevice = NULL;
+            }
+            break;
+#endif
         default:
             break;
     }
@@ -678,6 +757,7 @@ static void USB_HostHubProcessData(usb_host_hub_instance_t *hubInstance)
                     {
                         hubInstance->primeStatus = kPrimeHubControl;
                         needPrimeInterrupt = 0;
+                        return; /* return replace break because the misra */
                     }
                 }
             }
@@ -739,6 +819,228 @@ void USB_HostHubControlCallback(void *param, uint8_t *data, uint32_t data_len, u
     {
     }
 }
+
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+/*!
+ * @brief get device's hub device instance.
+ *
+ * @param parent_hub_no  device's parent hub instance.
+ *
+ * @return think time value.
+ */
+static usb_host_hub_instance_t *USB_HostHubGetHubDeviceHandle(uint8_t parentHubNo)
+{
+    usb_host_hub_instance_t *hubInstance = s_HubGlobal.hubList;
+    uint32_t deviceAddress;
+
+    /* get parentHubNo's hub instance handle */
+    while (hubInstance != NULL)
+    {
+        USB_HostHelperGetPeripheralInformation(hubInstance->deviceHandle, kUSB_HostGetDeviceAddress, &deviceAddress);
+        if (parentHubNo == deviceAddress)
+        {
+            break;
+        }
+        hubInstance = hubInstance->next;
+    }
+    if (hubInstance != NULL)
+    {
+        return hubInstance;
+    }
+    return (usb_host_hub_instance_t *)NULL;
+}
+
+static void USB_HostSetHubRequestCallback(void *param, usb_host_transfer_t *transfer, usb_status_t status)
+{
+    usb_host_instance_t *hostInstance = (usb_host_instance_t *)param;
+    USB_HostFreeTransfer(param, transfer);
+
+    if (kStatus_USB_Success == status)
+    {
+        hostInstance->deviceCallback(hostInstance->suspendedDevice, NULL,
+                                     kUSB_HostEventSuspended); /* call host callback function */
+    }
+    else
+    {
+        hostInstance->deviceCallback(hostInstance->suspendedDevice, NULL,
+                                     kUSB_HostEventNotSuspended); /* call host callback function */
+    }
+}
+
+static void USB_HostClearHubRequestCallback(void *param, usb_host_transfer_t *transfer, usb_status_t status)
+{
+    USB_HostFreeTransfer(param, transfer);
+
+    if (kStatus_USB_Success == status)
+    {
+    }
+}
+
+static void USB_HostHubRemoteWakeupCallback(void *param, usb_host_transfer_t *transfer, usb_status_t status)
+{
+    usb_host_hub_instance_t *hubInstance;
+    usb_host_instance_t *hostInstance;
+    usb_host_device_instance_t *deviceInstance;
+    if (NULL == param)
+    {
+        return;
+    }
+
+    hubInstance = (usb_host_hub_instance_t *)param;
+
+    hostInstance = (usb_host_instance_t *)hubInstance->hostHandle;
+    if (NULL == hostInstance)
+    {
+        return;
+    }
+
+    USB_HostFreeTransfer(hostInstance, transfer);
+
+    if (kStatus_USB_Success != status)
+    {
+        usb_echo("Transfer failed to set remote wakeup request to HUB.\r\n");
+    }
+
+    if (kStatus_USB_Success == status)
+    {
+        hubInstance->controlRetry = USB_HOST_HUB_REMOTE_WAKEUP_TIMES;
+        hubInstance = hubInstance->next;
+        while (hubInstance)
+        {
+            hubInstance->controlRetry = USB_HOST_HUB_REMOTE_WAKEUP_TIMES;
+            if (hubInstance->supportRemoteWakeup)
+            {
+                usb_echo("Set HUB remote wakeup feature: level %d, address %d.\r\n",
+                         ((usb_host_device_instance_t *)hubInstance->deviceHandle)->level,
+                         ((usb_host_device_instance_t *)hubInstance->deviceHandle)->setAddress);
+                status = USB_HostSendHubRequest(
+                    hubInstance->deviceHandle,
+                    USB_REQUEST_TYPE_RECIPIENT_DEVICE | USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_STANDARD,
+                    USB_REQUEST_STANDARD_SET_FEATURE, USB_REQUEST_STANDARD_FEATURE_SELECTOR_DEVICE_REMOTE_WAKEUP, 0,
+                    USB_HostHubRemoteWakeupCallback, hubInstance);
+                if (kStatus_USB_Success != status)
+                {
+                    usb_echo("Send set remote wakeup request to HUB failed.\r\n");
+                }
+                break;
+            }
+            hubInstance = hubInstance->next;
+        }
+    }
+    else
+    {
+        if (hubInstance->controlRetry)
+        {
+            hubInstance->controlRetry--;
+            usb_echo("Retry...\r\n", ((usb_host_device_instance_t *)hubInstance->deviceHandle)->level,
+                     ((usb_host_device_instance_t *)hubInstance->deviceHandle)->setAddress);
+            status = USB_HostSendHubRequest(
+                hubInstance->deviceHandle,
+                USB_REQUEST_TYPE_RECIPIENT_DEVICE | USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_STANDARD,
+                USB_REQUEST_STANDARD_SET_FEATURE, USB_REQUEST_STANDARD_FEATURE_SELECTOR_DEVICE_REMOTE_WAKEUP, 0,
+                USB_HostHubRemoteWakeupCallback, hubInstance);
+            if (kStatus_USB_Success != status)
+            {
+                usb_echo("Send set remote wakeup request to HUB failed.\r\n");
+            }
+        }
+        else
+        {
+            usb_echo("Transfer failed to set remote wakeup request to HUB.\r\n");
+        }
+    }
+    if (kStatus_USB_Success != status)
+    {
+        hostInstance->deviceCallback(hostInstance->suspendedDevice, NULL,
+                                     kUSB_HostEventNotSuspended); /* call host callback function */
+        return;
+    }
+    if (NULL == hubInstance)
+    {
+        status = kStatus_USB_Error;
+        deviceInstance = (usb_host_device_instance_t *)hostInstance->suspendedDevice;
+        if (NULL == deviceInstance)
+        {
+            usb_host_bus_control_t type = kUSB_HostBusSuspend;
+            status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl,
+                                                                    &type);
+            if (kStatus_USB_Success != status)
+            {
+                usb_echo("Suspend USB BUS failed.\r\n");
+            }
+        }
+        else
+        {
+            usb_host_hub_instance_t *hubInstance4Device = USB_HostHubGetHubDeviceHandle(deviceInstance->hubNumber);
+            if (NULL != hubInstance4Device)
+            {
+                status = USB_HostSendHubRequest(
+                    hubInstance4Device->deviceHandle,
+                    USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER,
+                    USB_REQUEST_STANDARD_SET_FEATURE, PORT_SUSPEND, deviceInstance->portNumber,
+                    USB_HostSetHubRequestCallback, hostInstance);
+                if (kStatus_USB_Success != status)
+                {
+                    usb_echo("Send suspend request to HUB is failed.\r\n");
+                }
+            }
+            else
+            {
+                usb_echo("Invalid HUB instance of device.\r\n");
+            }
+        }
+        if (kStatus_USB_Success != status)
+        {
+            hostInstance->deviceCallback(hostInstance->suspendedDevice, NULL,
+                                         kUSB_HostEventNotSuspended); /* call host callback function */
+            return;
+        }
+    }
+}
+
+static usb_status_t USB_HostSendHubRequest(usb_device_handle deviceHandle,
+                                           uint8_t requestType,
+                                           uint8_t request,
+                                           uint16_t wvalue,
+                                           uint16_t windex,
+                                           host_inner_transfer_callback_t callbackFn,
+                                           void *callbackParam)
+{
+    usb_host_device_instance_t *deviceInstance = (usb_host_device_instance_t *)deviceHandle;
+    usb_host_transfer_t *transfer;
+
+    /* get transfer */
+    if (USB_HostMallocTransfer(deviceInstance->hostHandle, &transfer) != kStatus_USB_Success)
+    {
+#ifdef HOST_ECHO
+        usb_echo("error to get transfer\r\n");
+#endif
+        return kStatus_USB_Error;
+    }
+
+    /* initialize transfer */
+    transfer->transferBuffer = NULL;
+    transfer->transferLength = 0U;
+    transfer->callbackFn = callbackFn;
+    transfer->callbackParam = callbackParam;
+    transfer->setupPacket.bmRequestType = requestType;
+    transfer->setupPacket.bRequest = request;
+    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(wvalue);
+    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(windex);
+    transfer->setupPacket.wLength = USB_SHORT_TO_LITTLE_ENDIAN(0U);
+
+    /* send transfer */
+    if (USB_HostSendSetup(deviceInstance->hostHandle, deviceInstance->controlPipe, transfer) != kStatus_USB_Success)
+    {
+#ifdef HOST_ECHO
+        usb_echo("Error in sending hub set report!\r\n");
+#endif
+        USB_HostFreeTransfer(deviceInstance->hostHandle, transfer);
+        return kStatus_USB_Error;
+    }
+    return kStatus_USB_Success;
+}
+#endif
 
 void USB_HostHubInterruptInCallback(void *param, uint8_t *data, uint32_t data_len, usb_status_t status)
 {
@@ -827,6 +1129,9 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
                     /* the interface is hub */
                     s_HubDeviceHandle = deviceHandle;
                     s_HubInterfaceHandle = interface;
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+                    s_HubConfiguration = configuration;
+#endif
                     return kStatus_USB_Success;
                 }
             }
@@ -865,7 +1170,15 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
                 hubInstance->next = s_HubGlobal.hubList;
                 s_HubGlobal.hubList = hubInstance;
                 USB_HostHubUnlock();
-
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+                hubInstance->supportRemoteWakeup = 0U;
+                hubInstance->controlRetry = USB_HOST_HUB_REMOTE_WAKEUP_TIMES;
+                if (s_HubConfiguration->configurationDesc->bmAttributes &
+                    USB_DESCRIPTOR_CONFIGURE_ATTRIBUTE_REMOTE_WAKEUP_MASK)
+                {
+                    hubInstance->supportRemoteWakeup = 1U;
+                }
+#endif
                 /* set hub instance's interface */
                 if (status == kStatus_USB_Success)
                 {
@@ -1102,5 +1415,127 @@ uint32_t USB_HostHubGetTotalThinkTime(uint8_t parentHubNo)
     }
     return 0;
 }
+
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+/*!
+ * @brief Suspend the device.
+ *
+ * @param hostHandle  Host instance.
+ *
+ * @return kStatus_USB_Success or error codes.
+ *
+ */
+usb_status_t USB_HostHubSuspendDevice(usb_host_handle hostHandle)
+{
+    usb_host_instance_t *hostInstance;
+    usb_host_hub_instance_t *hubInstance = s_HubGlobal.hubList;
+    usb_status_t status = kStatus_USB_Error;
+
+    if (NULL == hostHandle)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    hostInstance = (usb_host_instance_t *)hostHandle;
+    if (NULL == hubInstance)
+    {
+        usb_host_bus_control_t type = kUSB_HostBusSuspend;
+        status =
+            hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
+        if (kStatus_USB_Success != status)
+        {
+            usb_echo("Suspend USB BUS failed.\r\n");
+        }
+        return status;
+    }
+    /* Scan HUB instance handle */
+    while (hubInstance != NULL)
+    {
+        hubInstance->controlRetry = USB_HOST_HUB_REMOTE_WAKEUP_TIMES;
+        if (hubInstance->supportRemoteWakeup)
+        {
+            usb_echo("Set HUB remote wakeup feature: level %d, address %d.\r\n",
+                     ((usb_host_device_instance_t *)hubInstance->deviceHandle)->level,
+                     ((usb_host_device_instance_t *)hubInstance->deviceHandle)->setAddress);
+            status = USB_HostSendHubRequest(
+                hubInstance->deviceHandle,
+                USB_REQUEST_TYPE_RECIPIENT_DEVICE | USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_STANDARD,
+                USB_REQUEST_STANDARD_SET_FEATURE, USB_REQUEST_STANDARD_FEATURE_SELECTOR_DEVICE_REMOTE_WAKEUP, 0,
+                USB_HostHubRemoteWakeupCallback, hubInstance);
+            break;
+        }
+        hubInstance = hubInstance->next;
+    }
+    if (NULL == hubInstance)
+    {
+        usb_host_device_instance_t *deviceInstance = (usb_host_device_instance_t *)hostInstance->suspendedDevice;
+        if (NULL == deviceInstance)
+        {
+            usb_host_bus_control_t type = kUSB_HostBusSuspend;
+            status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl,
+                                                                    &type);
+            if (kStatus_USB_Success != status)
+            {
+                usb_echo("Suspend USB BUS failed.\r\n");
+            }
+        }
+        else
+        {
+            usb_host_hub_instance_t *hubInstance4Device = USB_HostHubGetHubDeviceHandle(deviceInstance->hubNumber);
+            if (NULL != hubInstance4Device)
+            {
+                status = USB_HostSendHubRequest(
+                    hubInstance4Device->deviceHandle,
+                    USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER,
+                    USB_REQUEST_STANDARD_SET_FEATURE, PORT_SUSPEND, deviceInstance->portNumber,
+                    USB_HostSetHubRequestCallback, hostInstance);
+                if (kStatus_USB_Success != status)
+                {
+                    usb_echo("Send suspend request to HUB is failed.\r\n");
+                }
+            }
+            else
+            {
+                usb_echo("Invalid HUB instance of device.\r\n");
+            }
+        }
+    }
+    return status;
+}
+
+/*!
+ * @brief Resume the device.
+ *
+ * @param hostHandle  Host instance.
+ *
+ * @return kStatus_USB_Success or error codes.
+ *
+ */
+usb_status_t USB_HostHubResumeDevice(usb_host_handle hostHandle)
+{
+    usb_host_instance_t *hostInstance;
+    usb_host_device_instance_t *deviceInstance;
+    usb_status_t status = kStatus_USB_Error;
+
+    if (NULL == hostHandle)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    hostInstance = (usb_host_instance_t *)hostHandle;
+
+    deviceInstance = (usb_host_device_instance_t *)hostInstance->suspendedDevice;
+    if (NULL == deviceInstance)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+
+    status = USB_HostSendHubRequest(
+        USB_HostHubGetHubDeviceHandle(deviceInstance->hubNumber)->deviceHandle,
+        USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER,
+        USB_REQUEST_STANDARD_CLEAR_FEATURE, PORT_SUSPEND, deviceInstance->portNumber, USB_HostClearHubRequestCallback,
+        hostInstance);
+
+    return status;
+}
+#endif
 
 #endif /* USB_HOST_CONFIG_HUB */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -41,7 +41,14 @@
 /*******************************************************************************
  * Prototypes
  ******************************************************************************/
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+
 extern uint32_t USB_HostHubGetTotalThinkTime(uint8_t parentHubNo);
+
+extern usb_status_t USB_HostHubSuspendDevice(usb_host_handle hostHandle);
+
+extern usb_status_t USB_HostHubResumeDevice(usb_host_handle hostHandle);
+#endif
 
 /*!
  * @brief get the idle host instance.
@@ -112,8 +119,10 @@ static const usb_host_controller_interface_t s_KhciInterface = \
 *END*--------------------------------------------------------------------*/
 usb_status_t USB_HostTestModeInit(usb_device_handle deviceHandle)
 {
+#if ((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI))
     usb_host_device_instance_t *deviceInstance = (usb_host_device_instance_t *)deviceHandle;
     usb_host_instance_t *hostInstance = (usb_host_instance_t *)deviceInstance->hostHandle;
+#endif
     uint32_t productId;
     uint32_t vendorId;
 
@@ -126,7 +135,7 @@ usb_status_t USB_HostTestModeInit(usb_device_handle deviceHandle)
         (productId != 0x0104) && (productId != 0x0105) && (productId != 0x0106) && (productId != 0x0107) &&
         (productId != 0x0108))
     {
-        usb_echo("device not supported\r\n");
+        usb_echo("Unsupported Device\r\n");
     }
 
     if (productId == 0x0200U)
@@ -396,7 +405,7 @@ usb_status_t USB_HostSendSetup(usb_host_handle hostHandle,
     transfer->transferSofar = 0;
     transfer->next = NULL;
     transfer->setupStatus = 0;
-    if ((transfer->setupPacket.bmRequestType & USB_REQUSET_TYPE_DIR_MASK) == USB_REQUEST_TYPE_DIR_IN)
+    if ((transfer->setupPacket.bmRequestType & USB_REQUEST_TYPE_DIR_MASK) == USB_REQUEST_TYPE_DIR_IN)
     {
         transfer->direction = USB_IN;
     }
@@ -610,6 +619,18 @@ usb_status_t USB_HostHelperGetPeripheralInformation(usb_device_handle deviceHand
             *infoValue = (uint32_t)USB_SHORT_FROM_LITTLE_ENDIAN_ADDRESS(deviceInstance->deviceDescriptor.idVendor);
             break;
 
+        case kUSB_HostGetDeviceConfigIndex: /* device config index */
+            *infoValue = (uint32_t)deviceInstance->configurationValue - 1U;
+            break;
+
+        case kUSB_HostGetConfigurationDes: /* configuration descriptor pointer */
+            *infoValue = (uint32_t)deviceInstance->configurationDesc;
+            break;
+
+        case kUSB_HostGetConfigurationLength: /* configuration descriptor length */
+            *infoValue = (uint32_t)deviceInstance->configurationLen;
+            break;
+
         default:
             return kStatus_USB_Error;
     }
@@ -752,3 +773,129 @@ void USB_HostGetVersion(uint32_t *version)
             (uint32_t)USB_MAKE_VERSION(USB_STACK_VERSION_MAJOR, USB_STACK_VERSION_MINOR, USB_STACK_VERSION_BUGFIX);
     }
 }
+
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+/* Send BUS or specific device suepend request */
+usb_status_t USB_HostSuspendDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle)
+{
+    usb_host_instance_t *hostInstance;
+    usb_host_device_instance_t *deviceInstance;
+    usb_status_t status = kStatus_USB_Error;
+    usb_host_bus_control_t type = kUSB_HostBusSuspend;
+
+    if (hostHandle == NULL)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    hostInstance = (usb_host_instance_t *)hostHandle;
+
+    hostInstance->suspendedDevice = (void *)deviceHandle;
+
+    if (NULL == deviceHandle)
+    {
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+        status = USB_HostHubSuspendDevice(hostInstance);
+#else
+        status =
+            hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
+#endif
+    }
+    else
+    {
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+        deviceInstance = (usb_host_device_instance_t *)deviceHandle;
+        if (0 == deviceInstance->hubNumber)
+        {
+#endif
+            if (hostInstance->deviceList == deviceHandle)
+            {
+                status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle,
+                                                                        kUSB_HostBusControl, &type);
+            }
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+        }
+        else
+        {
+            if (kStatus_USB_Success == USB_HostValidateDevice(hostInstance, deviceHandle))
+            {
+                status = USB_HostHubSuspendDevice(hostInstance);
+            }
+        }
+#endif
+    }
+    if (kStatus_USB_Error == status)
+    {
+        hostInstance->suspendedDevice = NULL;
+    }
+    return status;
+}
+
+/* Send BUS or specific device resume request */
+usb_status_t USB_HostResumeDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle)
+{
+    usb_host_instance_t *hostInstance;
+    usb_host_device_instance_t *deviceInstance;
+    usb_status_t status = kStatus_USB_Error;
+    usb_host_bus_control_t type = kUSB_HostBusResume;
+
+    if (hostHandle == NULL)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    hostInstance = (usb_host_instance_t *)hostHandle;
+
+    if (hostInstance->suspendedDevice != deviceHandle)
+    {
+        return kStatus_USB_InvalidParameter;
+    }
+    hostInstance->suspendedDevice = (void *)deviceHandle;
+
+    if (NULL == deviceHandle)
+    {
+        status =
+            hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
+    }
+    else
+    {
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+        deviceInstance = (usb_host_device_instance_t *)deviceHandle;
+        if (0 == deviceInstance->hubNumber)
+        {
+#endif
+            if (hostInstance->deviceList == deviceHandle)
+            {
+                status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle,
+                                                                        kUSB_HostBusControl, &type);
+            }
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+        }
+        else
+        {
+            if (kStatus_USB_Success == USB_HostValidateDevice(hostInstance, deviceHandle))
+            {
+                status = USB_HostHubResumeDevice(hostInstance);
+            }
+        }
+#endif
+    }
+
+    return status;
+}
+
+/* Update HW tick(unit is ms) */
+usb_status_t USB_HostUpdateHwTick(usb_host_handle hostHandle, uint64_t tick)
+{
+    usb_host_instance_t *hostInstance;
+    usb_status_t status = kStatus_USB_Success;
+
+    if (hostHandle == NULL)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    hostInstance = (usb_host_instance_t *)hostHandle;
+
+    hostInstance->hwTick = tick;
+
+    return status;
+}
+#endif

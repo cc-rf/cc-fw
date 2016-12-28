@@ -57,8 +57,11 @@
 /*! @brief EHCI state structure */
 typedef struct _usb_device_ehci_state_struct
 {
-    usb_device_struct_t *deviceHandle;     /*!< Device handle used to identify the device object is belonged to */
-    USBHS_Type *registerBase;              /*!< The base address of the register */
+    usb_device_struct_t *deviceHandle; /*!< Device handle used to identify the device object is belonged to */
+    USBHS_Type *registerBase;          /*!< The base address of the register */
+#if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
+    USBPHY_Type *registerPhyBase; /*!< The base address of the PHY register */
+#endif
     usb_device_ehci_qh_struct_t *qh;       /*!< The QH structure base address */
     usb_device_ehci_dtd_struct_t *dtd;     /*!< The DTD structure base address */
     usb_device_ehci_dtd_struct_t *dtdFree; /*!< The idle DTD list head */
@@ -125,12 +128,14 @@ usb_status_t USB_DeviceEhciDeinit(usb_device_controller_handle ehciHandle);
  *
  * @return A USB error code or kStatus_USB_Success.
  *
- * @note The return value means whether the sending request is successful or not. The transfer completion is indicated by the
+ * @note The return value means whether the sending request is successful or not. The transfer completion is indicated
+ * by the
  * corresponding callback function.
  * Currently, only one transfer request can be supported for a specific endpoint.
  * If there is a specific requirement to support multiple transfer requests for a specific endpoint, the application
  * should implement a queue in the application level.
- * The subsequent transfer can begin only when the previous transfer is done (a notification is received through the endpoint
+ * The subsequent transfer can begin only when the previous transfer is done (a notification is received through the
+ * endpoint
  * callback).
  */
 usb_status_t USB_DeviceEhciSend(usb_device_controller_handle ehciHandle,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -60,11 +60,10 @@ static usb_status_t USB_DeviceKhciEndpointStall(usb_device_khci_state_struct_t *
 static usb_status_t USB_DeviceKhciEndpointUnstall(usb_device_khci_state_struct_t *khciState, uint8_t ep);
 static void USB_DeviceKhciInterruptTokenDone(usb_device_khci_state_struct_t *khciState);
 static void USB_DeviceKhciInterruptReset(usb_device_khci_state_struct_t *khciState);
-#if ((defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U)) || \
-     (defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U)))
+#if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
 static void USB_DeviceKhciInterruptSleep(usb_device_khci_state_struct_t *khciState);
 static void USB_DeviceKhciInterruptResume(usb_device_khci_state_struct_t *khciState);
-#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE || USB_DEVICE_CONFIG_REMOTE_WAKEUP */
+#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 static void USB_DeviceKhciInterruptStall(usb_device_khci_state_struct_t *khciState);
 #if defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING > 0U)
 static void USB_DeviceKhciInterruptError(usb_device_khci_state_struct_t *khciState);
@@ -77,7 +76,7 @@ extern usb_status_t USB_DeviceNotificationTrigger(void *handle, void *msg);
  ******************************************************************************/
 
 /* Apply for BDT buffer, 512-byte alignment */
-USB_RAM_ADDRESS_ALGINMENT_512 USB_BDT static uint8_t s_UsbDeviceKhciBdtBuffer[USB_DEVICE_CONFIG_KHCI][512U];
+USB_BDT USB_RAM_ADDRESS_ALIGNMENT(512) static uint8_t s_UsbDeviceKhciBdtBuffer[USB_DEVICE_CONFIG_KHCI][512U];
 
 /* Apply for khci device state structure */
 USB_GLOBAL static usb_device_khci_state_struct_t s_UsbDeviceKhciState[USB_DEVICE_CONFIG_KHCI];
@@ -145,10 +144,9 @@ static void USB_DeviceKhciPrimeNextSetup(usb_device_khci_state_struct_t *khciSta
 {
 /* Update the endpoint state */
 /* Save the buffer address used to receive the setup packet. */
-#if defined(FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED) && (FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED > 0U) \
-&& defined(USB_DEVICE_CONFIG_KEEP_ALIVE_MODE) &&                                         \
-    (USB_DEVICE_CONFIG_KEEP_ALIVE_MODE > 0U) && defined(FSL_FEATURE_USB_KHCI_USB_RAM) && \
-    (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
+#if defined(FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED) && (FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED > 0U) && \
+    defined(USB_DEVICE_CONFIG_KEEP_ALIVE_MODE) && (USB_DEVICE_CONFIG_KEEP_ALIVE_MODE > 0U) &&             \
+    defined(FSL_FEATURE_USB_KHCI_USB_RAM) && (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
     /* In case of lowpower mode enabled, it requires to put the setup packet buffer(16 bytes) into the USB RAM so
      * that the setup packet would wake up the USB.
      */
@@ -226,11 +224,10 @@ static void USB_DeviceKhciSetDefaultState(usb_device_khci_state_struct_t *khciSt
 #endif
                     | kUSB_KhciInterruptTokenDone | kUSB_KhciInterruptStall;
 
-#if ((defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U)) || \
-     (defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U)))
+#if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
     /* Enable suspend interruprt */
     interruptFlag |= kUSB_KhciInterruptSleep;
-#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE || USB_DEVICE_CONFIG_REMOTE_WAKEUP */
+#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 
 #if defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING > 0U)
     /* Enable error interruprt */
@@ -289,6 +286,8 @@ static usb_status_t USB_DeviceKhciEndpointInit(usb_device_khci_state_struct_t *k
     khciState->endpointState[index].stateUnion.stateBitField.data0 = 0U;
     /* Clear the endpoint stalled state */
     khciState->endpointState[index].stateUnion.stateBitField.stalled = 0U;
+    /* Set the ZLT field */
+    khciState->endpointState[index].stateUnion.stateBitField.zlt = epInit->zlt;
     /* Enable the endpoint. */
     khciState->registerBase->ENDPOINT[endpoint].ENDPT |=
         (USB_IN == direction) ? USB_ENDPT_EPTXEN_MASK : USB_ENDPT_EPRXEN_MASK;
@@ -433,6 +432,7 @@ static void USB_DeviceKhciInterruptTokenDone(usb_device_khci_state_struct_t *khc
     uint32_t control;
     uint32_t length;
     uint32_t remainingLength;
+    uint8_t *bdtBuffer;
     usb_device_callback_message_struct_t message;
     uint8_t endpoint;
     uint8_t direction;
@@ -455,6 +455,9 @@ static void USB_DeviceKhciInterruptTokenDone(usb_device_khci_state_struct_t *khc
 
     /* Get the Control field of the BDT element according to the endpoint number, the direction and finished BDT ODD. */
     control = USB_KHCI_BDT_GET_CONTROL((uint32_t)khciState->bdt, endpoint, direction, bdtOdd);
+
+    /* Get the buffer field of the BDT element according to the endpoint number, the direction and finished BDT ODD. */
+    bdtBuffer = (uint8_t *)USB_KHCI_BDT_GET_ADDRESS((uint32_t)khciState->bdt, endpoint, direction, bdtOdd);
 
     /* Get the transferred length. */
     length = ((USB_LONG_FROM_LITTLE_ENDIAN(control)) >> 16U) & 0x3FFU;
@@ -507,21 +510,32 @@ static void USB_DeviceKhciInterruptTokenDone(usb_device_khci_state_struct_t *khc
              * Whether need to send ZLT when the pipe is control in pipe and the transferred length of current
              * transaction equals to max packet size.
              */
-            if ((length == khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize) &&
-                (USB_CONTROL_ENDPOINT == endpoint))
+            if ((length) && (!(length % khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize)))
             {
-                usb_setup_struct_t *setup_packet =
-                    (usb_setup_struct_t
-                         *)(&khciState->setupPacketBuffer[(USB_SETUP_PACKET_SIZE * khciState->setupBufferIndex)]);
-                /*
-                 * Send the ZLT and terminate the token done interrupt service when the tranferred length in data phase
-                 * is less than the host request.
-                 */
-                if (USB_SHORT_FROM_LITTLE_ENDIAN(setup_packet->wLength) >
-                    khciState->endpointState[index].transferLength)
+                if (USB_CONTROL_ENDPOINT == endpoint)
                 {
-                    (void)USB_DeviceSendRequest(khciState->deviceHandle, endpoint, (uint8_t *)NULL, 0U);
+                    usb_setup_struct_t *setup_packet =
+                        (usb_setup_struct_t
+                             *)(&khciState->setupPacketBuffer[(USB_SETUP_PACKET_SIZE * khciState->setupBufferIndex)]);
+                    /*
+                     * Send the ZLT and terminate the token done interrupt service when the tranferred length in data
+                     * phase
+                     * is less than the host request.
+                     */
+                    if (USB_SHORT_FROM_LITTLE_ENDIAN(setup_packet->wLength) >
+                        khciState->endpointState[index].transferLength)
+                    {
+                        (void)USB_DeviceKhciEndpointTransfer(khciState, endpoint, USB_IN, (uint8_t *)NULL, 0U);
+                        return;
+                    }
+                }
+                else if (khciState->endpointState[index].stateUnion.stateBitField.zlt)
+                {
+                    (void)USB_DeviceKhciEndpointTransfer(khciState, endpoint, USB_IN, (uint8_t *)NULL, 0U);
                     return;
+                }
+                else
+                {
                 }
             }
         }
@@ -566,8 +580,6 @@ static void USB_DeviceKhciInterruptTokenDone(usb_device_khci_state_struct_t *khc
 
             if ((USB_CONTROL_ENDPOINT == endpoint) && isSetup)
             {
-                USB_DeviceKhciCancel(khciState,
-                                     (endpoint | (USB_IN << USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_SHIFT)));
                 khciState->endpointState[(USB_CONTROL_ENDPOINT << 1U) | USB_OUT].stateUnion.stateBitField.data0 = 1U;
                 khciState->endpointState[(USB_CONTROL_ENDPOINT << 1U) | USB_IN].stateUnion.stateBitField.data0 = 1U;
             }
@@ -580,7 +592,14 @@ static void USB_DeviceKhciInterruptTokenDone(usb_device_khci_state_struct_t *khc
                 (khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize > length))
             {
                 message.length = khciState->endpointState[index].transferDone;
-                message.buffer = khciState->endpointState[index].transferBuffer;
+                if (isSetup)
+                {
+                    message.buffer = bdtBuffer;
+                }
+                else
+                {
+                    message.buffer = khciState->endpointState[index].transferBuffer;
+                }
                 khciState->endpointState[index].stateUnion.stateBitField.transferring = 0U;
             }
             else
@@ -619,6 +638,11 @@ static void USB_DeviceKhciInterruptReset(usb_device_khci_state_struct_t *khciSta
 
     /* Clear the reset interrupt */
     khciState->registerBase->ISTAT = (kUSB_KhciInterruptReset);
+#if ((defined(USB_DEVICE_CONFIG_LOW_POWER_MODE)) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
+    /* Clear the suspend interrupt */
+    khciState->registerBase->ISTAT = (kUSB_KhciInterruptSleep);
+    khciState->registerBase->USBCTRL &= ~USB_USBCTRL_SUSP_MASK;
+#endif
 
     message.buffer = (uint8_t *)NULL;
     message.code = kUSB_DeviceNotifyBusReset;
@@ -630,8 +654,7 @@ static void USB_DeviceKhciInterruptReset(usb_device_khci_state_struct_t *khciSta
 
 /* The USB suspend and resume signals need to be detected and handled when the low power or remote wakeup function
  * enabled. */
-#if ((defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U)) || \
-     (defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U)))
+#if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
 
 /*!
  * @brief Handle the suspend interrupt.
@@ -647,8 +670,10 @@ static void USB_DeviceKhciInterruptSleep(usb_device_khci_state_struct_t *khciSta
 
     /* Enable the resume interrupt */
     khciState->registerBase->INTEN |= kUSB_KhciInterruptResume;
+    khciState->registerBase->USBTRC0 |= USB_USBTRC0_USBRESMEN_MASK;
+    khciState->registerBase->USBCTRL |= USB_USBCTRL_SUSP_MASK;
     /* Disable the suspend interrupt */
-    khciState->registerBase->INTEN &= ~kUSB_KhciInterruptSleep;
+    khciState->registerBase->INTEN &= ~((uint32_t)kUSB_KhciInterruptSleep);
 
     /* Clear the suspend interrupt */
     khciState->registerBase->ISTAT = (kUSB_KhciInterruptSleep);
@@ -676,10 +701,12 @@ static void USB_DeviceKhciInterruptResume(usb_device_khci_state_struct_t *khciSt
 {
     usb_device_callback_message_struct_t message;
 
+    khciState->registerBase->USBCTRL &= ~USB_USBCTRL_SUSP_MASK;
     /* Enable the suspend interrupt */
     khciState->registerBase->INTEN |= kUSB_KhciInterruptSleep;
     /* Disable the resume interrupt */
-    khciState->registerBase->INTEN &= ~kUSB_KhciInterruptResume;
+    khciState->registerBase->INTEN &= ~((uint32_t)kUSB_KhciInterruptResume);
+    khciState->registerBase->USBTRC0 &= ~USB_USBTRC0_USBRESMEN_MASK;
 
     /* Clear the resume interrupt */
     khciState->registerBase->ISTAT = (kUSB_KhciInterruptResume);
@@ -694,7 +721,7 @@ static void USB_DeviceKhciInterruptResume(usb_device_khci_state_struct_t *khciSt
     /* Notify up layer the USB resume signal detected. */
     USB_DeviceNotificationTrigger(khciState->deviceHandle, &message);
 }
-#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE || USB_DEVICE_CONFIG_REMOTE_WAKEUP */
+#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 
 #if (defined(USB_DEVICE_CONFIG_DETACH_ENABLE) && (USB_DEVICE_CONFIG_DETACH_ENABLE > 0U)) && \
     (defined(FSL_FEATURE_USB_KHCI_VBUS_DETECT_ENABLED) && (FSL_FEATURE_USB_KHCI_VBUS_DETECT_ENABLED > 0U))
@@ -779,7 +806,10 @@ void USB_DeviceKhciInterruptSof(usb_device_khci_state_struct_t *khciState)
 static void USB_DeviceKhciInterruptStall(usb_device_khci_state_struct_t *khciState)
 {
     /* Clear the endpoint stalled interrupt flag */
-    khciState->registerBase->ISTAT = (kUSB_KhciInterruptStall);
+    while (khciState->registerBase->ISTAT & (kUSB_KhciInterruptStall))
+    {
+        khciState->registerBase->ISTAT = (kUSB_KhciInterruptStall);
+    }
 
     /* Un-stall the control in and out pipe when the control in or out pipe stalled. */
     if ((khciState->endpointState[(USB_CONTROL_ENDPOINT << 1U) | USB_IN].stateUnion.stateBitField.stalled) ||
@@ -843,8 +873,12 @@ usb_status_t USB_DeviceKhciInit(uint8_t controllerId,
     /* Clear all interrupt flags. */
     khciState->registerBase->ISTAT = 0xFFU;
 
+#if (defined(USB_DEVICE_CONFIG_OTG) && (USB_DEVICE_CONFIG_OTG))
+    khciState->otgStatus = 0U;
+#else
     /* Disable the device functionality. */
     USB_DeviceKhciControl(khciState, kUSB_DeviceControlStop, NULL);
+#endif
 
     khciState->bdt = s_UsbDeviceKhciBdtBuffer[controllerId - kUSB_ControllerKhci0];
 
@@ -858,18 +892,15 @@ usb_status_t USB_DeviceKhciInit(uint8_t controllerId,
     khciState->registerBase->MISCCTRL |= USB_MISCCTRL_VREDG_EN_MASK | USB_MISCCTRL_VFEDG_EN_MASK;
 #endif
 
-#if defined(FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED) && (FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED > 0U) \
-&& defined(USB_DEVICE_CONFIG_KEEP_ALIVE_MODE) &&                                         \
-    (USB_DEVICE_CONFIG_KEEP_ALIVE_MODE > 0U) && defined(FSL_FEATURE_USB_KHCI_USB_RAM) && \
-    (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
+#if defined(FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED) && (FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED > 0U) && \
+    defined(USB_DEVICE_CONFIG_KEEP_ALIVE_MODE) && (USB_DEVICE_CONFIG_KEEP_ALIVE_MODE > 0U) &&             \
+    defined(FSL_FEATURE_USB_KHCI_USB_RAM) && (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
     khciState->registerBase->CLK_RECOVER_CTRL |= USB_CLK_RECOVER_CTRL_CLOCK_RECOVER_EN_MASK;
     khciState->registerBase->KEEP_ALIVE_CTRL =
         USB_KEEP_ALIVE_CTRL_KEEP_ALIVE_EN_MASK | USB_KEEP_ALIVE_CTRL_OWN_OVERRD_EN_MASK |
-        USB_KEEP_ALIVE_CTRL_STOP_ACK_DLY_EN_MASK | USB_KEEP_ALIVE_CTRL_AHB_DLY_EN_MASK |
-        USB_KEEP_ALIVE_CTRL_WAKE_INT_EN_MASK;
+        USB_KEEP_ALIVE_CTRL_WAKE_INT_EN_MASK | FSL_FEATURE_USB_KHCI_KEEP_ALIVE_MODE_CONTROL;
     /* wake on out and setup transaction */
     khciState->registerBase->KEEP_ALIVE_WKCTRL = 0x1U;
-    MCG->MC |= MCG_MC_HIRCLPEN_MASK;
     PMC->REGSC |= PMC_REGSC_BGEN_MASK | PMC_REGSC_VLPO_MASK;
 #endif
     /* Set KHCI device state to default value. */
@@ -1003,45 +1034,45 @@ usb_status_t USB_DeviceKhciRecv(usb_device_controller_handle khciHandle,
     uint32_t index = ((endpointAddress & USB_ENDPOINT_NUMBER_MASK) << 1U) | USB_OUT;
     usb_status_t error = kStatus_USB_Error;
 
-    /* Save the tansfer information */
-    if (0U == khciState->endpointState[index].stateUnion.stateBitField.transferring)
-    {
-        khciState->endpointState[index].transferDone = 0U;
-        khciState->endpointState[index].transferBuffer = buffer;
-        khciState->endpointState[index].transferLength = length;
-    }
-    khciState->endpointState[index].stateUnion.stateBitField.dmaAlign = 1U;
-
-    /* Data length needs to less than max packet size in each call. */
-    if (length > khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize)
-    {
-        length = khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize;
-    }
-
-    buffer = (uint8_t *)((uint32_t)buffer + (uint32_t)khciState->endpointState[index].transferDone);
-
-    if ((khciState->dmaAlignBuffer) && (0U == khciState->isDmaAlignBufferInusing) &&
-        (USB_DEVICE_CONFIG_KHCI_DMA_ALIGN_BUFFER_LENGTH >= length) &&
-        ((length & 0x03U) || (((uint32_t)buffer) & 0x03U)))
-    {
-        khciState->endpointState[index].stateUnion.stateBitField.dmaAlign = 0U;
-        buffer = khciState->dmaAlignBuffer;
-        khciState->isDmaAlignBufferInusing = 1U;
-    }
-
-    /* Receive data when the device is not resetting. */
-    if (0U == khciState->isResetting)
-    {
-        error = USB_DeviceKhciEndpointTransfer(khciState, endpointAddress & USB_ENDPOINT_NUMBER_MASK, USB_OUT, buffer,
-                                               length);
-    }
-
-    /* Prime a transfer to receive next setup packet if the dat length is zero in a control out endpoint. */
     if ((0U == length) && (USB_CONTROL_ENDPOINT == (endpointAddress & USB_ENDPOINT_NUMBER_MASK)))
     {
-        khciState->endpointState[index].stateUnion.stateBitField.bdtOdd ^= 1U;
         khciState->endpointState[index].stateUnion.stateBitField.transferring = 0U;
         USB_DeviceKhciPrimeNextSetup(khciState);
+    }
+    else
+    {
+        /* Save the tansfer information */
+        if (0U == khciState->endpointState[index].stateUnion.stateBitField.transferring)
+        {
+            khciState->endpointState[index].transferDone = 0U;
+            khciState->endpointState[index].transferBuffer = buffer;
+            khciState->endpointState[index].transferLength = length;
+        }
+        khciState->endpointState[index].stateUnion.stateBitField.dmaAlign = 1U;
+
+        /* Data length needs to less than max packet size in each call. */
+        if (length > khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize)
+        {
+            length = khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize;
+        }
+
+        buffer = (uint8_t *)((uint32_t)buffer + (uint32_t)khciState->endpointState[index].transferDone);
+
+        if ((khciState->dmaAlignBuffer) && (0U == khciState->isDmaAlignBufferInusing) &&
+            (USB_DEVICE_CONFIG_KHCI_DMA_ALIGN_BUFFER_LENGTH >= length) &&
+            ((length & 0x03U) || (((uint32_t)buffer) & 0x03U)))
+        {
+            khciState->endpointState[index].stateUnion.stateBitField.dmaAlign = 0U;
+            buffer = khciState->dmaAlignBuffer;
+            khciState->isDmaAlignBufferInusing = 1U;
+        }
+
+        /* Receive data when the device is not resetting. */
+        if (0U == khciState->isResetting)
+        {
+            error = USB_DeviceKhciEndpointTransfer(khciState, endpointAddress & USB_ENDPOINT_NUMBER_MASK, USB_OUT,
+                                                   buffer, length);
+        }
     }
     return error;
 }
@@ -1090,17 +1121,22 @@ usb_status_t USB_DeviceKhciCancel(usb_device_controller_handle khciHandle, uint8
 usb_status_t USB_DeviceKhciControl(usb_device_controller_handle khciHandle, usb_device_control_type_t type, void *param)
 {
     usb_device_khci_state_struct_t *khciState = (usb_device_khci_state_struct_t *)khciHandle;
-    usb_status_t error = kStatus_USB_Error;
     uint16_t *temp16;
     uint8_t *temp8;
-#if defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U)
-    USB_OSA_SR_ALLOC();
-#endif /* USB_DEVICE_CONFIG_REMOTE_WAKEUP */
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+    usb_device_struct_t *deviceHandle;
+    uint64_t startTick;
+#endif
+    usb_status_t error = kStatus_USB_Error;
 
     if (!khciHandle)
     {
         return kStatus_USB_InvalidHandle;
     }
+
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+    deviceHandle = (usb_device_struct_t *)khciState->deviceHandle;
+#endif
 
     switch (type)
     {
@@ -1158,9 +1194,12 @@ usb_status_t USB_DeviceKhciControl(usb_device_controller_handle khciHandle, usb_
             if (param)
             {
                 temp16 = (uint16_t *)param;
-                *temp16 =
-                    (USB_DEVICE_CONFIG_SELF_POWER << (USB_REQUSET_STANDARD_GET_STATUS_DEVICE_SELF_POWERED_SHIFT)) |
-                    (USB_DEVICE_CONFIG_REMOTE_WAKEUP << (USB_REQUSET_STANDARD_GET_STATUS_DEVICE_REMOTE_WARKUP_SHIFT));
+                *temp16 = (USB_DEVICE_CONFIG_SELF_POWER << (USB_REQUEST_STANDARD_GET_STATUS_DEVICE_SELF_POWERED_SHIFT))
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+                          | ((uint16_t)(((uint32_t)deviceHandle->remotewakeup)
+                                        << (USB_REQUEST_STANDARD_GET_STATUS_DEVICE_REMOTE_WARKUP_SHIFT)))
+#endif
+                    ;
                 error = kStatus_USB_Success;
             }
             break;
@@ -1195,19 +1234,23 @@ usb_status_t USB_DeviceKhciControl(usb_device_controller_handle khciHandle, usb_
             break;
         case kUSB_DeviceControlGetSynchFrame:
             break;
-        case kUSB_DeviceControlResume:
+#if ((defined(USB_DEVICE_CONFIG_LOW_POWER_MODE)) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
 #if defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U)
-            USB_OSA_ENTER_CRITICAL();
+        case kUSB_DeviceControlResume:
             khciState->registerBase->CTL |= USB_CTL_RESUME_MASK;
-            for (uint32_t i = 500U; i > 0U; i--)
+            startTick = deviceHandle->hwTick;
+            while ((deviceHandle->hwTick - startTick) < 10)
             {
                 __ASM("nop");
             }
             khciState->registerBase->CTL &= ~USB_CTL_RESUME_MASK;
-            USB_OSA_EXIT_CRITICAL();
             error = kStatus_USB_Success;
-#endif /* USB_DEVICE_CONFIG_REMOTE_WAKEUP */
             break;
+#endif /* USB_DEVICE_CONFIG_REMOTE_WAKEUP */
+        case kUSB_DeviceControlSuspend:
+            error = kStatus_USB_Success;
+            break;
+#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
         case kUSB_DeviceControlSetDefaultStatus:
             for (uint8_t count = 0U; count < USB_DEVICE_CONFIG_ENDPOINTS; count++)
             {
@@ -1225,10 +1268,14 @@ usb_status_t USB_DeviceKhciControl(usb_device_controller_handle khciHandle, usb_
                 error = kStatus_USB_Success;
             }
             break;
+#if (defined(USB_DEVICE_CONFIG_OTG) && (USB_DEVICE_CONFIG_OTG))
         case kUSB_DeviceControlGetOtgStatus:
+            *((uint8_t *)param) = khciState->otgStatus;
             break;
         case kUSB_DeviceControlSetOtgStatus:
+            khciState->otgStatus = *((uint8_t *)param);
             break;
+#endif
         case kUSB_DeviceControlSetTestMode:
             break;
         default:
@@ -1260,10 +1307,9 @@ void USB_DeviceKhciIsrFunction(void *deviceHandle)
     khciState = (usb_device_khci_state_struct_t *)(handle->controllerHandle);
 
     status = khciState->registerBase->ISTAT;
-#if defined(FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED) && (FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED > 0U) \
-&& defined(USB_DEVICE_CONFIG_KEEP_ALIVE_MODE) &&                                         \
-    (USB_DEVICE_CONFIG_KEEP_ALIVE_MODE > 0U) && defined(FSL_FEATURE_USB_KHCI_USB_RAM) && \
-    (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
+#if defined(FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED) && (FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED > 0U) && \
+    defined(USB_DEVICE_CONFIG_KEEP_ALIVE_MODE) && (USB_DEVICE_CONFIG_KEEP_ALIVE_MODE > 0U) &&             \
+    defined(FSL_FEATURE_USB_KHCI_USB_RAM) && (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
     /* Clear EEP_ALIVE_CTRL_WAKE_INT interrupt state */
     if (khciState->registerBase->KEEP_ALIVE_CTRL & USB_KEEP_ALIVE_CTRL_WAKE_INT_STS_MASK)
     {
@@ -1294,8 +1340,7 @@ void USB_DeviceKhciIsrFunction(void *deviceHandle)
         USB_DeviceKhciInterruptReset(khciState);
     }
 
-#if ((defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U)) || \
-     (defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U)))
+#if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
     /* Suspend interrupt */
     if (status & kUSB_KhciInterruptSleep)
     {
@@ -1307,7 +1352,12 @@ void USB_DeviceKhciIsrFunction(void *deviceHandle)
     {
         USB_DeviceKhciInterruptResume(khciState);
     }
-#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE || USB_DEVICE_CONFIG_REMOTE_WAKEUP */
+
+    if (khciState->registerBase->USBTRC0 & USB_USBTRC0_USB_RESUME_INT_MASK)
+    {
+        USB_DeviceKhciInterruptResume(khciState);
+    }
+#endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 
     /* Endpoint stalled interrupt */
     if (status & kUSB_KhciInterruptStall)

@@ -40,6 +40,11 @@
 /*! @brief HUB reset times*/
 #define USB_HOST_HUB_PORT_RESET_TIMES (1)
 
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+/*! @brief HUB Control transcation retry times for remote wakeup*/
+#define USB_HOST_HUB_REMOTE_WAKEUP_TIMES (3U)
+#endif
+
 /*! @brief HUB lock */
 #define USB_HostHubLock() USB_OsaMutexLock(s_HubGlobal.hubMutex)
 /*! @brief HUB unlock */
@@ -64,6 +69,7 @@ typedef enum _usb_host_hub_app_status
     kHubRunGetDescriptor,    /*!< Get all HUB descriptor */
     kHubRunSetPortPower,     /*!< Set HUB's port power */
     kHubRunGetStatusDone,    /*!< HUB status changed */
+    kHubRunClearDone,        /*!< clear HUB feature callback */
 } usb_host_hub_app_status_t;
 
 /*! @brief HUB port application status */
@@ -83,6 +89,11 @@ typedef enum _usb_host_port_app_status
     kPortRunCheckPortDetach,      /*!< Check port is detached */
     kPortRunGetConnectionBit,     /*!< Get the port status data */
     kPortRunCheckConnectionBit,   /*!< Check PORT_CONNECTION */
+#if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
+    kPortRunClearCPortSuspend, /*!< Clear C_PORT_SUSPEND */
+    kPortRunCheckPortSuspend,  /*!< Check PORT_SUSPEND */
+    kPortRunPortSuspended,     /*!< Port is suspended */
+#endif
 } usb_host_port_app_status_t;
 
 /*! @brief HUB data prime status */

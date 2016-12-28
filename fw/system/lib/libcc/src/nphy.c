@@ -1,7 +1,7 @@
 #include <cc/phy.h>
 #include <cc/io.h>
 #include <cc/cfg.h>
-#include <cc/isr.h>
+
 #include <cc/spi.h>
 #include <alloca.h>
 #include <string.h>
@@ -14,6 +14,12 @@
 #include <malloc.h>
 #include <cc/freq.h>
 
+
+#include <cc/sys/kinetis/isrd.h>
+#include <fsl_port.h>
+
+
+static void isr_mcu_wake(void);
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -46,7 +52,7 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 
 
 static const cc_dev_t dev = 0;
-static isr_handle_t isr_handle = NULL;
+static xTaskHandle waiting_task = NULL;
 
 bool nphy_init(void)
 {
@@ -74,14 +80,32 @@ bool nphy_init(void)
         return false;
     }
 
-    enum isr_pin pin = ISR_PIN_ANY;
+    isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake);
 
-    if (!(isr_handle = cc_isr_setup(dev, &pin, ISR_EDGE_RISING)))
-        return false;
-
-    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(pin), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
+    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
 
     return true;
+}
+
+static void wait_mcu_wake(void)
+{
+    waiting_task = xTaskGetCurrentTaskHandle();
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+}
+
+static void isr_mcu_wake(void)
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskHandle *const task = waiting_task;
+
+    if (task) {
+        //portDISABLE_INTERRUPTS();
+        waiting_task = NULL;
+        vTaskNotifyGiveFromISR(task, &xHigherPriorityTaskWoken);
+        //portENABLE_INTERRUPTS();
+    }
+
+    portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 
 cc_pkt_t *nphy_rx(void)
@@ -106,7 +130,7 @@ cc_pkt_t *nphy_rx(void)
     }
 
     _wait:
-    cc_isr_wait(isr_handle);
+    wait_mcu_wake();
     st = cc_get(dev, CC1200_MARC_STATUS1);
 
     switch (st) {
@@ -172,7 +196,7 @@ void nphy_tx(cc_pkt_t *pkt)
     cc_strobe(dev, CC1200_STX);
 
     _wait:
-    cc_isr_wait(isr_handle);
+    wait_mcu_wake();
     st = cc_get(dev, CC1200_MARC_STATUS1);
 
     switch (st) {

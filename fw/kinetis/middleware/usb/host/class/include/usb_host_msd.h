@@ -163,7 +163,7 @@ typedef struct _usb_host_msd_instance
     void *controlCallbackParam;                /*!< MSD control transfer callback parameter*/
     usb_host_transfer_t *controlTransfer;      /*!< Ongoing control transfer*/
     usb_host_msd_command_t msdCommand;         /*!< Ongoing MSD UFI command information*/
-    uint8_t commandStatus;                     /*!< UFI command process status, please reference to command_status_t*/
+    uint8_t commandStatus;                     /*!< UFI command process status, see command_status_t*/
     uint8_t internalResetRecovery; /*!< 1 - class driver internal mass storage reset recovery is on-going; 0 -
                                       application call USB_HostMsdMassStorageReset to reset or there is no reset*/
 } usb_host_msd_instance_t;
@@ -496,20 +496,20 @@ extern usb_status_t USB_HostMsdTestUnitReady(usb_host_class_handle classHandle,
  * This function implements the UFI REQUEST SENSE command, this command instructs
  * the UFI device to transfer sense data to the host for the specified logical unit.
  *
- * @param[in] classHandle    the class MSD handle.
- * @param[in] logicalUnit    logical unit number.
- * @param[out] buffer        buffer pointer.
- * @param[in] bufferLength   the buffer length.
- * @param[in] callbackFn     this callback is called after this command completes.
- * @param[in] callbackParam  the first parameter in the callback function.
+ * @param[in] classHandle    The class MSD handle.
+ * @param[in] logicalUnit    Logical unit number.
+ * @param[out] buffer        Buffer pointer.
+ * @param[in] bufferLength   The buffer length.
+ * @param[in] callbackFn     This callback is called after this command completes.
+ * @param[in] callbackParam  The first parameter in the callback function.
  *
  * @retval kStatus_USB_Success        The device is initialized successfully.
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           The previous command is executing or there is no idle transfer.
- * @retval kStatus_USB_Error          send transfer fail. See the USB_HostSend/USB_HostRecv.
- * @retval kStatus_USB_Success        callback return status, the command succeed.
- * @retval kStatus_USB_MSDStatusFail  callback return status, the CSW status indicate this command fail.
- * @retval kStatus_USB_Error          callback return status, the command fail.
+ * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSend/USB_HostRecv.
+ * @retval kStatus_USB_Success        Callback return status, the command succeed.
+ * @retval kStatus_USB_MSDStatusFail  Callback return status, the CSW status indicate this command fail.
+ * @retval kStatus_USB_Error          Callback return status, the command fail.
  */
 extern usb_status_t USB_HostMsdRequestSense(usb_host_class_handle classHandle,
                                             uint8_t logicalUnit,
@@ -623,9 +623,9 @@ extern usb_status_t USB_HostMsdInquiry(usb_host_class_handle classHandle,
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           The previous command is executing or there is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSend/USB_HostRecv.
- * @retval kStatus_USB_Success        callback return status, the command succeed.
- * @retval kStatus_USB_MSDStatusFail  callback return status, the CSW status indicate this command fail.
- * @retval kStatus_USB_Error          callback return status, the command fail.
+ * @retval kStatus_USB_Success        Callback return status, the command succeed.
+ * @retval kStatus_USB_MSDStatusFail  Callback return status, the CSW status indicate this command fail.
+ * @retval kStatus_USB_Error          Callback return status, the command fail.
  */
 extern usb_status_t USB_HostMsdReadFormatCapacities(usb_host_class_handle classHandle,
                                                     uint8_t logicalUnit,
@@ -851,9 +851,9 @@ extern usb_status_t USB_HostMsdSeek10(usb_host_class_handle classHandle,
  * @retval kStatus_USB_InvalidHandle  The classHandle is NULL pointer.
  * @retval kStatus_USB_Busy           The previous command is executing or there is no idle transfer.
  * @retval kStatus_USB_Error          Send transfer fail. See the USB_HostSend/USB_HostRecv.
- * @retval kStatus_USB_Success        callback return status, the command succeed.
- * @retval kStatus_USB_MSDStatusFail  callback return status, the CSW status indicate this command fail.
- * @retval kStatus_USB_Error          callback return status, the command fail.
+ * @retval kStatus_USB_Success        Callback return status, the command succeed.
+ * @retval kStatus_USB_MSDStatusFail  Callback return status, the CSW status indicate this command fail.
+ * @retval kStatus_USB_Error          Callback return status, the command fail.
  */
 extern usb_status_t USB_HostMsdSendDiagnostic(usb_host_class_handle classHandle,
                                               uint8_t logicalUnit,

@@ -37,7 +37,7 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-/* Structure for an AUDIO class descriptor according to the 6.2.1 in AUDIO specification*/
+/* Structure for an AUDIO class descriptor according to the 6.2.1 in Audio specification*/
 #define AUDIO_FU_MUTE 0x01
 #define AUDIO_FU_VOLUME 0x02
 #define AUDIO_FU_BASS 0x03
@@ -479,7 +479,7 @@ extern usb_status_t USB_HostAudioStreamSend(usb_host_class_handle classHandle,
  * This function implements the get audio stream current altsetting descriptor.
  *
  * @param classHandle               The class handle.
- * @param asIntfDesc                The pointer of class specific AS interface descriptor.
+ * @param asIntfDesc                The pointer of class-specific AS interface descriptor.
  * @param formatTypeDesc       		The pointer of format type descriptor.
  * @param isoEndpDesc               The pointer of specific ISO endp descriptor.
  *

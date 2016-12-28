@@ -85,7 +85,7 @@ typedef struct _usb_device_khci_endpoint_state_struct
             uint32_t bdtOdd : 1U;         /*!< The BDT toggle of the endpoint */
             uint32_t dmaAlign : 1U;       /*!< Whether the transferBuffer is DMA aligned or not */
             uint32_t transferring : 1U;   /*!< The endpoint is transferring */
-            uint32_t resersed : 1U;       /*!< Reversed */
+            uint32_t zlt : 1U;            /*!< zlt flag */
         } stateBitField;
     } stateUnion;
 } usb_device_khci_endpoint_state_struct_t;
@@ -97,23 +97,26 @@ typedef struct _usb_device_khci_state_struct
     uint8_t *bdt;                      /*!< BDT buffer address */
     USB_Type *registerBase;            /*!< The base address of the register */
     uint8_t setupPacketBuffer[USB_SETUP_PACKET_SIZE * 2]; /*!< The setup request buffer */
-    uint8_t
-        *dmaAlignBuffer; /*!< This buffer is used to fix the transferBuffer or transferLength does
-                           not align to 4-bytes when the function USB_DeviceKhciRecv is called.
-                           The macro USB_DEVICE_CONFIG_KHCI_DMA_ALIGN is used to enable or disable this feature.
-                           If the feature is enabled, when the transferBuffer or transferLength does not align to 4-bytes,
-                           the transferLength is not more than USB_DEVICE_CONFIG_KHCI_DMA_ALIGN_BUFFER_LENGTH, and
-                           the flag isDmaAlignBufferInusing is zero, the dmaAlignBuffer is used to receive data
-                           and the flag isDmaAlignBufferInusing is set to 1.
-                           When the transfer is done, the received data, kept in dmaAlignBuffer, is copied
-                           to the transferBuffer, and the flag isDmaAlignBufferInusing is cleared.
-                            */
+    uint8_t *dmaAlignBuffer; /*!< This buffer is used to fix the transferBuffer or transferLength does
+                               not align to 4-bytes when the function USB_DeviceKhciRecv is called.
+                               The macro USB_DEVICE_CONFIG_KHCI_DMA_ALIGN is used to enable or disable this feature.
+                               If the feature is enabled, when the transferBuffer or transferLength does not align to
+                               4-bytes,
+                               the transferLength is not more than USB_DEVICE_CONFIG_KHCI_DMA_ALIGN_BUFFER_LENGTH, and
+                               the flag isDmaAlignBufferInusing is zero, the dmaAlignBuffer is used to receive data
+                               and the flag isDmaAlignBufferInusing is set to 1.
+                               When the transfer is done, the received data, kept in dmaAlignBuffer, is copied
+                               to the transferBuffer, and the flag isDmaAlignBufferInusing is cleared.
+                                */
     usb_device_khci_endpoint_state_struct_t
         endpointState[USB_DEVICE_CONFIG_ENDPOINTS * 2]; /*!< Endpoint state structures */
     uint8_t isDmaAlignBufferInusing;                    /*!< The dmaAlignBuffer is used or not */
     uint8_t isResetting;                                /*!< Is doing device reset or not */
     uint8_t controllerId;                               /*!< Controller ID */
     uint8_t setupBufferIndex;                           /*!< A valid setup buffer flag */
+#if (defined(USB_DEVICE_CONFIG_OTG) && (USB_DEVICE_CONFIG_OTG))
+    uint8_t otgStatus;
+#endif
 } usb_device_khci_state_struct_t;
 
 #if defined(__cplusplus)
@@ -167,12 +170,14 @@ usb_status_t USB_DeviceKhciDeinit(usb_device_controller_handle khciHandle);
  *
  * @return A USB error code or kStatus_USB_Success.
  *
- * @note The return value indicates whether the sending request is successful or not. The transfer completion is notified by the
+ * @note The return value indicates whether the sending request is successful or not. The transfer completion is
+ * notified by the
  * corresponding callback function.
  * Currently, only one transfer request can be supported for a specific endpoint.
  * If there is a specific requirement to support multiple transfer requests for a specific endpoint, the application
  * should implement a queue in the application level.
- * The subsequent transfer can begin only when the previous transfer is done (a notification is obtained through the endpoint
+ * The subsequent transfer can begin only when the previous transfer is done (a notification is obtained through the
+ * endpoint
  * callback).
  */
 usb_status_t USB_DeviceKhciSend(usb_device_controller_handle khciHandle,
@@ -192,12 +197,14 @@ usb_status_t USB_DeviceKhciSend(usb_device_controller_handle khciHandle,
  *
  * @return A USB error code or kStatus_USB_Success.
  *
- * @note The return value indicates whether the receiving request is successful or not. The transfer completion is notified by the
+ * @note The return value indicates whether the receiving request is successful or not. The transfer completion is
+ * notified by the
  * corresponding callback function.
  * Currently, only one transfer request can be supported for a specific endpoint.
  * If there is a specific requirement to support multiple transfer requests for a specific endpoint, the application
  * should implement a queue in the application level.
- * The subsequent transfer can begin only when the previous transfer is done (a notification is obtained through the endpoint
+ * The subsequent transfer can begin only when the previous transfer is done (a notification is obtained through the
+ * endpoint
  * callback).
  */
 usb_status_t USB_DeviceKhciRecv(usb_device_controller_handle khciHandle,
@@ -223,7 +230,7 @@ usb_status_t USB_DeviceKhciCancel(usb_device_controller_handle khciHandle, uint8
  * The function is used to control the status of the selected item.
  *
  * @param[in] khciHandle      Pointer of the device KHCI handle.
- * @param[in] type             The selected item. Please refer to enumeration type usb_device_control_type_t.
+ * @param[in] type             The selected item. See enumeration type usb_device_control_type_t.
  * @param[in,out] param            The parameter type is determined by the selected item.
  *
  * @return A USB error code or kStatus_USB_Success.

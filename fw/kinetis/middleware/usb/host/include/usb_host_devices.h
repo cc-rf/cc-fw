@@ -68,7 +68,6 @@ typedef enum _usb_host_device_state
 {
     kStatus_device_Detached = 0, /*!< Device is used by application */
     kStatus_device_Attached,     /*!< Device's default status */
-    kStatus_device_Released,     /*!< Device's resource is released */
 } usb_host_device_state_t;
 
 /*! @brief Device instance */

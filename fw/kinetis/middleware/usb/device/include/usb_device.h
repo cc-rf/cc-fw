@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -52,6 +52,9 @@ typedef enum _usb_device_status
     kUSB_DeviceStatusAddress,       /*!< Device address */
     kUSB_DeviceStatusSynchFrame,    /*!< Current frame */
     kUSB_DeviceStatusBus,           /*!< Bus status */
+    kUSB_DeviceStatusBusSuspend,    /*!< Bus suspend */
+    kUSB_DeviceStatusBusResume,     /*!< Bus resume */
+    kUSB_DeviceStatusRemoteWakeup,  /*!< Remote wakeup state */
 } usb_device_status_t;
 
 /*! @brief Defines USB 2.0 device state */
@@ -100,16 +103,18 @@ typedef enum _usb_device_event
     kUSB_DeviceEventSetConfiguration, /*!< Set configuration. */
     kUSB_DeviceEventSetInterface,     /*!< Set interface. */
 
-    kUSB_DeviceEventGetDeviceDescriptor,        /*!<Get device descriptor. */
-    kUSB_DeviceEventGetConfigurationDescriptor, /*!< Get configuration descriptor. */
-    kUSB_DeviceEventGetStringDescriptor,        /*!< Get string descriptor. */
-    kUSB_DeviceEventGetHidDescriptor,           /*!< Get HID descriptor. */
-    kUSB_DeviceEventGetHidReportDescriptor,     /*!< Get HID report descriptor. */
-    kUSB_DeviceEventGetHidPhysicalDescriptor,   /*!< Get HID physical descriptor. */
-    kUSB_DeviceEventVendorRequest,              /*!< Vendor request. */
-    kUSB_DeviceEventSetRemoteWakeup,            /*!< Enable or disable remote wakeup function. */
-    kUSB_DeviceEventGetConfiguration,           /*!< Get current configuration index */
-    kUSB_DeviceEventGetInterface,               /*!< Get current interface alternate setting value */
+    kUSB_DeviceEventGetDeviceDescriptor,          /*!< Get device descriptor. */
+    kUSB_DeviceEventGetConfigurationDescriptor,   /*!< Get configuration descriptor. */
+    kUSB_DeviceEventGetStringDescriptor,          /*!< Get string descriptor. */
+    kUSB_DeviceEventGetHidDescriptor,             /*!< Get HID descriptor. */
+    kUSB_DeviceEventGetHidReportDescriptor,       /*!< Get HID report descriptor. */
+    kUSB_DeviceEventGetHidPhysicalDescriptor,     /*!< Get HID physical descriptor. */
+    kUSB_DeviceEventGetDeviceQualifierDescriptor, /*!< Get device qualifier descriptor. */
+    kUSB_DeviceEventVendorRequest,                /*!< Vendor request. */
+    kUSB_DeviceEventSetRemoteWakeup,              /*!< Enable or disable remote wakeup function. */
+    kUSB_DeviceEventGetConfiguration,             /*!< Get current configuration index */
+    kUSB_DeviceEventGetInterface,                 /*!< Get current interface alternate setting value */
+    kUSB_DeviceEventSetBHNPEnable,
 } usb_device_event_t;
 
 /*! @brief Endpoint callback message structure */
@@ -127,7 +132,8 @@ typedef struct _usb_device_endpoint_callback_message_struct
  * This callback pointer is passed when a specified endpoint is initialized by calling API #USB_DeviceInitEndpoint.
  *
  * @param handle          The device handle. It equals to the value returned from #USB_DeviceInit.
- * @param message         The result of a transfer, which includes transfer buffer, transfer length, and whether is in a setup phase.
+ * @param message         The result of a transfer, which includes transfer buffer, transfer length, and whether is in a
+ * setup phase.
  * phase for control pipe.
  * @param callbackParam  The parameter for this callback. It is same with
  * usb_device_endpoint_callback_struct_t::callbackParam.
@@ -157,6 +163,7 @@ typedef struct _usb_device_endpoint_callback_struct
 {
     usb_device_endpoint_callback_t callbackFn; /*!< Endpoint callback function*/
     void *callbackParam;                       /*!< Parameter for callback function*/
+    uint8_t isBusy;
 } usb_device_endpoint_callback_struct_t;
 
 /*! @brief Endpoint initialization structure */
@@ -229,7 +236,8 @@ extern usb_status_t USB_DeviceRun(usb_device_handle handle);
 /*!
  * @brief Disables the device functionality.
  *
- * The function disables the device functionality. After this function called, even if the device is detached to the host,
+ * The function disables the device functionality. After this function called, even if the device is detached to the
+ * host,
  * it can't work.
  *
  * @param[in] handle The device handle received from #USB_DeviceInit.
@@ -259,7 +267,7 @@ extern usb_status_t USB_DeviceDeinit(usb_device_handle handle);
  *
  * @param[in] handle The device handle got from #USB_DeviceInit.
  * @param[in] endpointAddress Endpoint index.
- * @param[in] buffer The memory address to hold the data need to be sent.
+ * @param[in] buffer The memory address to hold the data need to be sent. The function is not reentrant.
  * @param[in] length The data length need to be sent.
  *
  * @retval kStatus_USB_Success              The send request is sent successfully.
@@ -268,7 +276,8 @@ extern usb_status_t USB_DeviceDeinit(usb_device_handle handle);
  * @retval kStatus_USB_ControllerNotFound   Cannot find the controller.
  * @retval kStatus_USB_Error                The device is doing reset.
  *
- * @note The return value indicates whether the sending request is successful or not. The transfer done is notified by the
+ * @note The return value indicates whether the sending request is successful or not. The transfer done is notified by
+ * the
  * corresponding callback function.
  * Currently, only one transfer request can be supported for one specific endpoint.
  * If there is a specific requirement to support multiple transfer requests for one specific endpoint, the application
@@ -284,7 +293,7 @@ extern usb_status_t USB_DeviceSendRequest(usb_device_handle handle,
 /*!
  * @brief Receives data through a specified endpoint.
  *
- * The function is used to receive data through a specified endpoint.
+ * The function is used to receive data through a specified endpoint. The function is not reentrant.
  *
  * @param[in] handle The device handle got from #USB_DeviceInit.
  * @param[in] endpointAddress Endpoint index.
@@ -297,7 +306,8 @@ extern usb_status_t USB_DeviceSendRequest(usb_device_handle handle,
  * @retval kStatus_USB_ControllerNotFound   Cannot find the controller.
  * @retval kStatus_USB_Error                The device is doing reset.
  *
- * @note The return value indicates whether the receiving request is successful or not. The transfer done is notified by the
+ * @note The return value indicates whether the receiving request is successful or not. The transfer done is notified by
+ * the
  * corresponding callback function.
  * Currently, only one transfer request can be supported for one specific endpoint.
  * If there is a specific requirement to support multiple transfer requests for one specific endpoint, the application
@@ -397,7 +407,7 @@ extern usb_status_t USB_DeviceUnstallEndpoint(usb_device_handle handle, uint8_t 
  * The function is used to get the status of the selected item.
  *
  * @param[in] handle The device handle got from #USB_DeviceInit.
- * @param[in] type   The selected item. Please refer to the structure #usb_device_status_t.
+ * @param[in] type   The selected item. See the structure #usb_device_status_t.
  * @param[out] param  The parameter type is determined by the selected item.
  *
  * @retval kStatus_USB_Success              Get status successfully.
@@ -414,7 +424,7 @@ extern usb_status_t USB_DeviceGetStatus(usb_device_handle handle, usb_device_sta
  * The function is used to set the status of the selected item.
  *
  * @param[in] handle The device handle got from #USB_DeviceInit.
- * @param[in] type The selected item. Please refer to the structure #usb_device_status_t.
+ * @param[in] type The selected item. See the structure #usb_device_status_t.
  * @param[in] param The parameter type is determined by the selected item.
  *
  * @retval kStatus_USB_Success              Set status successfully.
@@ -460,6 +470,20 @@ extern void USB_DeviceTaskFunction(void *deviceHandle);
 #define USB_DeviceEhciTaskFunction(deviceHandle) USB_DeviceTaskFunction(deviceHandle)
 #endif
 
+#if (((defined(USB_DEVICE_CONFIG_LPCIP3511FS)) && (USB_DEVICE_CONFIG_LPCIP3511FS > 0U)) || \
+     ((defined(USB_DEVICE_CONFIG_LPCIP3511HS)) && (USB_DEVICE_CONFIG_LPCIP3511HS > 0U)))
+/*!
+ * @brief Device LPC ip3511 controller task function.
+ *
+ * The function is used to handle the LPC ip3511 controller message.
+ * In the bare metal environment, this function should be called periodically in the main function.
+ * In the RTOS environment, this function should be used as a function entry to create a task.
+ *
+ * @param[in] deviceHandle The device handle got from #USB_DeviceInit.
+ */
+#define USB_DeviceLpcIp3511TaskFunction(deviceHandle) USB_DeviceTaskFunction(deviceHandle)
+#endif
+
 #if ((defined(USB_DEVICE_CONFIG_KHCI)) && (USB_DEVICE_CONFIG_KHCI > 0U))
 /*!
  * @brief Device KHCI ISR function.
@@ -482,8 +506,20 @@ extern void USB_DeviceKhciIsrFunction(void *deviceHandle);
 extern void USB_DeviceEhciIsrFunction(void *deviceHandle);
 #endif
 
+#if (((defined(USB_DEVICE_CONFIG_LPCIP3511FS)) && (USB_DEVICE_CONFIG_LPCIP3511FS > 0U)) || \
+     ((defined(USB_DEVICE_CONFIG_LPCIP3511HS)) && (USB_DEVICE_CONFIG_LPCIP3511HS > 0U)))
 /*!
- * @brief Get the device stack version function.
+ * @brief Device LPC USB ISR function.
+ *
+ * The function is the LPC USB interrupt service routine.
+ *
+ * @param[in] deviceHandle The device handle got from #USB_DeviceInit.
+ */
+extern void USB_DeviceLpcIp3511IsrFunction(void *deviceHandle);
+#endif
+
+/*!
+ * @brief Gets the device stack version function.
  *
  * The function is used to get the device stack version.
  *
@@ -491,6 +527,19 @@ extern void USB_DeviceEhciIsrFunction(void *deviceHandle);
  *
  */
 extern void USB_DeviceGetVersion(uint32_t *version);
+
+#if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
+/*!
+ * @brief Update the hardware tick.
+ *
+ * The function is used to update the hardware tick.
+ *
+ * @param[in] handle The device handle got from #USB_DeviceInit.
+ * @param[in] tick Current hardware tick(uint is ms).
+ *
+ */
+extern usb_status_t USB_DeviceUpdateHwTick(usb_device_handle handle, uint64_t tick);
+#endif
 
 /*! @}*/
 
