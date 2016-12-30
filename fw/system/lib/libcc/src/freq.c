@@ -558,3 +558,20 @@ s16 cc_get_rssi(cc_dev_t dev)
     //s16 rssi = rssi1;
     return (s16)(s8)cc_get(dev, CC1200_RSSI1);// - (s16)107/*99*/;
 }
+
+u32 cc_get_tx_time(cc_dev_t dev, u32 len)
+{
+    // TODO: Make this smarter and base it off of preamble, sync word, crc and others.
+    //       The current assumption is: preamble/2, sync/2, len/1, data/len, crc/2,
+    //         symbol rate divider = 1 (/2 for 4-ary modulation, /4 for DSSS, 4-ary+DSSS not possible)
+    //         symbol rate = 250ksps
+    const static u32 overhead = 2/*preamble*/ + 2/*sync*/ + 1/*len*/ + 2/*crc*/;
+    const static u32 divider = 1;
+    const static u32 symbol_rate = 250000;
+
+
+    const u32 div = (symbol_rate + (4 * divider)) / (8 * divider);
+
+    // round up to next nearest millisecond
+    return (1000*(len + overhead) + div) / div;
+}

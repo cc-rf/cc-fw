@@ -28,8 +28,8 @@ typedef struct __packed {
     cc_dev_t dev;
 
     struct {
-        u32 min;
-        u32 max;
+        u32 base;
+        u32 bw;
     } freq;
 
     chan_t size;

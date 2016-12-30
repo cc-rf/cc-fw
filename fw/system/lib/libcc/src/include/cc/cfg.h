@@ -262,11 +262,11 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC0,             0x4E}, // Sync Word Configuration [7:0]
 
         {CC1200_SYNC_CFG1,         0xA7/*0xA9*//*0xA8*/},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         0x33/*0x13*/}, // bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
+        /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         0x33/*0x13*/}, // 2byte sync. bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
         /*!!UNCONFIRMED CHANGE*/{CC1200_DEVIATION_M,       /*0x48*//*0xCB*/0x1F/*0x9A*/},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_MODCFG_DEV_E,      /*0x8D*//*0x8C*/0x8D/*0x8C*/}, // 0x80: coding gain
+        /*!!UNCONFIRMED CHANGE*/{CC1200_MODCFG_DEV_E,      0x0D/*new,same but no DSSS*/ /*0x8D*//*0x8C*//*0x8D*//*0x8C*/}, // 0x80: coding gain
         {CC1200_DCFILT_CFG,        0x4B},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_PREAMBLE_CFG1,     0x18/*0x34*/}, // 0x34: 30-byte preamble (4 == 0x18)
+        /*!!UNCONFIRMED CHANGE*/{CC1200_PREAMBLE_CFG1,     0x10/*new,2byte*/ /*0x18*//*0x34*/}, // 0x34: 30-byte preamble (4 == 0x18)
         {CC1200_PREAMBLE_CFG0,     0x8A},
         {CC1200_IQIC,              0x58/*NOTE: changing back to 0x58 improved AGC/RSSI performance*//*0x80*//*0x58*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_CHAN_BW,           /*0x05*//*0x04*/0x03},

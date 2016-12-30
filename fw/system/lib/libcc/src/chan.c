@@ -12,8 +12,8 @@ void chan_grp_init(chan_grp_t *grp, chan_t hop_table[])
 {
     assert(grp); assert(grp->size); assert(CC_DEV_VALID(grp->dev));
 
-    u32 step = (grp->freq.max - grp->freq.min) / grp->size;
-    u32 freq = grp->freq.min + step / 2;
+    const u32 step = grp->freq.bw;
+    u32 freq = grp->freq.base + step / 2;
 
     for (chan_t c = 0; c < grp->size; ++c, freq += step) {
         grp->chan[c].id = c;

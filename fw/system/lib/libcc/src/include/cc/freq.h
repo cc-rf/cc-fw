@@ -173,3 +173,5 @@ void cc_set_mod_cfg_0(cc_dev_t dev);
 void cc_set_mod_cfg_1(cc_dev_t dev);
 
 s16 cc_get_rssi(cc_dev_t dev);
+
+u32 cc_get_tx_time(cc_dev_t dev, u32 len);

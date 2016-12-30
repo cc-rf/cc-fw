@@ -118,7 +118,7 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTE,  4u, kPORT_PinDisabledOrAnalog);      // GPIO_HDR #5
     PORT_SetPinMux(PORTE,  5u, kPORT_PinDisabledOrAnalog);      // GPIO_HDR #2
     PORT_SetPinMux(PORTB,  4u, kPORT_PinDisabledOrAnalog);      // GPIO_HDR #8
-    PORT_SetPinMux(PORTB,  5u, kPORT_PinDisabledOrAnalog);      // GPIO_HDR #9
+    PORT_SetPinMux(PORTB,  5u, kPORT_MuxAsGpio);                // GPIO_HDR #9   ** currently used for config variant (rx/tx) input
 
     /*port_pin_config_t port_pin_config = {
             kPORT_PullUp,

@@ -94,7 +94,8 @@ static IRQn_Type const irqns[] = PORT_IRQS;
 
 void isrd_configure(const u8 port, const u8 pin, const port_interrupt_t type, const isr_t isr)
 {
-    isr_maps[port][pin] = isr || isr_noop;
+    if (isr) isr_maps[port][pin] = isr;
+    else isr_maps[port][pin] = isr_noop;
 
     const port_pin_config_t port_pin_config = {
             kPORT_PullDisable,

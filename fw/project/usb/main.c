@@ -20,6 +20,15 @@
 #include <core_cm4.h>
 #include <cc/sys/kinetis/pit.h>
 #include <cc/type.h>
+#include <timers.h>
+#include <cc/amp.h>
+#include <cc/cfg.h>
+#include <fsl_port.h>
+
+
+#define PFLAG_PORT PORTB
+#define PFLAG_GPIO GPIOB
+#define PFLAG_PIN  5
 
 
 extern void vcom_init(void);
@@ -55,11 +64,32 @@ int main(void)
        CLOCK_GetFreq(kCLOCK_LpoClk)
     );
 
-    //xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL);
+    // setup the rx/tx flag input pin
+    const port_pin_config_t port_pin_config = {
+            kPORT_PullDown,
+            kPORT_FastSlewRate,
+            kPORT_PassiveFilterDisable,
+            kPORT_OpenDrainDisable,
+            kPORT_LowDriveStrength,
+            kPORT_MuxAsGpio,
+            kPORT_LockRegister,
+    };
 
-    vcom_init();
-    printf("<vcom init>\r\n");
-    LED_C_ON();
+    PORT_SetPinConfig(PFLAG_PORT, PFLAG_PIN, &port_pin_config);
+
+    const gpio_pin_config_t gpio_pin_config = {
+            .pinDirection = kGPIO_DigitalInput,
+            .outputLogic = 0
+    };
+
+    GPIO_PinInit(PFLAG_GPIO, PFLAG_PIN, &gpio_pin_config);
+
+
+    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL);
+
+    //vcom_init();
+    //printf("<vcom init>\r\n");
+    //LED_C_ON();
 
     // Theoretically this will make sure the sub-priority on all interrupt configs is zero.
     //   Not sure it's actually really needed or what it does in the long run.
@@ -69,45 +99,203 @@ int main(void)
     vTaskStartScheduler();
 }
 
+static bool pflag_set(void)
+{
+    return GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
+}
+
+static const struct cc_cfg_reg CC_CFG_MAC[] = {
+        {CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
+};
+
+#define FREQ_BASE   905000000
+#define FREQ_BW     800000
+
+#define CHAN_COUNT  25
+
+static const u32 freq_base      = FREQ_BASE;
+static const u32 freq_side_bw   = FREQ_BW / 2;
+static const u32 chan_count     = CHAN_COUNT;
+static const u32 chan_time      = 200;//30;
+
+static struct {
+    chan_grp_t group;
+    chan_inf_t chan[CHAN_COUNT];
+    chan_t hop_table[CHAN_COUNT];
+
+} chnl = {
+        .group = {
+                .dev = 0,
+                .freq = {
+                        .base = FREQ_BASE,
+                        .bw   = FREQ_BW
+                },
+                .size = CHAN_COUNT
+        }
+};
+
+static volatile u32 chan_cur = UINT32_MAX;
+
+static inline u32 chan_freq(const u32 chan)
+{
+    //NOTE: for debug purposes, only use 2 channels
+    return (freq_base + freq_side_bw * (1+2*/*chan*/(12+chan%2)));
+}
+
+static inline void chan_set(const u32 chan)
+{
+    if (chan != chan_cur) {
+        chan_cur = chan;
+        //cc_set_freq(0, chan_freq(chan_cur));
+
+        //NOTE: for debug purposes, only use 3 channels
+        //chan_select(&chnl.group, (chan_t) (10 + chan%3));
+
+        chan_select(&chnl.group, (chan_t)chan);
+    }
+}
+
+static inline void chan_next(void)
+{
+    chan_set((chan_cur + 1) % chan_count);
+}
+
+static void timer_task(xTimerHandle timer __unused)
+{
+
+}
+
+#define MSG_LEN 120
+
+typedef struct __packed {
+    u8 len;
+    u8 chn;
+    u8 seq;
+    u8 data[MSG_LEN];
+
+} app_pkt_t;
+
+static pit_t xsec_timer_0;
+static pit_t xsec_timer;
+
+static inline u32 sync_timestamp(void)
+{
+    return pit_get_elapsed(xsec_timer);
+}
+
 static void main_task(void *param)
 {
     (void)param;
     printf("<main task>\r\n");
 
-    #if 0
+    //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
+
+#if 1
     if (nphy_init()) {
         printf("nphy init successful.\r\n");
 
-        cc_set_freq(0, 915000000);
+        if (!cc_cfg_regs(0, CC_CFG_MAC, COUNT_OF(CC_CFG_MAC))) {
+            printf("warn: could not configure (mac)\n");
+        }
 
-        #if 0
+        amp_init(0);
 
-        while (1) {
-            cc_pkt_t *pkt = nphy_rx();
+        chan_grp_init(&chnl.group, NULL);
+        chan_grp_calibrate(&chnl.group);
+        chan_set(0);
 
-            if (!pkt->len) {
-                printf("rx: <null>\r\n");
-            } else {
-                printf("rx:");
+        xsec_timer_0 = pit_alloc(&(pit_cfg_t){
+                .period = pit_nsec_tick(1000000)
+        });
 
-                for (u8 i = 0; i < pkt->len; ++i)
-                    printf(" %02X", pkt->data[i]);
+        xsec_timer = pit_chain(xsec_timer_0, &(pit_cfg_t){
+                .period = UINT32_MAX
+        });
 
-                printf("\r\n");
+        pit_start(xsec_timer);
+        pit_start(xsec_timer_0);
+
+        u32 ticks = 0;
+        u32 sync_time = 0;
+        u32 remaining = portMAX_DELAY;
+        u32 chan_ticks;
+
+        if (!pflag_set()) {
+            printf("mode: receive\r\n");
+
+            app_pkt_t *pkt;
+
+            amp_ctrl(0, AMP_LNA, true);
+            amp_ctrl(0, AMP_HGM, true);
+
+            while (1) {
+                if (sync_time) {
+                    ticks = sync_timestamp() - sync_time;
+                    remaining = chan_time - (ticks % chan_time);
+                    chan_set((ticks / chan_time) % chan_count);
+                }
+
+                //printf("rx: [wait] chn=%lu rem=%lu\n", chan_cur, remaining);
+                pkt = (app_pkt_t *) nphy_rx(pdMS_TO_TICKS(remaining));
+
+                if (pkt && pkt->len) {
+                    if (!sync_time) sync_time = sync_timestamp();
+                    LED_D_TOGGLE();
+                    //printf("rx: [recv] chn=%lu seq=%u\n", chan_cur, pkt->seq);
+                }
             }
+
+        } else {
+            printf("mode: transmit\r\n");
+
+            u32 pkt_time;
+
+            app_pkt_t pkt = {.len = /*MSG_LEN + */2, .seq = 0, .chn = (u8) chan_cur, .data = {[0 ... MSG_LEN - 1] = 'a'}};
+
+            amp_ctrl(0, AMP_PA, true);
+            amp_ctrl(0, AMP_HGM, true);
+
+            while (1) {
+
+                if (sync_time) {
+                    ticks = sync_timestamp() - sync_time;
+                    chan_ticks = (ticks % chan_time);
+                    remaining = chan_time - /*(ticks % chan_time)*/chan_ticks;
+                    pkt_time = cc_get_tx_time(0, pkt.len);
+
+                    if (chan_ticks < 10) {
+                        vTaskDelay(pdMS_TO_TICKS(10-chan_ticks));
+                        continue;
+                    }
+
+                    if (remaining <= pkt_time || remaining < 16) {
+                        vTaskDelay(pdMS_TO_TICKS(10+remaining));
+                        continue;
+                    }
+
+                    chan_set((ticks / chan_time) % chan_count);
+                }
+
+                pkt.chn = (u8) chan_cur;
+                //ticks = sync_timestamp();
+                nphy_tx((cc_pkt_t *) &pkt);
+                //ticks = sync_timestamp() - ticks;
+                //printf("tx/%lu: seq=%u t=%lu/%lu\r\n", chan_cur, pkt.seq, pkt_time, ticks);
+
+                if (!sync_time) sync_time = sync_timestamp();
+
+                ++pkt.seq;
+
+                pkt.len = (u8)((pkt.len + 1) % (MSG_LEN + 2));
+                if (!pkt.len) pkt.len = 2;
+
+                LED_D_TOGGLE();
+                vTaskDelay(pdMS_TO_TICKS(/*1137*/7 + (pkt.len % 2)*3 ));
+            }
+
         }
 
-        #else
 
-        static cc_pkt_t pkt = { .len = 1, .data = { '!' }};
-
-        while (1) {
-            nphy_tx(&pkt);
-            printf("tx: sent\r\n");
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
-
-        #endif
     }
     #endif
 

@@ -41,10 +41,10 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
         //{CC1200_PREAMBLE_CFG1, /*0xD*/0x4 << 2},
         //{CC1200_SYNC_CFG1,  0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16/* changed from 11 */},
         {CC1200_PKT_CFG2,   CC1200_PKT_CFG2_CCA_MODE_ALWAYS},
-        {CC1200_PKT_CFG1,   CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F | CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF | CC1200_PKT_CFG1_APPEND_STATUS},
+        {CC1200_PKT_CFG1,   CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F | CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF | CC1200_PKT_CFG1_APPEND_STATUS | CC1200_PKT_CFG1_WHITE_DATA},
         {CC1200_PKT_CFG0,   CC1200_PKT_CFG0_LENGTH_CONFIG_VARIABLE},
         {CC1200_PKT_LEN,    255},
-        {CC1200_SERIAL_STATUS, CC1200_SERIAL_STATUS_IOC_SYNC_PINS_EN}, // Enable access to GPIO state in CC1200_GPIO_STATUS.GPIO_STATE
+        //{CC1200_SERIAL_STATUS, CC1200_SERIAL_STATUS_IOC_SYNC_PINS_EN}, // Enable access to GPIO state in CC1200_GPIO_STATUS.GPIO_STATE
 
         {CC1200_RNDGEN,     CC1200_RNDGEN_EN}, // Needed for random backoff for LBT CCA: https://e2e.ti.com/support/wireless_connectivity/f/156/t/370230
         {CC1200_FIFO_CFG,   0 /*!CC1200_FIFO_CFG_CRC_AUTOFLUSH*/},
@@ -87,10 +87,17 @@ bool nphy_init(void)
     return true;
 }
 
-static void wait_mcu_wake(void)
+static bool wait_mcu_wake(TickType_t ticks)
 {
     waiting_task = xTaskGetCurrentTaskHandle();
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (!ulTaskNotifyTake(pdTRUE, ticks)) {
+        xTaskNotifyStateClear(waiting_task);
+        waiting_task = NULL;
+        return false;
+    }
+
+    return true;
 }
 
 static void isr_mcu_wake(void)
@@ -108,7 +115,7 @@ static void isr_mcu_wake(void)
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 
-cc_pkt_t *nphy_rx(void)
+cc_pkt_t *nphy_rx(u32 timeout)
 {
     static u8 buf[256];
     static cc_pkt_t *const pkt = (cc_pkt_t *)buf;
@@ -130,7 +137,7 @@ cc_pkt_t *nphy_rx(void)
     }
 
     _wait:
-    wait_mcu_wake();
+    if (!wait_mcu_wake(timeout)) return NULL;
     st = cc_get(dev, CC1200_MARC_STATUS1);
 
     switch (st) {
@@ -196,7 +203,7 @@ void nphy_tx(cc_pkt_t *pkt)
     cc_strobe(dev, CC1200_STX);
 
     _wait:
-    wait_mcu_wake();
+    wait_mcu_wake(portMAX_DELAY);
     st = cc_get(dev, CC1200_MARC_STATUS1);
 
     switch (st) {
