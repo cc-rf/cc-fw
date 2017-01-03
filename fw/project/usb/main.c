@@ -87,9 +87,9 @@ int main(void)
 
     xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL);
 
-    //vcom_init();
-    //printf("<vcom init>\r\n");
-    //LED_C_ON();
+    vcom_init();
+    printf("<vcom init>\r\n");
+    LED_C_ON();
 
     // Theoretically this will make sure the sub-priority on all interrupt configs is zero.
     //   Not sure it's actually really needed or what it does in the long run.
@@ -241,7 +241,7 @@ static void main_task(void *param)
                 if (pkt && pkt->len) {
                     if (!sync_time) sync_time = sync_timestamp();
                     LED_D_TOGGLE();
-                    //printf("rx: [recv] chn=%lu seq=%u\n", chan_cur, pkt->seq);
+                    printf("rx: [recv] chn=%lu seq=%u\r\n", chan_cur, pkt->seq);
                 }
             }
 
@@ -281,6 +281,7 @@ static void main_task(void *param)
                 nphy_tx((cc_pkt_t *) &pkt);
                 //ticks = sync_timestamp() - ticks;
                 //printf("tx/%lu: seq=%u t=%lu/%lu\r\n", chan_cur, pkt.seq, pkt_time, ticks);
+                printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
 
                 if (!sync_time) sync_time = sync_timestamp();
 
@@ -304,6 +305,7 @@ static void main_task(void *param)
     while (1) {}
 }
 
+extern void usb_write(char *buf, size_t len);
 
 int _write(int handle, char *buffer, int size)
 {
@@ -316,6 +318,7 @@ int _write(int handle, char *buffer, int size)
     }
 
     itm_write(0, (const u8 *)buffer, (size_t)size);
+    usb_write(buffer, (size_t)size);
 
     return size;
 }

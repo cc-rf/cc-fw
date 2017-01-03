@@ -131,6 +131,12 @@ volatile static uint8_t s_waitForDataReceive = 0;
 volatile static uint8_t s_comOpen = 0;
 #endif
 
+
+
+static SemaphoreHandle_t usb_tx_s = NULL;
+
+
+
 /*******************************************************************************
 * Code
 ******************************************************************************/
@@ -171,6 +177,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
             {
                 if ((epCbParam->buffer != NULL) || ((epCbParam->buffer == NULL) && (epCbParam->length == 0)))
                 {
+                    // if (usb_tx_s) xSemaphoreGive(usb_tx_s);
                     /* User: add your own code for send complete event */
                     /* Schedule buffer for next receive event */
                     error = USB_DeviceCdcAcmRecv(handle, USB_CDC_VCOM_BULK_OUT_ENDPOINT, s_currRecvBuf,
@@ -501,6 +508,8 @@ void USB_DeviceApplicationInit(void)
     uint8_t ehciIrq[] = USBHS_IRQS;
     irqNo = ehciIrq[CONTROLLER_ID - kUSB_ControllerEhci0];
 
+    CLOCK_EnableUsbfs0Clock(USB_FS_CLK_SRC, USB_FS_CLK_FREQ); // added but probably not needed
+
     CLOCK_EnableUsbhs0PhyPllClock(USB_HS_PHY_CLK_SRC, USB_HS_PHY_CLK_FREQ);
     CLOCK_EnableUsbhs0Clock(USB_HS_CLK_SRC, USB_HS_CLK_FREQ);
     USB_EhciPhyInit(CONTROLLER_ID, BOARD_XTAL0_CLK_HZ);
@@ -530,7 +539,7 @@ void USB_DeviceApplicationInit(void)
 #endif /* FSL_FEATURE_USB_KHCI_USB_RAM_BASE_ADDRESS */
 #endif /* FSL_FEATURE_USB_KHCI_USB_RAM */
 
-    s_cdcVcom.speed = USB_SPEED_FULL;
+    s_cdcVcom.speed = /*USB_SPEED_FULL*/USB_SPEED_HIGH;
     s_cdcVcom.attach = 0;
     s_cdcVcom.cdcAcmHandle = (class_handle_t)NULL;
     s_cdcVcom.deviceHandle = NULL;
@@ -576,6 +585,19 @@ void USB_DeviceTask(void *handle)
 }
 #endif
 
+
+
+#define USB_QUEUE_LEN       12
+#define USB_IO_MAX_LEN      16
+
+typedef struct {
+    size_t len;
+    u8 *buf;
+
+} usb_io_t;
+
+static QueueHandle_t usb_tx_q = NULL;
+
 /*!
  * @brief Application task function.
  *
@@ -585,6 +607,11 @@ void USB_DeviceTask(void *handle)
  */
 void APPTask(void *handle)
 {
+    usb_tx_q = xQueueCreate(USB_QUEUE_LEN, sizeof(usb_io_t));
+    usb_tx_s = xSemaphoreCreateBinary();
+
+    xSemaphoreGive(usb_tx_s);
+
     usb_status_t error = kStatus_USB_Error;
 
     USB_DeviceApplicationInit();
@@ -606,83 +633,12 @@ void APPTask(void *handle)
     }
 #endif
 
-    bool attach = false;
-    int n = 0;
+    usb_io_t io;
 
-    while (1)
-    {
-        if ((1 == s_cdcVcom.attach) && (1 == s_cdcVcom.startTransactions))
-        {
-            if (!attach) {
-                attach = true;
-                //LED_RED_ON();
-                LED_D_ON();
-                printf("usb attach\r\n");
-            }
-
-            /* User Code */
-            if ((0 != s_recvSize) && (0xFFFFFFFF != s_recvSize))
-            {
-                printf("<usb> receiving %lu bytes\r\n", s_recvSize);
-                int32_t i;
-
-                /* Copy Buffer to Send Buff */
-                for (i = 0; i < s_recvSize; i++)
-                {
-                    s_currSendBuf[s_sendSize++] = s_currRecvBuf[i];
-                }
-                s_recvSize = 0;
-            }
-
-            if (s_sendSize)
-            {
-                printf("send %lu bytes\r\n", s_sendSize);
-                uint32_t size = s_sendSize;
-                s_sendSize = 0;
-
-                error =
-                    USB_DeviceCdcAcmSend(s_cdcVcom.cdcAcmHandle, USB_CDC_VCOM_BULK_IN_ENDPOINT, s_currSendBuf, size);
-                if (error != kStatus_USB_Success)
-                {
-                    printf("<usb> send failed\r\n");
-                    /* Failure to send Data Handling code here */
-                }
-            }
-#if defined(FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED) && (FSL_FEATURE_USB_KHCI_KEEP_ALIVE_ENABLED > 0U) && \
-    defined(USB_DEVICE_CONFIG_KEEP_ALIVE_MODE) && (USB_DEVICE_CONFIG_KEEP_ALIVE_MODE > 0U) &&             \
-    defined(FSL_FEATURE_USB_KHCI_USB_RAM) && (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
-            if ((s_waitForDataReceive))
-            {
-                if (s_comOpen == 1)
-                {
-                    /* Wait for all the packets been sent during opening the com port. Otherwise these packets may
-                     * wake up the system.
-                    */
-                    usb_echo("Waiting to enter lowpower ...\r\n");
-                    for (uint32_t i = 0U; i < 16000000U; ++i)
-                    {
-                        __ASM("NOP"); /* delay */
-                    }
-
-                    s_comOpen = 0;
-                }
-                usb_echo("Enter lowpower\r\n");
-                USB0->INTEN &= ~USB_INTEN_TOKDNEEN_MASK;
-                SMC_SetPowerModeVlps(SMC);
-
-                s_waitForDataReceive = 0;
-                USB0->INTEN |= USB_INTEN_TOKDNEEN_MASK;
-                usb_echo("Exit	lowpower\r\n");
-            }
-#endif
-        } else if (attach) {
-            attach = false;
-            //LED_RED_OFF();
-            LED_D_OFF();
-            printf("usb detach\r\n");
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(100));
+    while (1) {
+        if (xQueueReceive(usb_tx_q, &io, portMAX_DELAY) != pdTRUE) continue;
+        if (!s_cdcVcom.attach || !s_cdcVcom.startTransactions) continue;
+        USB_DeviceCdcAcmSend(s_cdcVcom.cdcAcmHandle, USB_CDC_VCOM_BULK_IN_ENDPOINT, io.buf, io.len);
     }
 }
 
@@ -713,7 +669,77 @@ void vcom_init(void)
 #endif
 }
 
-void usb_write(u8 *buf, size_t len)
+static inline bool isInterrupt()
 {
+    return (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0 ;
+}
 
+static usb_io_t io = {0};
+
+void usb_write(char *buf, size_t len)
+{
+    if (!usb_tx_q || !s_cdcVcom.attach || !s_cdcVcom.startTransactions || !s_cdcVcom.cdcAcmHandle || !buf) return;
+
+    size_t sent = 0;
+    bool is_interrupt = isInterrupt();
+    BaseType_t xHigherPriorityTaskWokenAll = pdFALSE;
+    BaseType_t xHigherPriorityTaskWoken;
+
+    if (!is_interrupt) xSemaphoreTake(usb_tx_s, portMAX_DELAY);
+    else {
+        while (!xSemaphoreTakeFromISR(usb_tx_s, &xHigherPriorityTaskWoken));
+        xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+    }
+
+    //if (!buf[len-1]) buf[len-1] = '!';
+    /*if (!buf[len-1]) {
+        --len;
+        ++sent;
+    }*/
+
+    if (io.buf) {
+        free(io.buf);
+        io.buf = NULL;
+    }
+
+    io.len = len;
+    io.buf = malloc(len);
+
+    memcpy(io.buf, buf, len);
+
+    if (is_interrupt) {
+        xQueueSendFromISR(usb_tx_q, &io, &xHigherPriorityTaskWoken);
+        xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+
+    } else {
+        xQueueSend(usb_tx_q, &io, portMAX_DELAY);
+
+    }
+
+    /*while (len > 0) {
+        if (len > USB_IO_MAX_LEN) io.len = USB_IO_MAX_LEN;
+        else io.len = (u8)len;
+
+        memcpy(io.data, &buf[sent], io.len);
+
+        if (is_interrupt) {
+            if (!xQueueSendFromISR(usb_tx_q, &io, &xHigherPriorityTaskWoken)) break;
+            xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+        } else {
+            if (!xQueueSend(usb_tx_q, &io, portMAX_DELAY)) break;
+        }
+
+        sent += io.len;
+        len -= io.len;
+    }*/
+
+    if (!is_interrupt) xSemaphoreGive(usb_tx_s);
+    else {
+        xSemaphoreGiveFromISR(usb_tx_s, &xHigherPriorityTaskWoken);
+        xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+    };
+
+    if (xHigherPriorityTaskWokenAll) portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll)
+
+    return;
 }

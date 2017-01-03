@@ -20,6 +20,9 @@
 
 
 static void isr_mcu_wake(void);
+static void cca_setup(void);
+static void cca_run(void);
+static void cca_end(void);
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -48,6 +51,8 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 
         {CC1200_RNDGEN,     CC1200_RNDGEN_EN}, // Needed for random backoff for LBT CCA: https://e2e.ti.com/support/wireless_connectivity/f/156/t/370230
         {CC1200_FIFO_CFG,   0 /*!CC1200_FIFO_CFG_CRC_AUTOFLUSH*/},
+
+        {CC1200_AGC_GAIN_ADJUST, (u8)(s8)(-81 - 15 + 11)}
 };
 
 
@@ -194,21 +199,29 @@ void nphy_tx(cc_pkt_t *pkt)
     while ((st = cc_strobe(dev, CC1200_SIDLE)) & CC1200_STATUS_CHIP_RDYn);
 
     if (st & CC1200_STATE_TXFIFO_ERROR) {
-        cc_dbg_v("[%u] SFTX", dev);
+        cc_dbg("[%u] SFTX", dev);
         cc_strobe(dev, CC1200_SFTX);
     }
 
     cc_fifo_write(dev, (u8 *)pkt, pkt->len + 1);
-
+    cca_setup();
+    _cca:
+    cca_run();
     cc_strobe(dev, CC1200_STX);
 
     _wait:
+    cc_dbg("[%u] tx: wait", dev);
     wait_mcu_wake(portMAX_DELAY);
     st = cc_get(dev, CC1200_MARC_STATUS1);
+    cc_dbg("[%u] tx: st=0x%02X", dev, st);
 
     switch (st) {
         case CC1200_MARC_STATUS1_NO_FAILURE:
             goto _wait;
+
+        case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
+            cc_dbg("[%u] tx cca fail", dev);
+            goto _cca;
 
         case CC1200_MARC_STATUS1_TX_FINISHED:
             break;
@@ -223,5 +236,119 @@ void nphy_tx(cc_pkt_t *pkt)
         default:
             cc_dbg("[%u] tx error: ms1=0x%02X", dev, st);
             break;
+    }
+
+    cca_end();
+}
+
+#include <itm.h>
+
+
+void cca_setup(void)
+{
+    itm_puts(0, "cca setup\r\n");
+
+    //cc_update(dev, CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_M, CC1200_RFEND_CFG1_RXOFF_MODE_TX);
+    cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT);
+    //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_CARRIER_SENSE);
+    //cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0);
+}
+
+
+void cca_run(void)
+{
+    u8 reg;
+    cc_strobe(dev, CC1200_SRX);
+
+    do {
+        reg = cc_get(dev, CC1200_RSSI0) & (CC1200_RSSI0_RSSI_VALID | CC1200_RSSI0_CARRIER_SENSE_VALID);
+    } while (reg != (CC1200_RSSI0_RSSI_VALID | CC1200_RSSI0_CARRIER_SENSE_VALID));
+}
+
+void cca_end(void)
+{
+    cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_ALWAYS);
+    //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_NORMAL);
+    //cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 7); // NOTE: cheating here and using known value
+}
+
+
+
+
+typedef enum {
+    RF_STATE_NONE,
+    RF_STATE_RX,
+    RF_STATE_TX,
+    RF_STATE_CCA
+
+} rf_state_t;
+
+rf_state_t state;
+
+static void radio_loop(void)
+{
+    while (1) {
+
+        /**
+         * - handle status and initiate next action, OR
+         * - update current channel AND
+         * - if tx queued: expected: in RX, CCA set, strobe TX, CONTINUE
+         * -
+         */
+
+        const u8 ms = cc_get(dev, CC1200_MARC_STATUS1);
+        u8 st;
+
+        switch (ms) {
+            case CC1200_MARC_STATUS1_RX_FINISHED:
+                // handle rx, should be idle
+                break;
+
+            case CC1200_MARC_STATUS1_RX_TIMEOUT:
+            case CC1200_MARC_STATUS1_RX_TERMINATION:
+            case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
+            case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
+            case CC1200_MARC_STATUS1_ADDRESS:
+            case CC1200_MARC_STATUS1_CRC:
+            case CC1200_MARC_STATUS1_MAXIMUM_LENGTH:
+                // sfrx?, ensure idle
+                break;
+
+            case CC1200_MARC_STATUS1_TX_FINISHED:
+                // should already be idle
+                break;
+
+            case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
+                // what state here? do nothing, retry happens below
+                break;
+
+            case CC1200_MARC_STATUS1_TX_FIFO_OVERFLOW:
+            case CC1200_MARC_STATUS1_TX_FIFO_UNDERFLOW:
+                // sftx, ensure idle
+                break;
+
+            default:
+                break;
+        }
+
+        // update channel
+
+        if (xQueueReceive(nphy_tx_queue, &pkt, 0) == pdTRUE) {
+            cc_strobe(dev, CC1200_SIDLE);
+            cc_fifo_write(dev, (u8 *)pkt, pkt->len + 1);
+            cc_strobe(dev, CC1200_STX);
+        }
+
+        // if tx queued or cca failed:
+        //    if not cca failed, fill fifo
+        //    if CCA, ensure RX
+        //    start TX
+
+        /**
+         * - force idle
+         * - set channel
+         */
+
+
     }
 }
