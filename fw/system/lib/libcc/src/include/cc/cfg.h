@@ -270,13 +270,13 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_PREAMBLE_CFG0,     0x8A},
         {CC1200_IQIC,              0x58/*NOTE: changing back to 0x58 improved AGC/RSSI performance*//*0x80*//*0x58*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_CHAN_BW,           /*0x05*//*0x04*/0x03},
-        {CC1200_MDMCFG1,           0x42}, // |=0x80: CS gates sync search   |=((0x00-0x03)<<1) DVGA gain 0/-18/3/6 dB
+        {CC1200_MDMCFG1,           0x42 /*new: enable collision detect*/|0x08}, // |=0x80: CS gates sync search   |=((0x00-0x03)<<1) DVGA gain 0/-18/3/6 dB
         {CC1200_MDMCFG0,           0x05},
         {CC1200_SYMBOL_RATE2,      /*0xB4*/0xB9},
         {CC1200_SYMBOL_RATE1,      /*0x7A*/0x99},
         {CC1200_SYMBOL_RATE0,      /*0xE1*/0x9A},
         /*!!UNCONFIRMED CHANGE*/{CC1200_AGC_REF,           0x2E/*0x3D*//*0x37*/}, // Calibrated setting: 0x2E
-        {CC1200_AGC_CS_THR,        (u8)-103},
+        {CC1200_AGC_CS_THR,        (u8)/*-103*/-77},
         /*!!UNCONFIRMED CHANGE*/{CC1200_AGC_CFG2,          /*0x80*/0x40/*new: put back to 0x40 -- does this depend on the PA state?*/}, //  Calibrated setting: 0x40. Default: 0x20 (Normal mode, max gain 39dB). 0x4:Performance/max=27dB
         {CC1200_AGC_CFG1,          0x16},
         {CC1200_AGC_CFG0,          0x84},

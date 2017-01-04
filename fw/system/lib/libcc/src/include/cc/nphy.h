@@ -2,6 +2,7 @@
 
 #include <cc/common.h>
 
-bool nphy_init(void);
-cc_pkt_t *nphy_rx(u32 timeout);
+typedef void (* nphy_rx_t)(cc_pkt_t *pkt);
+
+bool nphy_init(nphy_rx_t rx);
 void nphy_tx(cc_pkt_t *pkt);

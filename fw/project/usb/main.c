@@ -108,7 +108,7 @@ static const struct cc_cfg_reg CC_CFG_MAC[] = {
         {CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
 };
 
-#define FREQ_BASE   905000000
+/*#define FREQ_BASE   905000000
 #define FREQ_BW     800000
 
 #define CHAN_COUNT  25
@@ -132,17 +132,12 @@ static struct {
                 },
                 .size = CHAN_COUNT
         }
-};
+};*/
 
-static volatile u32 chan_cur = UINT32_MAX;
+//static volatile u32 chan_cur = UINT32_MAX;
 
-static inline u32 chan_freq(const u32 chan)
-{
-    //NOTE: for debug purposes, only use 2 channels
-    return (freq_base + freq_side_bw * (1+2*/*chan*/(12+chan%2)));
-}
 
-static inline void chan_set(const u32 chan)
+/*static inline void chan_set(const u32 chan)
 {
     if (chan != chan_cur) {
         chan_cur = chan;
@@ -153,19 +148,12 @@ static inline void chan_set(const u32 chan)
 
         chan_select(&chnl.group, (chan_t)chan);
     }
-}
+}*/
 
-static inline void chan_next(void)
-{
-    chan_set((chan_cur + 1) % chan_count);
-}
 
-static void timer_task(xTimerHandle timer __unused)
-{
 
-}
 
-#define MSG_LEN 120
+#define MSG_LEN 117
 
 typedef struct __packed {
     u8 len;
@@ -178,10 +166,12 @@ typedef struct __packed {
 static pit_t xsec_timer_0;
 static pit_t xsec_timer;
 
-static inline u32 sync_timestamp(void)
+u32 sync_timestamp(void)
 {
     return pit_get_elapsed(xsec_timer);
 }
+
+static void handle_rx(app_pkt_t *pkt);
 
 static void main_task(void *param)
 {
@@ -190,8 +180,8 @@ static void main_task(void *param)
 
     //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
 
-#if 1
-    if (nphy_init()) {
+#if 0
+    if (nphy_init(handle_rx)) {
         printf("nphy init successful.\r\n");
 
         if (!cc_cfg_regs(0, CC_CFG_MAC, COUNT_OF(CC_CFG_MAC))) {
@@ -300,10 +290,95 @@ static void main_task(void *param)
     }
     #endif
 
+    #if 1
+
+    if (nphy_init((nphy_rx_t)handle_rx)) {
+        printf("nphy init successful.\r\n");
+
+        /*if (!cc_cfg_regs(0, CC_CFG_MAC, COUNT_OF(CC_CFG_MAC))) {
+            printf("warn: could not configure (mac)\n");
+        }*/
+
+        amp_init(0);
+
+        //chan_grp_init(&chnl.group, NULL);
+        //chan_grp_calibrate(&chnl.group);
+        //chan_set(0);
+
+        xsec_timer_0 = pit_alloc(&(pit_cfg_t){
+                .period = pit_nsec_tick(1000000)
+        });
+
+        xsec_timer = pit_chain(xsec_timer_0, &(pit_cfg_t){
+                .period = UINT32_MAX
+        });
+
+        pit_start(xsec_timer);
+        pit_start(xsec_timer_0);
+
+        u32 ticks = 0;
+        u32 sync_time = 0;
+        u32 remaining = portMAX_DELAY;
+        u32 chan_ticks;
+
+        if (!pflag_set()) {
+            printf("mode: receive\r\n");
+
+            amp_ctrl(0, AMP_LNA, true);
+            amp_ctrl(0, AMP_HGM, true);
+
+            vTaskDelay(portMAX_DELAY);
+
+        } else {
+            printf("mode: transmit\r\n");
+
+            app_pkt_t pkt = {.len = /*MSG_LEN + */2, .seq = 0, .chn = (u8) 0xfc, .data = {[0 ... MSG_LEN - 1] = 'a'}};
+
+            amp_ctrl(0, AMP_LNA, true);
+
+            amp_ctrl(0, AMP_PA, true);
+            amp_ctrl(0, AMP_HGM, true);
+
+            while (1) {
+                //pkt.chn = (u8) chan_cur;
+                nphy_tx((cc_pkt_t *) &pkt);
+                //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
+                ++pkt.seq;
+
+                const u32 pkt_time = cc_get_tx_time(0, pkt.len);
+
+                pkt.len = (u8)((pkt.len + 1) % (MSG_LEN + 2));
+                if (!pkt.len) pkt.len = 2;
+
+                LED_D_TOGGLE();
+                //vTaskDelay(pdMS_TO_TICKS(/*1137*/20 + (pkt.len % 2)*3 ));
+                vTaskDelay(pdMS_TO_TICKS(pkt_time*3));
+            }
+
+        }
+
+
+    }
+
+    #endif
+
     vTaskDelay(portMAX_DELAY);
     vTaskDelete(NULL);
     while (1) {}
 }
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
+{
+    printf("stack overflow in task '%s'\r\n", pcTaskName);
+}
+
+static void handle_rx(app_pkt_t *pkt)
+{
+    printf("rx: [recv] chn=%u seq=%u len=%u\r\n", pkt->chn, pkt->seq, pkt->len);
+    LED_D_TOGGLE();
+    if (!pflag_set()) nphy_tx((cc_pkt_t *)pkt);
+}
+
 
 extern void usb_write(char *buf, size_t len);
 

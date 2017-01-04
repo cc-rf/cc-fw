@@ -71,12 +71,12 @@
 #define FREERTOS_CONFIG_H
 
 /* Phillip: Additional configs from FreeRTOS.h */
-#define configUSE_NEWLIB_REENTRANT 1
+#define configUSE_NEWLIB_REENTRANT 0
 
 /* Phillip: specific task priorities */
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
 #define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 8)
-#define TASK_STACK_SIZE_DEFAULT     (TASK_STACK_SIZE_SMALL * 2)
+#define TASK_STACK_SIZE_DEFAULT     (TASK_STACK_SIZE_SMALL * 3)
 
 #define TASK_PRIO_MAX               (configMAX_PRIORITIES - 1)
 #define TASK_PRIO_MIN               0
@@ -118,7 +118,7 @@
 #define configIDLE_SHOULD_YIELD 1U
 #define configUSE_MUTEXES 1U
 #define configQUEUE_REGISTRY_SIZE 8U
-#define configCHECK_FOR_STACK_OVERFLOW 0U
+#define configCHECK_FOR_STACK_OVERFLOW 2U/*0U*/
 #define configUSE_RECURSIVE_MUTEXES 1U
 #define configUSE_MALLOC_FAILED_HOOK 0U
 #define configUSE_APPLICATION_TASK_TAG 0U

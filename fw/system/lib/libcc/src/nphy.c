@@ -1,4 +1,4 @@
-#include <cc/phy.h>
+#include <cc/nphy.h>
 #include <cc/io.h>
 #include <cc/cfg.h>
 
@@ -17,12 +17,20 @@
 
 #include <cc/sys/kinetis/isrd.h>
 #include <fsl_port.h>
+#include <cc/type.h>
 
 
 static void isr_mcu_wake(void);
 static void cca_setup(void);
 static void cca_run(void);
 static void cca_end(void);
+
+static void nphy_rx(void);
+
+static void nphy_task(void *param);
+static void nphy_dispatch_task(void *param);
+
+#define CC_RSSI_OFFSET      (s8)(-81 - 15 + 11)
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -37,13 +45,13 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
          * For the timeout to always trigger an interrupt, RX_TIME_QUAL must be zero.
          * */
         {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE | (0x7<<1) /*| CC1200_RFEND_CFG1_RX_TIME_QUAL_M*/},
-        {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE | CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN /*| 1*/},
+        {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_RX | CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN /*| 1*/},
 
         // These may not necessarily be part of the phy handling
 
         //{CC1200_PREAMBLE_CFG1, /*0xD*/0x4 << 2},
         //{CC1200_SYNC_CFG1,  0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16/* changed from 11 */},
-        {CC1200_PKT_CFG2,   CC1200_PKT_CFG2_CCA_MODE_ALWAYS},
+        {CC1200_PKT_CFG2,   /*CC1200_PKT_CFG2_CCA_MODE_ALWAYS*/CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_NOT_RX/*CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT*/},
         {CC1200_PKT_CFG1,   CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F | CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF | CC1200_PKT_CFG1_APPEND_STATUS | CC1200_PKT_CFG1_WHITE_DATA},
         {CC1200_PKT_CFG0,   CC1200_PKT_CFG0_LENGTH_CONFIG_VARIABLE},
         {CC1200_PKT_LEN,    255},
@@ -52,15 +60,87 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_RNDGEN,     CC1200_RNDGEN_EN}, // Needed for random backoff for LBT CCA: https://e2e.ti.com/support/wireless_connectivity/f/156/t/370230
         {CC1200_FIFO_CFG,   0 /*!CC1200_FIFO_CFG_CRC_AUTOFLUSH*/},
 
-        {CC1200_AGC_GAIN_ADJUST, (u8)(s8)(-81 - 15 + 11)}
+
+        {CC1200_AGC_GAIN_ADJUST, (u8)CC_RSSI_OFFSET},
+        {CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
+
 };
 
 
 static const cc_dev_t dev = 0;
 static xTaskHandle waiting_task = NULL;
 
-bool nphy_init(void)
+static struct {
+    xTaskHandle task;
+    xTaskHandle disp;
+    xQueueHandle txq;
+    xQueueHandle rxq;
+    nphy_rx_t rx;
+
+} nphy = {NULL};
+
+
+
+
+extern u32 sync_timestamp(void);
+u32 sync_time = 0;
+
+#define FREQ_BASE   905000000
+#define FREQ_BW     800000
+#define CHAN_COUNT  25
+
+static const u32 freq_base      = FREQ_BASE;
+static const u32 freq_side_bw   = FREQ_BW / 2;
+static const u32 chan_count     = CHAN_COUNT;
+static const u32 chan_time      = 200;//30;
+
+#include <cc/chan.h>
+#include <fsl_rnga.h>
+
+
+static struct {
+    chan_grp_t group;
+    chan_inf_t chan[CHAN_COUNT];
+    chan_t hop_table[CHAN_COUNT];
+
+} chnl = {
+        .group = {
+                .dev = 0,
+                .freq = {
+                        .base = FREQ_BASE,
+                        .bw   = FREQ_BW
+                },
+                .size = CHAN_COUNT
+        }
+};
+
+volatile u32 chan_cur = UINT32_MAX;
+
+static inline void chan_set(const u32 chan)
 {
+    if (chan != chan_cur) {
+        chan_cur = chan;
+
+        const u8 st = cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M;
+
+        // TODO: !!!! MAKE SURE THIS ISN'T STUPID !!!!
+        if (st != CC1200_STATE_IDLE)
+            cc_strobe(dev, CC1200_SIDLE);
+
+        //NOTE: for debug purposes, only use 2 channels
+        chan_select(&chnl.group, (chan_t) (10 + chan%2));
+        //chan_select(&chnl.group, (chan_t)chan);
+    }
+}
+
+
+
+
+bool nphy_init(nphy_rx_t rx)
+{
+    // TODO: eventually move elsewhere
+    RNGA_Init(RNG);
+
     cc_spi_init(dev);
 
     cc_strobe(dev, CC1200_SRES);
@@ -85,86 +165,60 @@ bool nphy_init(void)
         return false;
     }
 
-    isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake);
+    nphy.txq = xQueueCreate(8, sizeof(cc_pkt_t *));
+    nphy.rxq = xQueueCreate(8, sizeof(cc_pkt_t *));
+    nphy.rx = rx;
 
-    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
-
-    return true;
-}
-
-static bool wait_mcu_wake(TickType_t ticks)
-{
-    waiting_task = xTaskGetCurrentTaskHandle();
-
-    if (!ulTaskNotifyTake(pdTRUE, ticks)) {
-        xTaskNotifyStateClear(waiting_task);
-        waiting_task = NULL;
+    if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH, &nphy.task)) {
+        cc_dbg("[%u] error: unable to create main task", dev);
+        isrd_configure(2, 10, kPORT_InterruptOrDMADisabled, NULL);
         return false;
     }
 
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH-1, &nphy.disp)) {
+        cc_dbg("[%u] error: unable to create dispatch task", dev);
+        isrd_configure(2, 10, kPORT_InterruptOrDMADisabled, NULL);
+        return false;
+    }
+
+    chan_grp_init(&chnl.group, NULL);
+    chan_grp_calibrate(&chnl.group);
+    chan_set(0);
+
+    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
+    isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake);
+
+    cc_strobe(dev, CC1200_SRX);
     return true;
+}
+
+#define NOTIFY_MASK_ISR    2
+#define NOTIFY_MASK_TX     4
+
+
+void nphy_tx(cc_pkt_t *pkt)
+{
+    cc_pkt_t *qpkt = malloc(pkt->len + sizeof(*pkt)); assert(qpkt);
+    memcpy(qpkt, pkt, pkt->len + sizeof(*pkt));
+    xQueueSend(nphy.txq, &qpkt, portMAX_DELAY);
+    //xTaskNotifyGive(nphy.task);
+    xTaskNotify(nphy.task, NOTIFY_MASK_TX, eSetBits);
 }
 
 static void isr_mcu_wake(void)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xTaskHandle *const task = waiting_task;
-
-    if (task) {
-        //portDISABLE_INTERRUPTS();
-        waiting_task = NULL;
-        vTaskNotifyGiveFromISR(task, &xHigherPriorityTaskWoken);
-        //portENABLE_INTERRUPTS();
-    }
-
+    //vTaskNotifyGiveFromISR(nphy.task, &xHigherPriorityTaskWoken);
+    xTaskNotifyFromISR(nphy.task, NOTIFY_MASK_ISR, eSetBits, &xHigherPriorityTaskWoken);
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 
-cc_pkt_t *nphy_rx(u32 timeout)
+static void nphy_rx(void)
 {
-    static u8 buf[256];
-    static cc_pkt_t *const pkt = (cc_pkt_t *)buf;
+    u8 buf[256];
+    cc_pkt_t *const spkt = (cc_pkt_t *)buf;
 
-    u8 st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
-
-    pkt->len = 0;
-
-    if ((st & CC1200_STATUS_STATE_M) != CC1200_STATE_RX) {
-        if (st & CC1200_STATUS_EXTRA_M) {
-            cc_dbg_v("[%u] SFRX: st=0x%02X", dev, st);
-            cc_strobe(dev, CC1200_SFRX);
-        }
-
-        cc_dbg_v("[%u] SRX: st=0x%02X", dev, st);
-        cc_strobe(dev, CC1200_SRX);
-    } else {
-        cc_dbg_v("[%u] st=0x%02X", dev, st);
-    }
-
-    _wait:
-    if (!wait_mcu_wake(timeout)) return NULL;
-    st = cc_get(dev, CC1200_MARC_STATUS1);
-
-    switch (st) {
-        case CC1200_MARC_STATUS1_NO_FAILURE:
-            goto _wait;
-
-        case CC1200_MARC_STATUS1_RX_FINISHED:
-            break;
-
-        case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
-        case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
-            cc_dbg("[%u] rx fifo error: ms1=0x%02X", dev, st);
-            cc_strobe(dev, CC1200_SFRX);
-            return pkt;
-
-        case CC1200_MARC_STATUS1_ADDRESS:
-        case CC1200_MARC_STATUS1_CRC:
-        case CC1200_MARC_STATUS1_MAXIMUM_LENGTH:
-        default:
-            cc_dbg("[%u] rx error: ms1=0x%02X", dev, st);
-            return pkt;
-    }
+    spkt->len = 0;
 
     /* Assumption (may change later): variable packet length, 2 status bytes -> 3 total. */
     const static u8 PKT_OVERHEAD = 3;
@@ -177,76 +231,48 @@ cc_pkt_t *nphy_rx(u32 timeout)
         //cc_dbg("[%u] rxf=%u rxl=%u n=%u", dev, rxf, rxl, len);
 
         // (another assumption: only one packet in FIFO. TBD whether it ever might be more)
-        cc_fifo_read(dev, (u8 *)pkt, fifo_len);
+        cc_fifo_read(dev, (u8 *)spkt, fifo_len);
 
-        const s8 rssi = (s8)pkt->data[pkt->len];
-        const u8 crc_ok = pkt->data[pkt->len + 1] & (u8) CC1200_LQI_CRC_OK_BM;
-        const u8 lqi = pkt->data[pkt->len + 1] & (u8) CC1200_LQI_EST_BM;
+        const s8 rssi = (s8)spkt->data[spkt->len];
+        const u8 crc_ok = spkt->data[spkt->len + 1] & (u8) CC1200_LQI_CRC_OK_BM;
+        const u8 lqi = spkt->data[spkt->len + 1] & (u8) CC1200_LQI_EST_BM;
 
-        if (!crc_ok) pkt->len = 0;
+        if (!crc_ok) spkt->len = 0;
+        else {
+            // assumption: length field in fifo is sane
+            cc_pkt_t *pkt = malloc(sizeof(*spkt) + spkt->len); assert(pkt);
+            memcpy(pkt, spkt, sizeof(*spkt) + spkt->len);
+            if (!xQueueSend(nphy.rxq, &pkt, 0)) {
+                cc_dbg("rx pkt queue fail");
+            } // TODO: probably need to not wait here
+        }
 
     } else if (fifo_len) {
         cc_strobe(dev, CC1200_SFRX);
     }
-
-    return pkt;
 }
 
-void nphy_tx(cc_pkt_t *pkt)
+static void ensure_rx(void)
 {
-    u8 st;
+    const u8 ms = cc_get(dev, CC1200_MARCSTATE) & CC1200_MARC_STATE_M;
 
-    while ((st = cc_strobe(dev, CC1200_SIDLE)) & CC1200_STATUS_CHIP_RDYn);
-
-    if (st & CC1200_STATE_TXFIFO_ERROR) {
-        cc_dbg("[%u] SFTX", dev);
-        cc_strobe(dev, CC1200_SFTX);
-    }
-
-    cc_fifo_write(dev, (u8 *)pkt, pkt->len + 1);
-    cca_setup();
-    _cca:
-    cca_run();
-    cc_strobe(dev, CC1200_STX);
-
-    _wait:
-    cc_dbg("[%u] tx: wait", dev);
-    wait_mcu_wake(portMAX_DELAY);
-    st = cc_get(dev, CC1200_MARC_STATUS1);
-    cc_dbg("[%u] tx: st=0x%02X", dev, st);
-
-    switch (st) {
-        case CC1200_MARC_STATUS1_NO_FAILURE:
-            goto _wait;
-
-        case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
-            cc_dbg("[%u] tx cca fail", dev);
-            goto _cca;
-
-        case CC1200_MARC_STATUS1_TX_FINISHED:
+    switch (ms) {
+        case CC1200_MARC_STATE_RX:
+        case CC1200_MARC_STATE_TXRX_SWITCH:
+        case CC1200_MARC_STATE_IFADCON_TXRX:
             break;
 
-        case CC1200_MARC_STATUS1_TX_FIFO_OVERFLOW:
-        case CC1200_MARC_STATUS1_TX_FIFO_UNDERFLOW:
-            /*if (cc1200_strobe(CC1200_SFTX, NULL)) { DBG("fail: SFTX"); goto fail; }*/
-            cc_dbg("[%u] tx fifo error: %s", dev, st == CC1200_MARC_STATUS1_TX_FIFO_OVERFLOW ? "overflow" : "underflow");
-            cc_strobe(dev, CC1200_SFTX);
-            break;
-
+        case CC1200_MARC_STATE_RX_FIFO_ERR:
+            cc_strobe(dev, CC1200_SFRX);
+            // fall through
         default:
-            cc_dbg("[%u] tx error: ms1=0x%02X", dev, st);
+            cc_strobe(dev, CC1200_SRX);
             break;
     }
-
-    cca_end();
 }
-
-#include <itm.h>
-
 
 void cca_setup(void)
 {
-    itm_puts(0, "cca setup\r\n");
 
     //cc_update(dev, CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_M, CC1200_RFEND_CFG1_RXOFF_MODE_TX);
     cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT);
@@ -254,11 +280,15 @@ void cca_setup(void)
     //cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0);
 }
 
-
 void cca_run(void)
 {
-    u8 reg;
-    cc_strobe(dev, CC1200_SRX);
+    u8 reg = cc_get(dev, CC1200_MARCSTATE) & CC1200_MARC_STATE_M;
+
+    if (reg != CC1200_MARC_STATE_RX) {
+        cc_strobe(dev, CC1200_SRX);
+        u8 msnew = cc_get(dev, CC1200_MARCSTATE) & CC1200_MARC_STATE_M;
+        cc_dbg("not rx. MS=0x%02X -> 0x%02X", reg, msnew);
+    }
 
     do {
         reg = cc_get(dev, CC1200_RSSI0) & (CC1200_RSSI0_RSSI_VALID | CC1200_RSSI0_CARRIER_SENSE_VALID);
@@ -273,82 +303,226 @@ void cca_end(void)
 }
 
 
+typedef struct __packed {
+    u8 len;
+    u8 chn;
+    u8 seq;
+    u8 data[];
+
+} app_pkt_t;
 
 
-typedef enum {
-    RF_STATE_NONE,
-    RF_STATE_RX,
-    RF_STATE_TX,
-    RF_STATE_CCA
-
-} rf_state_t;
-
-rf_state_t state;
-
-static void radio_loop(void)
+static void nphy_task(void *param)
 {
+    cc_pkt_t *pkt = NULL;
+    u8 ms, st;
+
+    u32 ticks = 0;
+    u32 remaining = chan_time;
+    u32 tx_time = 0;
+    u32 chan_ticks;
+    u32 notify;
+
     while (1) {
 
-        /**
-         * - handle status and initiate next action, OR
-         * - update current channel AND
-         * - if tx queued: expected: in RX, CCA set, strobe TX, CONTINUE
-         * -
-         */
+        // always do ...
 
-        const u8 ms = cc_get(dev, CC1200_MARC_STATUS1);
-        u8 st;
+        if (xTaskNotifyWait(0, UINT32_MAX, &notify, pdMS_TO_TICKS(remaining))) {
 
-        switch (ms) {
-            case CC1200_MARC_STATUS1_RX_FINISHED:
-                // handle rx, should be idle
-                break;
+            if (notify & NOTIFY_MASK_ISR) {
+                // handle isr
+                ms = cc_get(dev, CC1200_MARC_STATUS1);
 
-            case CC1200_MARC_STATUS1_RX_TIMEOUT:
-            case CC1200_MARC_STATUS1_RX_TERMINATION:
-            case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
-            case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
-            case CC1200_MARC_STATUS1_ADDRESS:
-            case CC1200_MARC_STATUS1_CRC:
-            case CC1200_MARC_STATUS1_MAXIMUM_LENGTH:
-                // sfrx?, ensure idle
-                break;
+                cc_dbg_v("ms1=0x%02X t=%lu", ms, sync_timestamp());
 
-            case CC1200_MARC_STATUS1_TX_FINISHED:
-                // should already be idle
-                break;
+                if (pkt) {
+                    switch (ms) {
+                        case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
+                            RNGA_GetRandomData(RNG, &st, 1);
+                            st = (u8)(3 + (st % 8));
+                            vTaskDelay(pdMS_TO_TICKS(st));
 
-            case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
-                // what state here? do nothing, retry happens below
-                break;
+                        _re_cca:
+                            if ((sync_timestamp() - tx_time) > (chan_time/4)) {
+                                cc_dbg("tx: abandanoning packet! (0)");
+                                free(pkt);
+                                pkt = NULL;
+                                //goto _txq_check;
+                                break; // ^ basically the same
+                            }
 
-            case CC1200_MARC_STATUS1_TX_FIFO_OVERFLOW:
-            case CC1200_MARC_STATUS1_TX_FIFO_UNDERFLOW:
-                // sftx, ensure idle
-                break;
+                            cc_dbg("tx: cca retry ~ ms=0x%02X st=0x%02X rssi=%i", ms, cc_get(dev, CC1200_SNOP), cc_get_rssi(0));
+                            // TODO: update_channel
+                            if (sync_time) {
+                                _ts2: ticks = sync_timestamp() - sync_time;
+                                chan_ticks = (ticks % chan_time);
+                                remaining = chan_time - /*(ticks % chan_time)*/chan_ticks;
 
-            default:
-                break;
+                                /*if (chan_ticks < 10) {
+                                    vTaskDelay(pdMS_TO_TICKS(10-chan_ticks));
+                                    goto _ts;
+                                }*/
+
+                                if (remaining <= 5) {
+                                    vTaskDelay(pdMS_TO_TICKS(10+remaining));
+                                    goto _ts2;
+                                }
+
+                                chan_set((ticks / chan_time) % chan_count);
+                            }
+
+                            cca_run();
+                            cc_strobe(dev, CC1200_STX); // TODO: Should this be SFTXON?
+                            // TODO: update wait time but NOT channel
+                            if (sync_time) {
+                                ticks = sync_timestamp() - sync_time;
+                                remaining = chan_time - (ticks % chan_time);
+                            }
+
+                            continue;
+
+                        case CC1200_MARC_STATUS1_RX_FINISHED:
+                            // an awkward situation, sort of -- packet received during cca, which is totally possible in some
+                            // cases. might as well handle it as 'normal'... but, big
+                            // !TODO: determine whether cca needs continuing at this point or what!
+                            if (!sync_time) sync_time = sync_timestamp();
+                            nphy_rx();
+                            cc_strobe(dev, CC1200_SIDLE); // NOTE: could be unnecessary/impactful
+                            //break;
+                            goto _re_cca;
+
+                        case CC1200_MARC_STATUS1_NO_FAILURE:
+                            // although other things could be happening, we are busy waiting for the result of a tx.
+                            // it was assumed before (hoprefully) that there would be channel time to do so, so that means
+                            // if the packet is sent close to the end of a slot, we'll be late to the next one. such is life.
+                            continue;
+
+                        default:
+                            cc_dbg("tx: weird outcome ms=0x%02X st=0x%02X", ms, cc_get(dev, CC1200_SNOP));
+                            cc_strobe(dev, CC1200_SIDLE);
+                            cc_strobe(dev, CC1200_SFRX);
+                            cc_strobe(dev, CC1200_SFTX);
+                            // fall through
+                        case CC1200_MARC_STATUS1_TX_FINISHED:
+                            free(pkt);
+                            pkt = NULL;
+                            // don't srx or update channel or check for tx, let it happen below.
+                            break;
+                    }
+                } else if (ms) {
+                    switch (ms) {
+                        case CC1200_MARC_STATUS1_RX_FINISHED:
+                            if (!sync_time) sync_time = sync_timestamp();
+                            tx_time = 0; // next tx not gated by last tx?
+                            nphy_rx();
+                            break;
+
+                        case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
+                        case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
+                            cc_strobe(dev, CC1200_SFRX);
+                            break;
+
+                        default:
+                            cc_dbg("task: weird outcome ms=0x%02X st=0x%02X", ms, cc_get(dev, CC1200_SNOP));
+                            // TODO: maybe flush fifos and/or check etc...
+                            cc_strobe(dev, CC1200_SIDLE);
+                            cc_strobe(dev, CC1200_SFRX);
+                            cc_strobe(dev, CC1200_SFTX);
+                            break;
+                    }
+                }
+            }
+
+        } else {
+            // timeout
         }
 
-        // update channel
+        _txq_check:;
 
-        if (xQueueReceive(nphy_tx_queue, &pkt, 0) == pdTRUE) {
-            cc_strobe(dev, CC1200_SIDLE);
-            cc_fifo_write(dev, (u8 *)pkt, pkt->len + 1);
+        bool new_pkt = false;
+        bool cca = false;
+
+        if (!pkt) {
+
+            // maybe only gate tx packets when haven't just received one, e.g. clear tx_time on rx
+            if ((sync_timestamp() - tx_time) > 10 && xQueueReceive(nphy.txq, &pkt, 0) && pkt) {
+                tx_time = sync_timestamp();
+                new_pkt = true;
+                cca = true;//(pkt->len & 0x80) != 0;
+
+                if (!cca) {
+                    //cc_strobe(dev, CC1200_SIDLE);
+                } else {
+                    // ^ fucked with the condition above....
+                    //pkt->len &= 0x7f;
+                }
+
+                pkt->len &= 0x7f;
+            }
+
+        } else if (pkt && ((sync_timestamp() - tx_time) > (chan_time/4))) {
+            cc_dbg("tx: abandanoning packet! (1:also:this is a weird case no?)");
+            free(pkt);
+            pkt = NULL;
+            goto _txq_check;
+        }
+
+        if (sync_time && ((/*packet was not already/still pending tx*/pkt && new_pkt) ||/*no packet tx*/ !pkt)) {
+            _ts: ticks = sync_timestamp() - sync_time;
+            chan_ticks = (ticks % chan_time);
+            remaining = chan_time - /*(ticks % chan_time)*/chan_ticks;
+
+            if (pkt) {
+                if (chan_ticks < 5) {
+                    vTaskDelay(pdMS_TO_TICKS(5 - chan_ticks));
+                    goto _ts;
+                }
+
+                if (remaining <= 5) {
+                    vTaskDelay(pdMS_TO_TICKS(5 + remaining));
+
+                    goto _ts;
+                }
+            }
+
+            chan_set((ticks / chan_time) % chan_count);
+        }
+
+        if (new_pkt) {
+            // DEBUG
+            ((app_pkt_t *)pkt)->chn = (u8)chan_cur;
+            // NOTE: Used to be above after queue receive
+            cc_fifo_write(dev, (u8 *) pkt, sizeof(*pkt) + pkt->len);
+
+            if (cca) {
+                cca_run();
+            }
+
             cc_strobe(dev, CC1200_STX);
+            if (!sync_time) sync_time = sync_timestamp(); // TODO: Maybe move to when the isr indicates success?
+
+            // DEBUG
+            printf("tx/%u: seq=%u len=%u t=%lu\r\n", (u8)chan_cur, ((app_pkt_t *)pkt)->seq, ((app_pkt_t *)pkt)->len, sync_timestamp());
+
+        } else if (!pkt) {
+            // TODO: Maybe find a better condition for this. Maybe really important
+            ensure_rx();
         }
+    }
+}
 
-        // if tx queued or cca failed:
-        //    if not cca failed, fill fifo
-        //    if CCA, ensure RX
-        //    start TX
+static void nphy_dispatch_task(void *param)
+{
+    const xQueueHandle rxq = nphy.rxq;
+    const nphy_rx_t rx = nphy.rx;
+    cc_pkt_t *spkt = alloca(sizeof(cc_pkt_t) + 255);
+    cc_pkt_t *pkt;
 
-        /**
-         * - force idle
-         * - set channel
-         */
-
-
+    while (1) {
+        if (xQueueReceive(rxq, &pkt, portMAX_DELAY)) {
+            memcpy(spkt, pkt, sizeof(*pkt) + pkt->len);
+            free(pkt);
+            if (rx) rx(spkt); // TODO: maybe require cb and remove check
+        }
     }
 }
