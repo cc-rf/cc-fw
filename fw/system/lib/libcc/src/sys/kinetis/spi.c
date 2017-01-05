@@ -7,8 +7,8 @@
 #include <FreeRTOS.h>
 #include <semphr.h>
 
-//#define CC_SPI_DMA
-
+#define CC_SPI_DMA
+//#define CC_SPI_LOCK
 
 // TODO: see if CC1200 will accept 8-bit addresses with leading zeroes in upper 8 bits
 
@@ -19,15 +19,17 @@ static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, statu
 #endif
 
 static struct {
-#ifdef CC_SPI_DMA
+    #ifdef CC_SPI_DMA
     dspi_master_edma_handle_t edma_handle;
     edma_handle_t rx_handle;
     edma_handle_t tx_handle;
     edma_handle_t im_handle;
-#else
+    #else
     dspi_master_handle_t master_handle;
-#endif
+    #endif
+    #ifdef CC_SPI_LOCK
     xSemaphoreHandle mtx;
+    #endif
     xSemaphoreHandle sem;
 
 } spi[CC_NUM_DEVICES];
@@ -37,110 +39,117 @@ void cc_spi_init(cc_dev_t dev)
     assert(CC_DEV_VALID(dev));
     const spi_config_t *const cfg = &cc_interface[dev].spi;
 
-    spi[dev].mtx = xSemaphoreCreateMutex(); assert(spi[dev].mtx != NULL);
+    #ifdef CC_SPI_LOCK
+        //spi[dev].mtx = xSemaphoreCreateMutex(); assert(spi[dev].mtx != NULL);
+        spi[dev].mtx = xSemaphoreCreateBinary(); assert(spi[dev].mtx != NULL);
+        xSemaphoreGive(spi[dev].mtx);
+    #endif
+
     spi[dev].sem = xSemaphoreCreateBinary(); assert(spi[dev].sem != NULL);
 
     dspi_master_config_t spi_config;
     DSPI_MasterGetDefaultConfig(&spi_config);
     spi_config.whichPcs = (dspi_which_pcs_t)(1u << cfg->pcs);
-    spi_config.ctarConfig.pcsToSckDelayInNanoSec = 1000;
-    spi_config.ctarConfig.lastSckToPcsDelayInNanoSec = 1000;
+    spi_config.ctarConfig.pcsToSckDelayInNanoSec = /*1000*/0;
+    spi_config.ctarConfig.lastSckToPcsDelayInNanoSec = /*1000*/100;
     spi_config.ctarConfig.betweenTransferDelayInNanoSec = 0;
     spi_config.ctarConfig.baudRate = 8000000;
 
     DSPI_MasterInit(cfg->spi, &spi_config, CLOCK_GetBusClkFreq());
 
-#ifdef CC_SPI_DMA
-    dma_request_source_t dreq_rx, dreq_tx;
-    status_t status;
+    #ifdef CC_SPI_DMA
 
-    DMAMGR_Init();
+        dma_request_source_t dreq_rx, dreq_tx;
+        status_t status;
 
-    if      (cfg->spi == SPI0) { dreq_rx = kDmaRequestMux0SPI0Rx; dreq_tx = kDmaRequestMux0SPI0Tx; }
-    else if (cfg->spi == SPI1) { dreq_rx = kDmaRequestMux0SPI1Rx; dreq_tx = kDmaRequestMux0SPI1Tx; }
-    else if (cfg->spi == SPI2) { dreq_rx = kDmaRequestMux0SPI2Rx; dreq_tx = kDmaRequestMux0SPI2Tx; }
-#ifdef SPI3
-    else if (cfg->spi == SPI3) { dreq_rx = kDmaRequestMux0SPI3Rx; dreq_tx = kDmaRequestMux0SPI3Tx; }
-#endif
-#ifdef SPI4
-    else if (cfg->spi == SPI4) { dreq_rx = kDmaRequestMux0SPI4Rx; dreq_tx = kDmaRequestMux0SPI4Tx; }
-#endif
-#ifdef SPI5
-    else if (cfg->spi == SPI5) { dreq_rx = kDmaRequestMux0SPI5Rx; dreq_tx = kDmaRequestMux0SPI5Tx; }
-#endif
+        DMAMGR_Init();
 
-    /*
-    status = DMAMGR_RequestChannel(dreq_rx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].tx_handle);
-    assert(status == kStatus_Success);
+        if      (cfg->spi == SPI0) { dreq_rx = kDmaRequestMux0SPI0Rx; dreq_tx = kDmaRequestMux0SPI0Tx; }
+        else if (cfg->spi == SPI1) { dreq_rx = kDmaRequestMux0SPI1Rx; dreq_tx = kDmaRequestMux0SPI1Tx; }
+        else if (cfg->spi == SPI2) { dreq_rx = kDmaRequestMux0SPI2Rx; dreq_tx = kDmaRequestMux0SPI2Tx; }
+        #ifdef SPI3
+            else if (cfg->spi == SPI3) { dreq_rx = kDmaRequestMux0SPI3Rx; dreq_tx = kDmaRequestMux0SPI3Tx; }
+        #endif
+        #ifdef SPI4
+            else if (cfg->spi == SPI4) { dreq_rx = kDmaRequestMux0SPI4Rx; dreq_tx = kDmaRequestMux0SPI4Tx; }
+        #endif
+        #ifdef SPI5
+            else if (cfg->spi == SPI5) { dreq_rx = kDmaRequestMux0SPI5Rx; dreq_tx = kDmaRequestMux0SPI5Tx; }
+        #endif
 
-    // What to do here? The examples don't configure DMAMUX for intermediary...
-    //status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].im_handle);
-    //assert(status == kStatus_Success);
-    //DMAMUX_DisableChannel(DMAMUX0, spi[dev].im_handle.channel); // ?
-    EDMA_CreateHandle(&spi[dev].im_handle, DMA0, 21+dev);
+        /*
+        status = DMAMGR_RequestChannel(dreq_rx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].tx_handle);
+        assert(status == kStatus_Success);
 
-    status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].rx_handle);
-    assert(status == kStatus_Success);
-     */
+        // What to do here? The examples don't configure DMAMUX for intermediary...
+        //status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].im_handle);
+        //assert(status == kStatus_Success);
+        //DMAMUX_DisableChannel(DMAMUX0, spi[dev].im_handle.channel); // ?
+        EDMA_CreateHandle(&spi[dev].im_handle, DMA0, 21+dev);
 
-    DMAMUX_SetSource(DMAMUX0, (dev*3u)+0u, dreq_rx);
-    DMAMUX_EnableChannel(DMAMUX0, (dev*3u)+0u);
-    DMAMUX_SetSource(DMAMUX0, (dev*3u)+1u, dreq_tx);
-    DMAMUX_EnableChannel(DMAMUX0, (dev*3u)+1u);
+        status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].rx_handle);
+        assert(status == kStatus_Success);
+         */
 
-    EDMA_CreateHandle(&spi[dev].rx_handle, DMA0, (dev*3u)+0u);
-    EDMA_CreateHandle(&spi[dev].im_handle, DMA0, (dev*3u)+2u);
-    EDMA_CreateHandle(&spi[dev].tx_handle, DMA0, (dev*3u)+1u);
+        DMAMUX_SetSource(DMAMUX0, (dev*3u)+0u, dreq_rx);
+        DMAMUX_EnableChannel(DMAMUX0, (dev*3u)+0u);
+        DMAMUX_SetSource(DMAMUX0, (dev*3u)+1u, dreq_tx);
+        DMAMUX_EnableChannel(DMAMUX0, (dev*3u)+1u);
 
-    NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
-    NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
-    //NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].im_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+        EDMA_CreateHandle(&spi[dev].rx_handle, DMA0, (dev*3u)+0u);
+        EDMA_CreateHandle(&spi[dev].im_handle, DMA0, (dev*3u)+2u);
+        EDMA_CreateHandle(&spi[dev].tx_handle, DMA0, (dev*3u)+1u);
 
-    DSPI_MasterTransferCreateHandleEDMA(
-            cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *) spi[dev].sem,
-            &spi[dev].rx_handle, &spi[dev].im_handle, &spi[dev].tx_handle
-    );
-#else
+        NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+        NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+        //NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].im_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
 
-    DSPI_MasterTransferCreateHandle(
-            cfg->spi, &spi[dev].master_handle, spi_irq_callback, (void *) spi[dev].sem
-    );
+        DSPI_MasterTransferCreateHandleEDMA(
+                cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *) spi[dev].sem,
+                &spi[dev].rx_handle, &spi[dev].im_handle, &spi[dev].tx_handle
+        );
 
-    IRQn_Type irqn = NotAvail_IRQn;
+    #else
 
-    if      (cfg->spi == SPI0) irqn = SPI0_IRQn;
-    else if (cfg->spi == SPI1) irqn = SPI1_IRQn;
-    else if (cfg->spi == SPI2) irqn = SPI2_IRQn;
-#ifdef SPI3
-    else if (cfg->spi == SPI3) irqn = SPI3_IRQn;
-#endif
-#ifdef SPI4
-    else if (cfg->spi == SPI4) irqn = SPI4_IRQn;
-#endif
-#ifdef SPI5
-    else if (cfg->spi == SPI5) irqn = SPI5_IRQn;
-#endif
+        DSPI_MasterTransferCreateHandle(
+                cfg->spi, &spi[dev].master_handle, spi_irq_callback, (void *) spi[dev].sem
+        );
 
-    if (irqn == NotAvail_IRQn) {
-        cc_dbg("[%u] irq for SPI@%p unavailable", dev, cfg->spi);
-        return;
-    }
+        IRQn_Type irqn = NotAvail_IRQn;
 
-    NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+        if      (cfg->spi == SPI0) irqn = SPI0_IRQn;
+        else if (cfg->spi == SPI1) irqn = SPI1_IRQn;
+        else if (cfg->spi == SPI2) irqn = SPI2_IRQn;
+        #ifdef SPI3
+            else if (cfg->spi == SPI3) irqn = SPI3_IRQn;
+        #endif
+        #ifdef SPI4
+            else if (cfg->spi == SPI4) irqn = SPI4_IRQn;
+        #endif
+        #ifdef SPI5
+            else if (cfg->spi == SPI5) irqn = SPI5_IRQn;
+        #endif
 
-#endif
+        if (irqn == NotAvail_IRQn) {
+            cc_dbg("[%u] irq for SPI@%p unavailable", dev, cfg->spi);
+            return;
+        }
+
+        NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+
+    #endif
 
     cc_dbg_v("[%u] initialized", dev);
 }
 
-static void print_hex(u8 *buf, size_t len)
+/*static void print_hex(u8 *buf, size_t len)
 {
     for (size_t i = 0; i < len; i++) {
         cc_dbg_printf_v("0x%02X ", buf[i]);
     }
 
     cc_dbg_printf_v("\r\n");
-}
+}*/
 
 u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
 {
@@ -178,22 +187,36 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
             .configFlags = kDSPI_MasterCtar0 | (cfg->pcs << DSPI_MASTER_PCS_SHIFT) | kDSPI_MasterPcsContinuous
     };
 
-#if CC_DEBUG_VERBOSE
-    cc_dbg_v("flag=0x%x addr=0x%x len=%lu hlen=%u", flag, addr, len, hlen);
-    cc_dbg_printf_v("tx="); print_hex(xbuf, xlen);
-#endif
+    #if CC_DEBUG_VERBOSE
+        cc_dbg_v("flag=0x%x addr=0x%x len=%lu hlen=%u", flag, addr, len, hlen);
+        cc_dbg_printf_v("tx="); print_hex(xbuf, xlen);
+    #endif
 
-#ifdef CC_SPI_DMA
-    xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
-    DSPI_MasterTransferEDMA(cfg->spi, &spi[dev].edma_handle, &xfer);
-    xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
-    xSemaphoreGive(spi[dev].mtx);
-#else
-    xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
-    DSPI_MasterTransferNonBlocking(cfg->spi, &spi[dev].master_handle, &xfer);
-    xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
-    xSemaphoreGive(spi[dev].mtx);
-#endif
+    #ifdef CC_SPI_DMA
+        #ifdef CC_SPI_LOCK
+            xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
+        #endif
+
+        DSPI_MasterTransferEDMA(cfg->spi, &spi[dev].edma_handle, &xfer);
+        xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
+
+        #ifdef CC_SPI_LOCK
+            xSemaphoreGive(spi[dev].mtx);
+        #endif
+
+    #else
+        #ifdef CC_SPI_LOCK
+            xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
+        #endif
+
+        DSPI_MasterTransferNonBlocking(cfg->spi, &spi[dev].master_handle, &xfer);
+        xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
+
+        #ifdef CC_SPI_LOCK
+            xSemaphoreGive(spi[dev].mtx);
+        #endif
+
+    #endif
 
     if (rx && len) {
         memcpy(rx, &xbuf[hlen], len);
