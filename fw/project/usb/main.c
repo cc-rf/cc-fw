@@ -165,7 +165,6 @@ static struct {
 
 typedef struct __packed {
     u8 len;
-    u8 chn;
     u8 seq;
     u8 data[MSG_LEN];
 
@@ -329,23 +328,19 @@ static void main_task(void *param)
         u32 remaining = portMAX_DELAY;
         u32 chan_ticks;
 
+        amp_ctrl(0, AMP_LNA, true);
+        amp_ctrl(0, AMP_PA, true);
+        amp_ctrl(0, AMP_HGM, true);
+
         if (!pflag_set()) {
             printf("mode: receive\r\n");
-
-            amp_ctrl(0, AMP_LNA, true);
-            amp_ctrl(0, AMP_HGM, true);
 
             vTaskDelay(portMAX_DELAY);
 
         } else {
             printf("mode: transmit\r\n");
 
-            app_pkt_t pkt = {.len = /*MSG_LEN + */2, .seq = 0, .chn = (u8) 0xfc, .data = {[0 ... MSG_LEN - 1] = 'a'}};
-
-            amp_ctrl(0, AMP_LNA, true);
-
-            amp_ctrl(0, AMP_PA, true);
-            amp_ctrl(0, AMP_HGM, true);
+            app_pkt_t pkt = {.len = /*MSG_LEN + */2, .seq = 0, .data = {[0 ... MSG_LEN - 1] = 'a'}};
 
             while (1) {
                 //pkt.chn = (u8) chan_cur;
@@ -360,7 +355,7 @@ static void main_task(void *param)
 
                 LED_D_TOGGLE();
                 //vTaskDelay(pdMS_TO_TICKS(/*1137*/20 + (pkt.len % 2)*3 ));
-                vTaskDelay(pdMS_TO_TICKS(pkt_time*3));
+                //vTaskDelay(pdMS_TO_TICKS(pkt_time*3));
             }
 
         }
@@ -382,7 +377,7 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
 
 static void handle_rx(app_pkt_t *pkt)
 {
-    printf("\t\t\t\t\trx/%u: seq=%u len=%u t=%lu\r\n", pkt->chn, pkt->seq, pkt->len, sync_timestamp());
+    printf("\t\t\t\t\trx: seq=%u len=%u t=%lu\r\n", pkt->seq, pkt->len, sync_timestamp());
     LED_D_TOGGLE();
     if (!pflag_set()) nphy_tx((cc_pkt_t *)pkt);
 }

@@ -88,9 +88,10 @@ u32 sync_time = 0;
 #define FREQ_BASE       905000000
 #define FREQ_BW         800000
 #define CHAN_COUNT      25
-#define CHAN_TIME       100//200  //30
+#define CHAN_TIME       400/*100*///200  //30
 #define MAX_CCA_RETRY   3
 #define MAX_CCA_TIME    9//(chan_time/4)
+#define MAX_PACKET_LEN  120
 
 static const u32 freq_base      = FREQ_BASE;
 static const u32 freq_side_bw   = FREQ_BW / 2;
@@ -175,7 +176,7 @@ bool nphy_init(nphy_rx_t rx)
     nphy.rxq = xQueueCreate(8, sizeof(cc_pkt_t *));
     nphy.rx = rx;
 
-    if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH, &nphy.task)) {
+    if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGHEST, &nphy.task)) {
         cc_dbg("[%u] error: unable to create main task", dev);
         isrd_configure(2, 10, kPORT_InterruptOrDMADisabled, NULL);
         return false;
@@ -245,9 +246,13 @@ static void nphy_rx(bool flush)
     while (len > PKT_OVERHEAD) {
         spkt = (cc_pkt_t *)buf;
 
+        if (spkt->len > MAX_PACKET_LEN) {
+            cc_dbg("[%u] c=%u malformed: len[header]=%u > len[max]=%u  (len[fifo]=%u)", dev, pkt_count+1, spkt->len, MAX_PACKET_LEN, len);
+            break;
+        }
+
         if (spkt->len > (len - PKT_OVERHEAD)) {
-            /* Bad length field, cannot continue */
-            cc_dbg("[%u] c=%u underflow: len=%u < len[header]=%u", dev, pkt_count+1, len, spkt->len);
+            cc_dbg("[%u] c=%u underflow: len[header]=%u > len[fifo]=%u", dev, pkt_count+1, spkt->len, len);
             break;
         }
 
@@ -351,15 +356,6 @@ void cca_end(void)
 }
 
 
-typedef struct __packed {
-    u8 len;
-    u8 chn;
-    u8 seq;
-    u8 data[];
-
-} app_pkt_t;
-
-
 static void nphy_task(void *param)
 {
     cc_pkt_t *pkt = NULL;
@@ -374,8 +370,8 @@ static void nphy_task(void *param)
     bool new_pkt = false;
     bool cca = false;
 
-//#undef cc_dbg_v
-//#define cc_dbg_v cc_dbg
+#undef cc_dbg_v
+#define cc_dbg_v cc_dbg
 
     while (1) {
         if (!remaining) remaining = chan_time;
@@ -411,9 +407,6 @@ static void nphy_task(void *param)
                                 //break; // ^ basically the same
                                 goto _end_tx; // for consistency
                             }
-
-                            // DEBUG
-                            ((app_pkt_t *)pkt)->chn = (u8)chan_cur;
 
                             // fifo check: new: go idle if a fifo refill is needed
                             if (cc_get(dev, CC1200_NUM_TXBYTES) != (sizeof(*pkt) + pkt->len)) {
@@ -459,7 +452,7 @@ static void nphy_task(void *param)
                             // an awkward situation, sort of -- packet received during cca, which is totally possible in some
                             // cases. might as well handle it as 'normal'... but, big
                             // !TODO: determine whether cca needs continuing at this point or what!
-                            if (!sync_time) sync_time = sync_timestamp();
+                            if (!sync_time || !chan_cur/*def not entirely right*/) sync_time = sync_timestamp();
                             if (!pkt) tx_time = 0; // only ungate next tx if not currently busy with a tx
                             nphy_rx(true);
                             cc_strobe(dev, CC1200_SIDLE); // NOTE: could be unnecessary/impactful
@@ -512,11 +505,11 @@ static void nphy_task(void *param)
                             // fall through
 
                         case CC1200_MARC_STATUS1_TX_FINISHED:
-                            if (!sync_time) sync_time = sync_timestamp();
+                            if (!sync_time || !chan_cur) sync_time = sync_timestamp();
                             tx_time = sync_timestamp();
 
-                            // DEBUG
-                            printf("tx/%u: seq=%u len=%u t=%lu\r\n", (u8)chan_cur, ((app_pkt_t *)pkt)->seq, ((app_pkt_t *)pkt)->len, sync_timestamp());
+                            // DEBUG: extra info
+                            //printf("tx/%u: seq=%u len=%u t=%lu\r\n", (u8)chan_cur, ((app_pkt_t *)pkt)->seq, ((app_pkt_t *)pkt)->len, sync_timestamp());
 
                         _end_tx:
                             free(pkt);
@@ -586,15 +579,13 @@ static void nphy_task(void *param)
 
                 pkt->len &= 0x7f;
 
-                // DEBUG
-                ((app_pkt_t *)pkt)->chn = (u8)chan_cur;
-
                 // NOTE: Used to be below after channel set
                 cc_fifo_write(dev, (u8 *) pkt, sizeof(*pkt) + pkt->len);
             }
 
-        } /*else if (pkt && ((sync_timestamp() - tx_time) > (chan_time/4))) {
+        } /*else if (pkt && ((sync_timestamp() - tx_time) > MAX_CCA_TIME)) {
             cc_dbg("tx: abandanoning packet! (1:also:this is a weird case no?)");
+            tx_time = 0; // needed/useful?
             free(pkt);
             pkt = NULL;
             goto _txq_check;
@@ -611,7 +602,7 @@ static void nphy_task(void *param)
                     goto _ts;
                 }*/
 
-                if (remaining <= 5) {
+                if (remaining <= /*3*//*6*/10) {
                     // potetial observed issue (needs more investigation):
                     //   waiting here at the tail end of a channel when another packet is coming
                     //   in causes a miss.
