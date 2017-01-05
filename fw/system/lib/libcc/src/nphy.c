@@ -85,10 +85,13 @@ static struct {
 extern u32 sync_timestamp(void);
 u32 sync_time = 0;
 
+static void ensure_rx(void);
+
+
 #define FREQ_BASE       905000000
 #define FREQ_BW         800000
 #define CHAN_COUNT      25
-#define CHAN_TIME       400/*100*///200  //30
+#define CHAN_TIME       60//400/*100*///200  //30
 #define MAX_CCA_RETRY   3
 #define MAX_CCA_TIME    9//(chan_time/4)
 #define MAX_PACKET_LEN  120
@@ -125,11 +128,12 @@ static inline void chan_set(const u32 chan)
     if (chan != chan_cur) {
         chan_cur = chan;
 
-        const u8 st = cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M;
+        u8 st;
 
-        // TODO: !!!! MAKE SURE THIS ISN'T STUPID !!!!
-        if (st != CC1200_STATE_IDLE)
-            cc_strobe(dev, CC1200_SIDLE);
+        do {
+            st = cc_strobe(dev, CC1200_SIDLE) & CC1200_STATUS_STATE_M;
+
+        } while (st != CC1200_STATE_IDLE);
 
         // this is probably useful however, we can't do anything with partial packets
         cc_strobe(dev, CC1200_SFRX);
@@ -137,6 +141,8 @@ static inline void chan_set(const u32 chan)
         //NOTE: for debug purposes, only use 2 channels
         chan_select(&chnl.group, (chan_t) (10 + chan%2));
         //chan_select(&chnl.group, (chan_t)chan);
+
+        ensure_rx(); // this kills the in-progress tx
     }
 }
 
@@ -367,7 +373,6 @@ static void nphy_task(void *param)
     u32 chan_ticks;
     u32 notify;
 
-    bool new_pkt = false;
     bool cca = false;
 
 #undef cc_dbg_v
@@ -559,15 +564,33 @@ static void nphy_task(void *param)
             // timeout
         }
 
-        _txq_check:;
 
-        if (!pkt) {
 
-            // maybe only gate tx packets when haven't just received one, e.g. clear tx_time on rx
-            if ((sync_timestamp() - tx_time) >= 10 && xQueueReceive(nphy.txq, &pkt, 0) && pkt) {
+        if (sync_time) {
+            ticks = sync_timestamp() - sync_time;
+            chan_ticks = (ticks % chan_time);
+            remaining = chan_time - chan_ticks;
+
+            chan_set((ticks / chan_time) % chan_count);
+
+        } else {
+            remaining = chan_time;
+        }
+
+
+        if (!pkt && ((sync_timestamp() - tx_time) >= 5) && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
+            const u32 pkt_time = 1 + cc_get_tx_time(dev, pkt->len);
+
+            if (remaining <= pkt_time) {
+                cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->len);
+                pkt = NULL;
+                remaining = 1;
+                continue;
+
+            } else {
+                xQueueReceive(nphy.txq, &pkt, 0); // no reason in the universe that this should not just always pop the same pointer every time
                 retry = MAX_CCA_RETRY;
-                tx_time = sync_timestamp();
-                new_pkt = true;
+
                 cca = true;//(pkt->len & 0x80) != 0;
 
                 if (!cca) {
@@ -579,60 +602,18 @@ static void nphy_task(void *param)
 
                 pkt->len &= 0x7f;
 
-                // NOTE: Used to be below after channel set
                 cc_fifo_write(dev, (u8 *) pkt, sizeof(*pkt) + pkt->len);
-            }
 
-        } /*else if (pkt && ((sync_timestamp() - tx_time) > MAX_CCA_TIME)) {
-            cc_dbg("tx: abandanoning packet! (1:also:this is a weird case no?)");
-            tx_time = 0; // needed/useful?
-            free(pkt);
-            pkt = NULL;
-            goto _txq_check;
-        }*/
-
-        if (sync_time && ((/*packet was not already/still pending tx*/pkt && new_pkt) ||/*no packet tx*/ !pkt)) {
-            _ts: ticks = sync_timestamp() - sync_time;
-            chan_ticks = (ticks % chan_time);
-            remaining = chan_time - /*(ticks % chan_time)*/chan_ticks;
-
-            if (pkt) {
-                /*if (chan_ticks < 5) {
-                    vTaskDelay(pdMS_TO_TICKS(5 - chan_ticks));
-                    goto _ts;
-                }*/
-
-                if (remaining <= /*3*//*6*/10) {
-                    // potetial observed issue (needs more investigation):
-                    //   waiting here at the tail end of a channel when another packet is coming
-                    //   in causes a miss.
-                    cc_dbg_v("tx channel wait: new=%u t=%lu", new_pkt==1, sync_timestamp());
-                    vTaskDelay(pdMS_TO_TICKS(2+remaining));
-                    //goto _ts;
-                    // just restart from top to grab any interrupts
-                    remaining = 1;
-                    continue;
+                if (cca) {
+                    cca_run();
                 }
-            }
 
-            chan_set((ticks / chan_time) % chan_count);
+                cc_strobe(dev, CC1200_STX);
+                tx_time = sync_timestamp();
+            }
         }
 
-        if (pkt && new_pkt) {
-            new_pkt = false;
-
-            if (cca) {
-                cca_run();
-            }
-
-            cc_strobe(dev, CC1200_STX);
-            tx_time = sync_timestamp();
-            //if (!cca && !sync_time) sync_time = sync_timestamp(); // TODO: Maybe move to when the isr indicates success?
-
-        } else if (!pkt) {
-            // TODO: Maybe find a better condition for this. Maybe really important
-            ensure_rx();
-        }
+        if (!pkt) ensure_rx();
     }
 }
 
