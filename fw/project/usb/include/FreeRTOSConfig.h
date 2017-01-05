@@ -71,7 +71,8 @@
 #define FREERTOS_CONFIG_H
 
 /* Phillip: Additional configs from FreeRTOS.h */
-#define configUSE_NEWLIB_REENTRANT 0
+#define configUSE_NEWLIB_REENTRANT          0
+#define configSUPPORT_STATIC_ALLOCATION     0
 
 /* Phillip: specific task priorities */
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE

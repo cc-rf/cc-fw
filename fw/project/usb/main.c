@@ -24,6 +24,7 @@
 #include <cc/amp.h>
 #include <cc/cfg.h>
 #include <fsl_port.h>
+#include <semphr.h>
 
 
 #define PFLAG_PORT PORTB
@@ -35,6 +36,10 @@ extern void vcom_init(void);
 
 static void main_task(void *param);
 
+static SemaphoreHandle_t write_sem = NULL;
+
+
+
 int main(void)
 {
     BOARD_InitPins();
@@ -42,6 +47,9 @@ int main(void)
 
     BOARD_BootClockRUN();
     LED_B_ON();
+
+    write_sem = xSemaphoreCreateBinary();
+    xSemaphoreGive(write_sem);
 
     BOARD_InitDebugConsole();
     itm_init();
@@ -374,13 +382,19 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
 
 static void handle_rx(app_pkt_t *pkt)
 {
-    printf("rx: [recv] chn=%u seq=%u len=%u\r\n", pkt->chn, pkt->seq, pkt->len);
+    printf("\t\t\t\t\trx/%u: seq=%u len=%u t=%lu\r\n", pkt->chn, pkt->seq, pkt->len, sync_timestamp());
     LED_D_TOGGLE();
     if (!pflag_set()) nphy_tx((cc_pkt_t *)pkt);
 }
 
 
 extern void usb_write(char *buf, size_t len);
+
+static inline bool isInterrupt()
+{
+    return (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0 ;
+}
+
 
 int _write(int handle, char *buffer, int size)
 {
@@ -392,8 +406,25 @@ int _write(int handle, char *buffer, int size)
         return -1;
     }
 
+    BaseType_t xHigherPriorityTaskWokenAll = pdFALSE, xHigherPriorityTaskWoken;
+    const bool is_interrupt = isInterrupt();
+
+    if (!is_interrupt) xSemaphoreTake(write_sem, portMAX_DELAY);
+    else {
+        while (!xSemaphoreTakeFromISR(write_sem, &xHigherPriorityTaskWoken));
+        xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+    }
+
     itm_write(0, (const u8 *)buffer, (size_t)size);
     usb_write(buffer, (size_t)size);
+
+    if (!is_interrupt) xSemaphoreGive(write_sem);
+    else {
+        xSemaphoreGiveFromISR(write_sem, &xHigherPriorityTaskWoken);
+        xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+    };
+
+    if (is_interrupt) portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll)
 
     return size;
 }

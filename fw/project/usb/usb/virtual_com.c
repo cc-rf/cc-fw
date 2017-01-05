@@ -739,7 +739,7 @@ void usb_write(char *buf, size_t len)
         xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
     };
 
-    if (xHigherPriorityTaskWokenAll) portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll)
+    if (/*xHigherPriorityTaskWokenAll*/is_interrupt) portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll)
 
     return;
 }
