@@ -305,13 +305,13 @@ static void ensure_rx(void)
         case CC1200_STATE_RXFIFO_ERROR:
             cc_strobe(dev, CC1200_SIDLE); // seems necessary to prevent ISR error indication?
             cc_strobe(dev, CC1200_SFRX);
-            cc_dbg("rx fifo error");
+            cc_dbg_v("rx fifo error");
             break;
 
         case CC1200_STATE_TXFIFO_ERROR:
             cc_strobe(dev, CC1200_SIDLE); // seems necessary to prevent ISR error indication?
             cc_strobe(dev, CC1200_SFTX);
-            cc_dbg("tx fifo error");
+            cc_dbg_v("tx fifo error");
             break;
     }
 
@@ -374,6 +374,9 @@ static void nphy_task(void *param)
     bool new_pkt = false;
     bool cca = false;
 
+//#undef cc_dbg_v
+//#define cc_dbg_v cc_dbg
+
     while (1) {
         if (!remaining) remaining = chan_time;
 
@@ -389,7 +392,7 @@ static void nphy_task(void *param)
                     switch (ms) {
                         case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
                             if (!retry--) {
-                                cc_dbg("tx: cca max retry t=%lu", sync_timestamp());
+                                cc_dbg_v("tx: cca max retry t=%lu", sync_timestamp());
                                 cc_strobe(dev, CC1200_SFTX);
                                 goto _end_tx;
                             }
@@ -400,7 +403,7 @@ static void nphy_task(void *param)
 
                         _re_cca:
                             if ((sync_timestamp() - tx_time) >= MAX_CCA_TIME/*(chan_time/4)*/) {
-                                cc_dbg("tx: cca timeout t=%lu", sync_timestamp());
+                                cc_dbg_v("tx: cca timeout t=%lu", sync_timestamp());
                                 cc_strobe(dev, CC1200_SFTX);
                                 //free(pkt);
                                 //pkt = NULL;
@@ -417,10 +420,10 @@ static void nphy_task(void *param)
                                 cc_strobe(dev, CC1200_SIDLE);
                                 cc_strobe(dev, CC1200_SFTX);
                                 cc_fifo_write(dev, (u8 *)pkt, sizeof(*pkt) + pkt->len);
-                                cc_dbg("tx: fifo refill");
+                                cc_dbg_v("tx: fifo refill");
                             }
 
-                            cc_dbg("tx: cca retry[A] t=%lu ch=%u st=0x%02X", sync_timestamp(), chan_cur, cc_strobe(dev,CC1200_SNOP));
+                            cc_dbg_v("tx: cca retry t=%lu ch=%u st=0x%02X", sync_timestamp(), chan_cur, cc_strobe(dev,CC1200_SNOP));
 
                             if (sync_time) {
                                 _ts2: ticks = sync_timestamp() - sync_time;
@@ -433,7 +436,8 @@ static void nphy_task(void *param)
                                 }*/
 
                                 if (remaining <= 3) {
-                                    cc_dbg("cca channel wait");
+                                    // have not yet observed this condition
+                                    cc_dbg_v("cca channel wait");
                                     vTaskDelay(pdMS_TO_TICKS(1+remaining));
                                     goto _ts2;
                                 }
@@ -470,7 +474,7 @@ static void nphy_task(void *param)
                         case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
                             cc_strobe(dev, CC1200_SIDLE); // seems important (not sure yet)?
                             cc_strobe(dev, CC1200_SFRX);
-                            cc_dbg("tx: rx fifo error");
+                            cc_dbg_v("tx: rx fifo error");
                             // fall through
 
                         case CC1200_MARC_STATUS1_CRC:
@@ -498,7 +502,7 @@ static void nphy_task(void *param)
                             cc_strobe(dev, CC1200_SIDLE); // seems important (more sure: rx fifo fails often shortly after)?
                             cc_strobe(dev, CC1200_SFRX); // ^ same as above reason
                             cc_strobe(dev, CC1200_SFTX);
-                            cc_dbg("tx: tx fifo overflow");
+                            cc_dbg_v("tx: tx fifo overflow");
                             goto _end_tx;
 
                         default:
@@ -543,7 +547,7 @@ static void nphy_task(void *param)
                         case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
                             cc_strobe(dev, CC1200_SIDLE); // seems important (not sure yet)? (copied from above)
                             st = cc_strobe(dev, CC1200_SFRX);
-                            cc_dbg("rx: rx fifo error: ms=0x%02X st=0x%02X", ms, st);
+                            cc_dbg_v("rx: rx fifo error: ms=0x%02X st=0x%02X", ms, st);
                             break;
 
                         case CC1200_MARC_STATUS1_CRC:
@@ -611,8 +615,8 @@ static void nphy_task(void *param)
                     // potetial observed issue (needs more investigation):
                     //   waiting here at the tail end of a channel when another packet is coming
                     //   in causes a miss.
-                    cc_dbg("tx channel wait: new=%u t=%lu", new_pkt==1, sync_timestamp());
-                    vTaskDelay(pdMS_TO_TICKS(remaining));
+                    cc_dbg_v("tx channel wait: new=%u t=%lu", new_pkt==1, sync_timestamp());
+                    vTaskDelay(pdMS_TO_TICKS(2+remaining));
                     //goto _ts;
                     // just restart from top to grab any interrupts
                     remaining = 1;
