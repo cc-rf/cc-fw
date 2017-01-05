@@ -38,8 +38,6 @@ static void main_task(void *param);
 
 static SemaphoreHandle_t write_sem = NULL;
 
-
-
 int main(void)
 {
     BOARD_InitPins();
@@ -54,6 +52,10 @@ int main(void)
     BOARD_InitDebugConsole();
     itm_init();
     printf("<boot>\r\n");
+
+    /*printf("how about a fault.\r\n");
+    *(int *)(0xfffefafe) = 42;
+    while (1) {};*/
 
 
     printf("\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",
@@ -93,7 +95,7 @@ int main(void)
     GPIO_PinInit(PFLAG_GPIO, PFLAG_PIN, &gpio_pin_config);
 
 
-    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL);
+    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
 
     vcom_init();
     printf("<vcom init>\r\n");
@@ -115,50 +117,6 @@ static bool pflag_set(void)
 static const struct cc_cfg_reg CC_CFG_MAC[] = {
         {CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
 };
-
-/*#define FREQ_BASE   905000000
-#define FREQ_BW     800000
-
-#define CHAN_COUNT  25
-
-static const u32 freq_base      = FREQ_BASE;
-static const u32 freq_side_bw   = FREQ_BW / 2;
-static const u32 chan_count     = CHAN_COUNT;
-static const u32 chan_time      = 200;//30;
-
-static struct {
-    chan_grp_t group;
-    chan_inf_t chan[CHAN_COUNT];
-    chan_t hop_table[CHAN_COUNT];
-
-} chnl = {
-        .group = {
-                .dev = 0,
-                .freq = {
-                        .base = FREQ_BASE,
-                        .bw   = FREQ_BW
-                },
-                .size = CHAN_COUNT
-        }
-};*/
-
-//static volatile u32 chan_cur = UINT32_MAX;
-
-
-/*static inline void chan_set(const u32 chan)
-{
-    if (chan != chan_cur) {
-        chan_cur = chan;
-        //cc_set_freq(0, chan_freq(chan_cur));
-
-        //NOTE: for debug purposes, only use 3 channels
-        //chan_select(&chnl.group, (chan_t) (10 + chan%3));
-
-        chan_select(&chnl.group, (chan_t)chan);
-    }
-}*/
-
-
 
 
 #define MSG_LEN 117
@@ -187,117 +145,24 @@ static void main_task(void *param)
 
     //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
 
-#if 0
-    if (nphy_init(handle_rx)) {
-        printf("nphy init successful.\r\n");
-
-        if (!cc_cfg_regs(0, CC_CFG_MAC, COUNT_OF(CC_CFG_MAC))) {
-            printf("warn: could not configure (mac)\n");
-        }
-
-        amp_init(0);
-
-        chan_grp_init(&chnl.group, NULL);
-        chan_grp_calibrate(&chnl.group);
-        chan_set(0);
-
-        xsec_timer_0 = pit_alloc(&(pit_cfg_t){
-                .period = pit_nsec_tick(1000000)
-        });
-
-        xsec_timer = pit_chain(xsec_timer_0, &(pit_cfg_t){
-                .period = UINT32_MAX
-        });
-
-        pit_start(xsec_timer);
-        pit_start(xsec_timer_0);
-
-        u32 ticks = 0;
-        u32 sync_time = 0;
-        u32 remaining = portMAX_DELAY;
-        u32 chan_ticks;
-
-        if (!pflag_set()) {
-            printf("mode: receive\r\n");
-
-            app_pkt_t *pkt;
-
-            amp_ctrl(0, AMP_LNA, true);
-            amp_ctrl(0, AMP_HGM, true);
-
-            while (1) {
-                if (sync_time) {
-                    ticks = sync_timestamp() - sync_time;
-                    remaining = chan_time - (ticks % chan_time);
-                    chan_set((ticks / chan_time) % chan_count);
-                }
-
-                //printf("rx: [wait] chn=%lu rem=%lu\n", chan_cur, remaining);
-                pkt = (app_pkt_t *) nphy_rx(pdMS_TO_TICKS(remaining));
-
-                if (pkt && pkt->len) {
-                    if (!sync_time) sync_time = sync_timestamp();
-                    LED_D_TOGGLE();
-                    printf("rx: [recv] chn=%lu seq=%u\r\n", chan_cur, pkt->seq);
-                }
-            }
-
-        } else {
-            printf("mode: transmit\r\n");
-
-            u32 pkt_time;
-
-            app_pkt_t pkt = {.len = /*MSG_LEN + */2, .seq = 0, .chn = (u8) chan_cur, .data = {[0 ... MSG_LEN - 1] = 'a'}};
-
-            amp_ctrl(0, AMP_PA, true);
-            amp_ctrl(0, AMP_HGM, true);
-
-            while (1) {
-
-                if (sync_time) {
-                    ticks = sync_timestamp() - sync_time;
-                    chan_ticks = (ticks % chan_time);
-                    remaining = chan_time - /*(ticks % chan_time)*/chan_ticks;
-                    pkt_time = cc_get_tx_time(0, pkt.len);
-
-                    if (chan_ticks < 10) {
-                        vTaskDelay(pdMS_TO_TICKS(10-chan_ticks));
-                        continue;
-                    }
-
-                    if (remaining <= pkt_time || remaining < 16) {
-                        vTaskDelay(pdMS_TO_TICKS(10+remaining));
-                        continue;
-                    }
-
-                    chan_set((ticks / chan_time) % chan_count);
-                }
-
-                pkt.chn = (u8) chan_cur;
-                //ticks = sync_timestamp();
-                nphy_tx((cc_pkt_t *) &pkt);
-                //ticks = sync_timestamp() - ticks;
-                //printf("tx/%lu: seq=%u t=%lu/%lu\r\n", chan_cur, pkt.seq, pkt_time, ticks);
-                printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
-
-                if (!sync_time) sync_time = sync_timestamp();
-
-                ++pkt.seq;
-
-                pkt.len = (u8)((pkt.len + 1) % (MSG_LEN + 2));
-                if (!pkt.len) pkt.len = 2;
-
-                LED_D_TOGGLE();
-                vTaskDelay(pdMS_TO_TICKS(/*1137*/7 + (pkt.len % 2)*3 ));
-            }
-
-        }
-
-
-    }
-    #endif
-
     #if 1
+
+    amp_init(0);
+
+    xsec_timer_0 = pit_alloc(&(pit_cfg_t){
+            .period = pit_nsec_tick(1000000)
+    });
+
+    xsec_timer = pit_chain(xsec_timer_0, &(pit_cfg_t){
+            .period = UINT32_MAX
+    });
+
+    pit_start(xsec_timer);
+    pit_start(xsec_timer_0);
+
+    amp_ctrl(0, AMP_LNA, true);
+    amp_ctrl(0, AMP_PA, true);
+    amp_ctrl(0, AMP_HGM, true);
 
     if (nphy_init((nphy_rx_t)handle_rx)) {
         printf("nphy init successful.\r\n");
@@ -305,32 +170,6 @@ static void main_task(void *param)
         /*if (!cc_cfg_regs(0, CC_CFG_MAC, COUNT_OF(CC_CFG_MAC))) {
             printf("warn: could not configure (mac)\n");
         }*/
-
-        amp_init(0);
-
-        //chan_grp_init(&chnl.group, NULL);
-        //chan_grp_calibrate(&chnl.group);
-        //chan_set(0);
-
-        xsec_timer_0 = pit_alloc(&(pit_cfg_t){
-                .period = pit_nsec_tick(1000000)
-        });
-
-        xsec_timer = pit_chain(xsec_timer_0, &(pit_cfg_t){
-                .period = UINT32_MAX
-        });
-
-        pit_start(xsec_timer);
-        pit_start(xsec_timer_0);
-
-        u32 ticks = 0;
-        u32 sync_time = 0;
-        u32 remaining = portMAX_DELAY;
-        u32 chan_ticks;
-
-        amp_ctrl(0, AMP_LNA, true);
-        amp_ctrl(0, AMP_PA, true);
-        amp_ctrl(0, AMP_HGM, true);
 
         if (!pflag_set()) {
             printf("mode: receive\r\n");
@@ -375,9 +214,28 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
     printf("stack overflow in task '%s'\r\n", pcTaskName);
 }
 
+
+static u32 start_time = 0;
+static u32 sum_lengths = 0;
+static u32 num_packets = 0;
+static u32 time_diff;
+
 static void handle_rx(app_pkt_t *pkt)
 {
-    printf("\t\t\t\t\trx: seq=%u len=%u t=%lu\r\n", pkt->seq, pkt->len, sync_timestamp());
+    sum_lengths += pkt->len + 3 + /*being generous: 2 sync, 2 preamble*/4;
+    num_packets++;
+    if (!start_time) start_time = sync_timestamp();
+    time_diff = sync_timestamp() - start_time;
+
+    if (time_diff >= 1000) {
+        printf("rx: rate = %lu bps\t\t\tpkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
+        num_packets = 0;
+        sum_lengths = 0;
+        start_time = 0;
+    }
+
+    //printf("\t\t\t\t\trx: seq=%u len=%u t=%lu\r\n", pkt->seq, pkt->len, sync_timestamp());
+
     LED_D_TOGGLE();
     if (!pflag_set()) nphy_tx((cc_pkt_t *)pkt);
 }
@@ -422,4 +280,41 @@ int _write(int handle, char *buffer, int size)
     if (is_interrupt) portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll)
 
     return size;
+}
+
+#include "fault.c"
+
+// begin: sbrk.c
+#include <sys/types.h>
+#include <errno.h>
+
+/*!
+ * @brief Function to override ARMGCC default function _sbrk
+ *
+ * _sbrk is called by malloc. ARMGCC default _sbrk compares "SP" register and
+ * heap end, if heap end is larger than "SP", then _sbrk returns error and
+ * memory allocation failed. This function changes to compare __HeapLimit with
+ * heap end.
+ */
+caddr_t _sbrk(int incr)
+{
+    extern char end __asm("end");
+    extern char heap_limit __asm("__HeapLimit");
+    static char *heap_end;
+    char *prev_heap_end;
+
+    if (heap_end == NULL)
+        heap_end = &end;
+
+    prev_heap_end = heap_end;
+
+    if (heap_end + incr > &heap_limit)
+    {
+        errno = ENOMEM;
+        return (caddr_t)-1;
+    }
+
+    heap_end += incr;
+
+    return (caddr_t)prev_heap_end;
 }

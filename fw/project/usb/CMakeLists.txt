@@ -2,7 +2,6 @@ set(NAME fw_project_usb)
 
 add_library(
         ${NAME} STATIC
-        fault.c
         main.c
         usb/usb_device_cdc_acm.c
         usb/usb_device_ch9.c
@@ -30,8 +29,8 @@ target_link_libraries(
         PUBLIC fw_system_framework_trace
         PUBLIC util_uart
         PUBLIC libcc
-        "-Xlinker -defsym=__heap_size__=0x8000"
-        "-Xlinker -defsym=__stack_size__=0x2000"
+        "-Xlinker -defsym=__heap_size__=0x10000"
+        "-Xlinker -defsym=__stack_size__=0x4000"
 )
 
 add_library(kinetis_freertos_config INTERFACE)

@@ -28,7 +28,7 @@ __attribute__((naked, interrupt)) void HardFault_Handler(void)
     );
 }
 
-/*__attribute__((naked))*/ void UsageFault_Handler(void)
+/* (OLD!!) __attribute__((naked))*/ void UsageFault_Handler(void)
 {
     __asm volatile
     (
@@ -190,7 +190,7 @@ void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
 {
     static int hard_fault_count_init;
 
-    printf("!!!!!!!!!! HARD FAULT !!!!!!!!!!!!!!\r\n");
+    printf("\r\n\v\r\n ======== HARD FAULT ======== \r\n pc: %p\r\n\r\n", fr->pc);
     while (!hard_fault_continue) asm("nop");
     NVIC_SystemReset();
 

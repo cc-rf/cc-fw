@@ -91,9 +91,9 @@ static void ensure_rx(void);
 #define FREQ_BASE       905000000
 #define FREQ_BW         800000
 #define CHAN_COUNT      25
-#define CHAN_TIME       60//400/*100*///200  //30
-#define MAX_CCA_RETRY   3
-#define MAX_CCA_TIME    9//(chan_time/4)
+#define CHAN_TIME       200//60//400/*100*///200  //30
+#define MAX_CCA_RETRY   2//3
+#define MAX_CCA_TIME    7//9//(chan_time/4)
 #define MAX_PACKET_LEN  120
 
 static const u32 freq_base      = FREQ_BASE;
@@ -178,17 +178,17 @@ bool nphy_init(nphy_rx_t rx)
         return false;
     }
 
-    nphy.txq = xQueueCreate(8, sizeof(cc_pkt_t *));
-    nphy.rxq = xQueueCreate(8, sizeof(cc_pkt_t *));
+    nphy.txq = xQueueCreate(4/*8*/, sizeof(cc_pkt_t *));
+    nphy.rxq = xQueueCreate(4/*8*/, sizeof(cc_pkt_t *));
     nphy.rx = rx;
 
-    if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGHEST, &nphy.task)) {
+    if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE * 2, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
         cc_dbg("[%u] error: unable to create main task", dev);
         isrd_configure(2, 10, kPORT_InterruptOrDMADisabled, NULL);
         return false;
     }
 
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH-1, &nphy.disp)) {
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH+1/*-1*/, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
         isrd_configure(2, 10, kPORT_InterruptOrDMADisabled, NULL);
         return false;
@@ -375,11 +375,11 @@ static void nphy_task(void *param)
 
     bool cca = false;
 
-#undef cc_dbg_v
-#define cc_dbg_v cc_dbg
+//#undef cc_dbg_v
+//#define cc_dbg_v cc_dbg
 
     while (1) {
-        if (!remaining) remaining = chan_time;
+        //if (!remaining) remaining = chan_time;
 
         if (xTaskNotifyWait(0, UINT32_MAX, &notify, pdMS_TO_TICKS(remaining))) {
 
@@ -435,7 +435,7 @@ static void nphy_task(void *param)
 
                                 if (remaining <= 3) {
                                     // have not yet observed this condition
-                                    cc_dbg_v("cca channel wait");
+                                    cc_dbg("cca channel wait");
                                     vTaskDelay(pdMS_TO_TICKS(1+remaining));
                                     goto _ts2;
                                 }
@@ -457,7 +457,7 @@ static void nphy_task(void *param)
                             // an awkward situation, sort of -- packet received during cca, which is totally possible in some
                             // cases. might as well handle it as 'normal'... but, big
                             // !TODO: determine whether cca needs continuing at this point or what!
-                            if (!sync_time || !chan_cur/*def not entirely right*/) sync_time = sync_timestamp();
+                            if (!sync_time /*|| !chan_cur*//*def not entirely right*/) sync_time = sync_timestamp();
                             if (!pkt) tx_time = 0; // only ungate next tx if not currently busy with a tx
                             nphy_rx(true);
                             cc_strobe(dev, CC1200_SIDLE); // NOTE: could be unnecessary/impactful
@@ -510,7 +510,7 @@ static void nphy_task(void *param)
                             // fall through
 
                         case CC1200_MARC_STATUS1_TX_FINISHED:
-                            if (!sync_time || !chan_cur) sync_time = sync_timestamp();
+                            if (!sync_time /*|| !chan_cur*/) sync_time = sync_timestamp();
                             tx_time = sync_timestamp();
 
                             // DEBUG: extra info
@@ -577,14 +577,15 @@ static void nphy_task(void *param)
             remaining = chan_time;
         }
 
+        ticks = sync_timestamp() - tx_time;
 
-        if (!pkt && ((sync_timestamp() - tx_time) >= 5) && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
+        if (!pkt /*&& (ticks >= 3)*/ && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
             const u32 pkt_time = 1 + cc_get_tx_time(dev, pkt->len);
 
-            if (remaining <= pkt_time) {
+            if (remaining <= pkt_time || ticks <= pkt_time*2) {
                 cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->len);
                 pkt = NULL;
-                remaining = 1;
+                remaining = 0/*1*/;
                 continue;
 
             } else {
@@ -594,13 +595,10 @@ static void nphy_task(void *param)
                 cca = true;//(pkt->len & 0x80) != 0;
 
                 if (!cca) {
-                    //cc_strobe(dev, CC1200_SIDLE);
+                    //cc_strobe(dev, CC1200_SIDLE); // needed?
                 } else {
-                    // ^ fucked with the condition above....
-                    //pkt->len &= 0x7f;
+                    pkt->len &= 0x7f;
                 }
-
-                pkt->len &= 0x7f;
 
                 cc_fifo_write(dev, (u8 *) pkt, sizeof(*pkt) + pkt->len);
 
