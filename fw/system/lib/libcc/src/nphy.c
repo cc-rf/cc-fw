@@ -91,7 +91,7 @@ static void ensure_rx(void);
 #define FREQ_BASE       905000000
 #define FREQ_BW         800000
 #define CHAN_COUNT      25
-#define CHAN_TIME       200//60//400/*100*///200  //30
+#define CHAN_TIME       100//200//60//400/*100*///200  //30
 #define MAX_CCA_RETRY   2//3
 #define MAX_CCA_TIME    7//9//(chan_time/4)
 #define MAX_PACKET_LEN  120
@@ -130,8 +130,10 @@ static inline void chan_set(const u32 chan)
 
         u8 st;
 
+        cc_strobe(dev, CC1200_SIDLE);
+
         do {
-            st = cc_strobe(dev, CC1200_SIDLE) & CC1200_STATUS_STATE_M;
+            st = cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M;
 
         } while (st != CC1200_STATE_IDLE);
 
@@ -331,7 +333,7 @@ static void ensure_rx(void)
     do {
         st = cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M;
 
-    } while (st != CC1200_STATE_RX);
+    }  while (st != CC1200_STATE_RX);
 }
 
 void cca_setup(void)
@@ -406,11 +408,7 @@ static void nphy_task(void *param)
                             if ((sync_timestamp() - tx_time) >= MAX_CCA_TIME/*(chan_time/4)*/) {
                                 cc_dbg_v("tx: cca timeout t=%lu", sync_timestamp());
                                 cc_strobe(dev, CC1200_SFTX);
-                                //free(pkt);
-                                //pkt = NULL;
-                                //goto _txq_check;
-                                //break; // ^ basically the same
-                                goto _end_tx; // for consistency
+                                goto _end_tx;
                             }
 
                             // fifo check: new: go idle if a fifo refill is needed
@@ -421,21 +419,20 @@ static void nphy_task(void *param)
                                 cc_dbg_v("tx: fifo refill");
                             }
 
-                            cc_dbg_v("tx: cca retry t=%lu ch=%u st=0x%02X", sync_timestamp(), chan_cur, cc_strobe(dev,CC1200_SNOP));
+                            //cc_dbg("tx: cca retry t=%lu ch=%u st=0x%02X", sync_timestamp(), chan_cur, cc_strobe(dev,CC1200_SNOP));
 
                             if (sync_time) {
                                 _ts2: ticks = sync_timestamp() - sync_time;
                                 chan_ticks = (ticks % chan_time);
-                                remaining = chan_time - /*(ticks % chan_time)*/chan_ticks;
+                                remaining = chan_time - chan_ticks;
+                                const u32 pkt_time = 1 + cc_get_tx_time(dev, pkt->len);
 
-                                /*if (chan_ticks < 5) {
-                                    vTaskDelay(pdMS_TO_TICKS(5-chan_ticks));
-                                    goto _ts2;
-                                }*/
-
-                                if (remaining <= 3) {
-                                    // have not yet observed this condition
-                                    cc_dbg("cca channel wait");
+                                if (remaining <= pkt_time) {
+                                    // this is an exceedingly rare condition but just handle it like below, however
+                                    // the logic of continuing the loop is weird, so just hang out for a second.
+                                    // if an rx finishes in this time, will eventually need a way to get that packet
+                                    // because this probably won't work.
+                                    cc_dbg_v("tx: cca delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->len);
                                     vTaskDelay(pdMS_TO_TICKS(1+remaining));
                                     goto _ts2;
                                 }
@@ -582,7 +579,7 @@ static void nphy_task(void *param)
         if (!pkt /*&& (ticks >= 3)*/ && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
             const u32 pkt_time = 1 + cc_get_tx_time(dev, pkt->len);
 
-            if (remaining <= pkt_time || ticks <= pkt_time*2) {
+            if (remaining <= pkt_time || ticks <= pkt_time/**2*/) {
                 cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->len);
                 pkt = NULL;
                 remaining = 0/*1*/;

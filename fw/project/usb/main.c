@@ -119,7 +119,7 @@ static const struct cc_cfg_reg CC_CFG_MAC[] = {
 };
 
 
-#define MSG_LEN 117
+#define MSG_LEN 40
 
 typedef struct __packed {
     u8 len;
@@ -179,7 +179,12 @@ static void main_task(void *param)
         } else {
             printf("mode: transmit\r\n");
 
-            app_pkt_t pkt = {.len = /*MSG_LEN + */2, .seq = 0, .data = {[0 ... MSG_LEN - 1] = 'a'}};
+            app_pkt_t pkt = {.len = MSG_LEN + 2, .seq = 0, .data = {[0 ... MSG_LEN - 1] = 'a'}};
+
+            u32 start_time = sync_timestamp();
+            u32 sum_lengths = 0;
+            u32 num_packets = 0;
+            u32 time_diff;
 
             while (1) {
                 //pkt.chn = (u8) chan_cur;
@@ -187,10 +192,21 @@ static void main_task(void *param)
                 //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
                 ++pkt.seq;
 
-                const u32 pkt_time = cc_get_tx_time(0, pkt.len);
+                sum_lengths += pkt.len + 3 + /*being generous: 2 sync, 2 preamble*/4;
+                num_packets++;
+                time_diff = sync_timestamp() - start_time;
 
-                pkt.len = (u8)((pkt.len + 1) % (MSG_LEN + 2));
-                if (!pkt.len) pkt.len = 2;
+                if (time_diff >= 1000) {
+                    printf("tx: rate = %lu bps\t\t\tpkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
+                    num_packets = 0;
+                    sum_lengths = 0;
+                    start_time = sync_timestamp();
+                }
+
+                //const u32 pkt_time = cc_get_tx_time(0, pkt.len);
+
+                //pkt.len = (u8)((pkt.len + 1) % (MSG_LEN + 2));
+                //if (!pkt.len) pkt.len = 2;
 
                 LED_D_TOGGLE();
                 //vTaskDelay(pdMS_TO_TICKS(/*1137*/20 + (pkt.len % 2)*3 ));
@@ -237,7 +253,7 @@ static void handle_rx(app_pkt_t *pkt)
     //printf("\t\t\t\t\trx: seq=%u len=%u t=%lu\r\n", pkt->seq, pkt->len, sync_timestamp());
 
     LED_D_TOGGLE();
-    if (!pflag_set()) nphy_tx((cc_pkt_t *)pkt);
+    //if (!pflag_set()) nphy_tx((cc_pkt_t *)pkt);
 }
 
 
