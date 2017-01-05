@@ -192,7 +192,7 @@ static void main_task(void *param)
                 //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
                 ++pkt.seq;
 
-                sum_lengths += pkt.len + 3 + /*being generous: 2 sync, 2 preamble*/4;
+                sum_lengths += pkt.len;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
                 num_packets++;
                 time_diff = sync_timestamp() - start_time;
 
@@ -238,7 +238,7 @@ static u32 time_diff;
 
 static void handle_rx(app_pkt_t *pkt)
 {
-    sum_lengths += pkt->len + 3 + /*being generous: 2 sync, 2 preamble*/4;
+    sum_lengths += pkt->len;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
     num_packets++;
     if (!start_time) start_time = sync_timestamp();
     time_diff = sync_timestamp() - start_time;

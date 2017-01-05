@@ -130,15 +130,15 @@ static inline void chan_set(const u32 chan)
 
         u8 st;
 
-        cc_strobe(dev, CC1200_SIDLE);
+        st = cc_strobe(dev, CC1200_SIDLE | CC1200_ACCESS_READ);
+
+        // chance of switching during rx -- TODO: maybe try to extract valid packets?
+        if (st & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFRX);
 
         do {
             st = cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M;
 
         } while (st != CC1200_STATE_IDLE);
-
-        // this is probably useful however, we can't do anything with partial packets
-        cc_strobe(dev, CC1200_SFRX);
 
         //NOTE: for debug purposes, only use 2 channels
         chan_select(&chnl.group, (chan_t) (10 + chan%2));
@@ -309,9 +309,15 @@ static void ensure_rx(void)
         case CC1200_STATE_RX:
             return;
 
-        case CC1200_STATE_IDLE:
         case CC1200_STATE_TX:
+            cc_dbg("warning: was in TX");
+            break;
+
         case CC1200_STATE_FSTXON:
+            cc_dbg("warning: was in FSTXON");
+            break;
+
+        case CC1200_STATE_IDLE:
         default:
             break;
 
@@ -372,7 +378,7 @@ static void nphy_task(void *param)
     u32 ticks = 0;
     u32 remaining = chan_time;
     u32 tx_time = 0;
-    u32 chan_ticks;
+    u32 chan_ticks = 0;
     u32 notify;
 
     bool cca = false;
@@ -405,7 +411,7 @@ static void nphy_task(void *param)
                             vTaskDelay(pdMS_TO_TICKS(st));*/
 
                         _re_cca:
-                            if ((sync_timestamp() - tx_time) >= MAX_CCA_TIME/*(chan_time/4)*/) {
+                            if ((sync_timestamp() - tx_time) >= MAX_CCA_TIME) {
                                 cc_dbg_v("tx: cca timeout t=%lu", sync_timestamp());
                                 cc_strobe(dev, CC1200_SFTX);
                                 goto _end_tx;
@@ -413,8 +419,7 @@ static void nphy_task(void *param)
 
                             // fifo check: new: go idle if a fifo refill is needed
                             if (cc_get(dev, CC1200_NUM_TXBYTES) != (sizeof(*pkt) + pkt->len)) {
-                                cc_strobe(dev, CC1200_SIDLE);
-                                cc_strobe(dev, CC1200_SFTX);
+                                if (cc_strobe(dev, CC1200_SIDLE) & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFTX);
                                 cc_fifo_write(dev, (u8 *)pkt, sizeof(*pkt) + pkt->len);
                                 cc_dbg_v("tx: fifo refill");
                             }
@@ -481,6 +486,18 @@ static void nphy_task(void *param)
                             // although other things could be happening, we are busy waiting for the result of a tx.
                             // it was assumed before (hoprefully) that there would be channel time to do so, so that means
                             // if the packet is sent close to the end of a slot, we'll be late to the next one. such is life.
+
+                            // however: sometimes a cca does not generate a result (!) and no tx status is indicated, so check
+                            // for timeout below (TODO: either use diff timeout when not cca or rename the 'max cca timeout' var)
+
+                            if ((sync_timestamp() - tx_time) >= MAX_CCA_TIME*2) {
+                                cc_dbg("tx: timeout t=%lu", sync_timestamp());
+                                if (cc_strobe(dev, CC1200_SIDLE) & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFTX);
+                                goto _end_tx;
+                            }
+
+                            // TODO: what about periodic checking of the same thing below when an outbound packet is pending
+                            // and no interrupts are generated??
                             continue;
 
 
@@ -508,7 +525,7 @@ static void nphy_task(void *param)
 
                         case CC1200_MARC_STATUS1_TX_FINISHED:
                             if (!sync_time /*|| !chan_cur*/) sync_time = sync_timestamp();
-                            tx_time = sync_timestamp();
+                            //tx_time = sync_timestamp() - 1; // HUGE impact -- bad idea
 
                             // DEBUG: extra info
                             //printf("tx/%u: seq=%u len=%u t=%lu\r\n", (u8)chan_cur, ((app_pkt_t *)pkt)->seq, ((app_pkt_t *)pkt)->len, sync_timestamp());
@@ -574,15 +591,15 @@ static void nphy_task(void *param)
             remaining = chan_time;
         }
 
-        ticks = sync_timestamp() - tx_time;
 
         if (!pkt /*&& (ticks >= 3)*/ && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
-            const u32 pkt_time = 1 + cc_get_tx_time(dev, pkt->len);
+            ticks = sync_timestamp() - tx_time;
+            const u32 pkt_time = cc_get_tx_time(dev, pkt->len) + 1;
 
-            if (remaining <= pkt_time || ticks <= pkt_time/**2*/) {
+            if (remaining <= pkt_time || ticks < pkt_time/**2 TODO: do this when we know an ACK is coming*/) {
                 cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->len);
                 pkt = NULL;
-                remaining = 0/*1*/;
+                remaining = 0;
                 continue;
 
             } else {
