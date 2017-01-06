@@ -119,7 +119,7 @@ static const struct cc_cfg_reg CC_CFG_MAC[] = {
 };
 
 
-#define MSG_LEN 38//88//48//38
+#define MSG_LEN 90//38//88//48//38
 
 static pit_t xsec_timer_0;
 static pit_t xsec_timer;
@@ -179,12 +179,14 @@ static void main_task(void *param)
             u32 num_packets = 0;
             u32 time_diff;
 
+            u8 pkt_len = 4;
+
             while (1) {
                 //pkt.chn = (u8) chan_cur;
-                nphy_tx(0, data, MSG_LEN);
+                nphy_tx(0, data, pkt_len);
                 //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
 
-                sum_lengths += MSG_LEN;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
+                sum_lengths += pkt_len;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
                 num_packets++;
                 time_diff = sync_timestamp() - start_time;
 
@@ -194,6 +196,8 @@ static void main_task(void *param)
                     sum_lengths = 0;
                     start_time = sync_timestamp();
                 }
+
+                if (++pkt_len > MSG_LEN) pkt_len = 4;
 
                 //const u32 pkt_time = cc_get_tx_time(0, pkt.len);
 
@@ -248,7 +252,7 @@ static void handle_rx(u8 flag, u8 *buf, u8 len)
     //printf("\t\t\t\t\trx: seq=%u len=%u t=%lu\r\n", pkt->seq, pkt->len, sync_timestamp());
 
     LED_D_TOGGLE();
-    if (!pflag_set()) nphy_tx(flag, buf, len);
+    //if (!pflag_set()) nphy_tx(flag, buf, len);
 }
 
 

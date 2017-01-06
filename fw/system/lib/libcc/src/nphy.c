@@ -703,10 +703,10 @@ static void nphy_task(void *param)
             //ticks = sync_timestamp() - tx_time;
             const u32 pkt_time = cc_get_tx_time(dev, pkt->len) + 1;
 
-            if (remaining <= (/*1+*/pkt_time) || /*ticks*/(sync_timestamp() - tx_time) <= (1/*1:fair 0:fast*/+((pkt_time*2)/3))/**2 TODO: do this when we know an ACK is coming*/) {
-                cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->hdr.len);
+            if (remaining < (ticks=(/*1+*/pkt_time)) || (sync_timestamp() - tx_time) <= (ticks=(0/*1:fair 0:fast*/+pkt_time)*2) ) {
+                cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u ticks=%lu", remaining, pkt_time, pkt->len, ticks);
                 pkt = NULL;
-                remaining = 0;
+                remaining = ticks/*0*/;
                 continue;
 
             } else {
