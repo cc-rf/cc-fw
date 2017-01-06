@@ -20,6 +20,27 @@
 #include <cc/type.h>
 
 
+#define PHY_PKT_FLAG_SYNC 1
+
+typedef struct __packed {
+    u8 len;
+    u8 flag;
+
+} phy_pkt_hdr_t;
+
+typedef struct __packed {
+    phy_pkt_hdr_t hdr;
+    u8 data[];
+
+} phy_pkt_t, phy_data_pkt_t;
+
+typedef struct __packed {
+    phy_pkt_hdr_t hdr;
+    u32 ts;
+
+} phy_sync_pkt_t;
+
+
 static void isr_mcu_wake(void);
 static void cca_setup(void);
 static void cca_run(void);
@@ -44,7 +65,7 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
          * forever despite the lack of a sync word detection.
          * For the timeout to always trigger an interrupt, RX_TIME_QUAL must be zero.
          * */
-        {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE | (0x7<<1) /*| CC1200_RFEND_CFG1_RX_TIME_QUAL_M*/},
+        {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_RX | (0x7<<1) /*| CC1200_RFEND_CFG1_RX_TIME_QUAL_M*/},
         {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_RX | CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN /*| 1*/},
 
         // These may not necessarily be part of the phy handling
@@ -83,7 +104,7 @@ static struct {
 
 
 extern u32 sync_timestamp(void);
-u32 sync_time = 0;
+s32 sync_time = 0;
 
 static void ensure_rx(void);
 
@@ -91,7 +112,7 @@ static void ensure_rx(void);
 #define FREQ_BASE       905000000
 #define FREQ_BW         800000
 #define CHAN_COUNT      25
-#define CHAN_TIME       100//200//60//400/*100*///200  //30
+#define CHAN_TIME       200//100//200//60//400/*100*///200  //30
 #define MAX_CCA_RETRY   2//3
 #define MAX_CCA_TIME    7//9//(chan_time/4)
 #define MAX_PACKET_LEN  120
@@ -149,10 +170,12 @@ static inline void chan_set(const u32 chan)
 }
 
 
+static bool boss = false;
 
-
-bool nphy_init(nphy_rx_t rx)
+bool nphy_init(nphy_rx_t rx, bool sync_master)
 {
+    boss = sync_master;
+
     // TODO: eventually move elsewhere
     RNGA_Init(RNG);
 
@@ -180,8 +203,8 @@ bool nphy_init(nphy_rx_t rx)
         return false;
     }
 
-    nphy.txq = xQueueCreate(4/*8*/, sizeof(cc_pkt_t *));
-    nphy.rxq = xQueueCreate(4/*8*/, sizeof(cc_pkt_t *));
+    nphy.txq = xQueueCreate(4/*8*/, sizeof(void *));
+    nphy.rxq = xQueueCreate(4/*8*/, sizeof(void *));
     nphy.rx = rx;
 
     if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE * 2, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
@@ -210,22 +233,55 @@ bool nphy_init(nphy_rx_t rx)
 #define NOTIFY_MASK_ISR    2
 #define NOTIFY_MASK_TX     4
 
+static u8 seq_all = 0;
 
-void nphy_tx(cc_pkt_t *pkt)
+void nphy_tx(u8 flag __unused, u8 *buf, u8 len)
 {
-    cc_pkt_t *qpkt = malloc(pkt->len + sizeof(*pkt)); assert(qpkt);
-    memcpy(qpkt, pkt, pkt->len + sizeof(*pkt));
+    phy_data_pkt_t *qpkt = malloc(sizeof(phy_data_pkt_t) + len); assert(qpkt);
+    if (len && buf) memcpy(qpkt->data, buf, len);
+    qpkt->hdr.len = sizeof(phy_data_pkt_t) - 1 + len;
+    qpkt->hdr.flag = 0;
+
     xQueueSend(nphy.txq, &qpkt, portMAX_DELAY);
-    //xTaskNotifyGive(nphy.task);
     xTaskNotify(nphy.task, NOTIFY_MASK_TX, eSetBits);
 }
 
 static void isr_mcu_wake(void)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    //vTaskNotifyGiveFromISR(nphy.task, &xHigherPriorityTaskWoken);
     xTaskNotifyFromISR(nphy.task, NOTIFY_MASK_ISR, eSetBits, &xHigherPriorityTaskWoken);
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
+}
+
+static void process_packet(rf_pkt_t *pkt)
+{
+    phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *)pkt;
+
+    if (spkt->hdr.flag & PHY_PKT_FLAG_SYNC) {
+        // TODO: make sure size is big enough before reading flag
+
+        if (!boss) {
+            //static u32 last_sync = 0;
+
+            sync_time = sync_timestamp() - spkt->ts;
+
+            /*if (last_sync) {
+                cc_dbg("sync: diff=%lu", sync_time - last_sync);
+            }
+
+            last_sync = sync_time;*/
+        }
+
+    } else {
+        // TODO: check for size underflow vs. phy packet size
+        phy_pkt_t *dpkt = malloc(1 + pkt->len);
+        assert(dpkt);
+        memcpy(dpkt, pkt, 1 + pkt->len);
+
+        if (!xQueueSend(nphy.rxq, &dpkt, 0)) {
+            cc_dbg("rx pkt queue fail");
+        }
+    }
 }
 
 static void nphy_rx(bool flush)
@@ -245,14 +301,14 @@ static void nphy_rx(bool flush)
         return;
     }
 
-    cc_pkt_t *spkt;
+    rf_pkt_t *spkt;
     u8 *buf = alloca(len);
     size_t pkt_count = 0;
 
     cc_fifo_read(dev, buf, len);
 
     while (len > PKT_OVERHEAD) {
-        spkt = (cc_pkt_t *)buf;
+        spkt = (rf_pkt_t *)buf;
 
         if (spkt->len > MAX_PACKET_LEN) {
             cc_dbg("[%u] c=%u malformed: len[header]=%u > len[max]=%u  (len[fifo]=%u)", dev, pkt_count+1, spkt->len, MAX_PACKET_LEN, len);
@@ -276,12 +332,7 @@ static void nphy_rx(bool flush)
             const u8 lqi = spkt->data[spkt->len + 1] & (u8) CC1200_LQI_EST_BM;
 
             if (crc_ok) {
-                cc_pkt_t *pkt = malloc(sizeof(*spkt) + spkt->len);
-                assert(pkt);
-                memcpy(pkt, spkt, sizeof(*spkt) + spkt->len);
-                if (!xQueueSend(nphy.rxq, &pkt, 0)) {
-                    cc_dbg("rx pkt queue fail");
-                } // TODO: probably need to not wait here
+                process_packet(spkt);
             } else {
                 cc_dbg("[%u] c=%u bad crc", dev, pkt_count);
             }
@@ -369,22 +420,34 @@ void cca_end(void)
     //cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 7); // NOTE: cheating here and using known value
 }
 
-
 static void nphy_task(void *param)
 {
-    cc_pkt_t *pkt = NULL;
+    rf_pkt_t *pkt = NULL;
     u8 ms, st, retry = 0;
 
     u32 ticks = 0;
-    u32 remaining = chan_time;
+    u32 remaining = 0;
     u32 tx_time = 0;
     u32 chan_ticks = 0;
     u32 notify;
 
     bool cca = false;
+    /*chan_t*/u32 sync_chan = chan_cur - 1;
+
+    phy_sync_pkt_t pkt_sync = {
+            .hdr = {
+                    .len = sizeof(phy_sync_pkt_t) - 1,
+                    .flag = PHY_PKT_FLAG_SYNC
+            },
+            .ts = 0
+    };
 
 //#undef cc_dbg_v
 //#define cc_dbg_v cc_dbg
+
+    const u32 start_time = sync_timestamp();
+
+    if (boss) sync_time = start_time;
 
     while (1) {
         //if (!remaining) remaining = chan_time;
@@ -418,9 +481,10 @@ static void nphy_task(void *param)
                             }
 
                             // fifo check: new: go idle if a fifo refill is needed
-                            if (cc_get(dev, CC1200_NUM_TXBYTES) != (sizeof(*pkt) + pkt->len)) {
+                            if (cc_get(dev, CC1200_NUM_TXBYTES) != (pkt->len + 1)) {
+                                // this seems to specifically happen when receving a packet during tx (pretty sure)
                                 if (cc_strobe(dev, CC1200_SIDLE) & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFTX);
-                                cc_fifo_write(dev, (u8 *)pkt, sizeof(*pkt) + pkt->len);
+                                cc_fifo_write(dev, (u8 *)pkt, pkt->len + 1);
                                 cc_dbg_v("tx: fifo refill");
                             }
 
@@ -437,7 +501,7 @@ static void nphy_task(void *param)
                                     // the logic of continuing the loop is weird, so just hang out for a second.
                                     // if an rx finishes in this time, will eventually need a way to get that packet
                                     // because this probably won't work.
-                                    cc_dbg_v("tx: cca delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->len);
+                                    cc_dbg_v("tx: cca delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->hdr.len);
                                     vTaskDelay(pdMS_TO_TICKS(1+remaining));
                                     goto _ts2;
                                 }
@@ -447,9 +511,13 @@ static void nphy_task(void *param)
 
                             cca_run();
                             cc_strobe(dev, CC1200_STX); // TODO: Should this be SFTXON?
-                            // TODO: update wait time but NOT channel
+
+                            // update wait time but NOT channel
                             if (sync_time) {
                                 ticks = sync_timestamp() - sync_time;
+                                remaining = chan_time - (ticks % chan_time);
+                            } else {
+                                ticks = sync_timestamp() - start_time;
                                 remaining = chan_time - (ticks % chan_time);
                             }
 
@@ -457,9 +525,8 @@ static void nphy_task(void *param)
 
                         case CC1200_MARC_STATUS1_RX_FINISHED:
                             // an awkward situation, sort of -- packet received during cca, which is totally possible in some
-                            // cases. might as well handle it as 'normal'... but, big
-                            // !TODO: determine whether cca needs continuing at this point or what!
-                            if (!sync_time /*|| !chan_cur*//*def not entirely right*/) sync_time = sync_timestamp();
+                            // cases. might as well handle it as 'normal'. RX during CCA can be disabled by disabling sync word
+                            // detection, but we probably care about packets all the time.
                             if (!pkt) tx_time = 0; // only ungate next tx if not currently busy with a tx
                             nphy_rx(true);
                             cc_strobe(dev, CC1200_SIDLE); // NOTE: could be unnecessary/impactful
@@ -506,7 +573,7 @@ static void nphy_task(void *param)
                             // so just refill the fifo here and go again. this might be a degenerate case
                             // now that the NUM_TXBYTES check in the cca handling above is done.
                             cc_strobe(dev, CC1200_SFTX);
-                            cc_fifo_write(dev, (u8 *)pkt, sizeof(*pkt) + pkt->len);
+                            cc_fifo_write(dev, (u8 *)pkt, pkt->len);
                             cc_dbg("tx: tx fifo underflow");
                             goto _re_cca;
 
@@ -524,14 +591,19 @@ static void nphy_task(void *param)
                             // fall through
 
                         case CC1200_MARC_STATUS1_TX_FINISHED:
-                            if (!sync_time /*|| !chan_cur*/) sync_time = sync_timestamp();
+                            //if (!sync_time /*|| !chan_cur*/) sync_time = sync_timestamp();
+
+                            // just sent a sync packet
+                            //if (boss && (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_SYNC)) sync_time = sync_timestamp();
+                            // maybe the boss never has a sync time?
+
                             //tx_time = sync_timestamp() - 1; // HUGE impact -- bad idea
 
                             // DEBUG: extra info
                             //printf("tx/%u: seq=%u len=%u t=%lu\r\n", (u8)chan_cur, ((app_pkt_t *)pkt)->seq, ((app_pkt_t *)pkt)->len, sync_timestamp());
 
                         _end_tx:
-                            free(pkt);
+                            if ((void*)pkt != &pkt_sync) free(pkt);
                             pkt = NULL;
                             // don't srx or update channel or check for tx, let it happen below.
                             break;
@@ -539,7 +611,6 @@ static void nphy_task(void *param)
                 } else if (ms) {
                     switch (ms) {
                         case CC1200_MARC_STATUS1_RX_FINISHED:
-                            if (!sync_time) sync_time = sync_timestamp();
                             if (!pkt) tx_time = 0; // only ungate next tx if not currently busy with a tx
                             nphy_rx(true);
                             cc_strobe(dev, CC1200_SIDLE); // NOTE: could be unnecessary/impactful (copied from RX_FIN above)
@@ -552,6 +623,14 @@ static void nphy_task(void *param)
                             break;
 
                         case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
+                            // When doing high-rate back-and-forth with two nodes using CCAs but not waiting after sending,
+                            // packets seem to pile up 3 at a time in the RX queue while we wait for RX_FINISHED, meaning the
+                            // first two get salvaged from the fifo here but the third is always a few bytes short. It seems
+                            // that changing the RXOFF mode to RX prevents such situations. The alternative might be to watch
+                            // for the SYNC_RXTX falling edge, but it's unclear whether the current FIFO handling logic can
+                            // deal with it properly (reading a packet while receiving another one might require the use of
+                            // RXFIRST/RXLAST).
+                            // The RXOFF change is sensible so far and does not seem to have adverse side effects.
                             nphy_rx(false); // try to salvage packet(s)
 
                             // fall through for forced uncoditional flush
@@ -579,7 +658,6 @@ static void nphy_task(void *param)
         }
 
 
-
         if (sync_time) {
             ticks = sync_timestamp() - sync_time;
             chan_ticks = (ticks % chan_time);
@@ -588,16 +666,39 @@ static void nphy_task(void *param)
             chan_set((ticks / chan_time) % chan_count);
 
         } else {
-            remaining = chan_time;
+            ticks = sync_timestamp() - start_time;
+            chan_ticks = (ticks % chan_time);
+            remaining = chan_time - chan_ticks;
         }
 
+        if (boss) {
+            if ((sync_chan != chan_cur) /*&& !pkt*//*guaranteed by tx checks below!*/ /*&& (remaining > 1)*//*sanity check, should always pass*/) {
+                assert(!pkt); //guaranteed by tx checks below!
+                assert(remaining > 1);
+                sync_chan = chan_cur;
+                pkt_sync.ts = ticks;
+                pkt = (rf_pkt_t *) &pkt_sync;
+                retry = MAX_CCA_RETRY;
+                cca = false;
+
+                cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
+
+                if (cca) {
+                    cca_run();
+                }
+
+                cc_strobe(dev, CC1200_STX);
+                tx_time = sync_timestamp();
+                cc_dbg_v("sync: ch=%lu", sync_chan);
+            }
+        }
 
         if (!pkt /*&& (ticks >= 3)*/ && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
             ticks = sync_timestamp() - tx_time;
-            const u32 pkt_time = cc_get_tx_time(dev, pkt->len) + 1;
+            const u32 pkt_time = cc_get_tx_time(dev, pkt->len) /*+ 1*/;
 
-            if (remaining <= pkt_time || ticks < pkt_time/**2 TODO: do this when we know an ACK is coming*/) {
-                cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->len);
+            if (remaining <= pkt_time || ticks <= pkt_time/**2 TODO: do this when we know an ACK is coming*/) {
+                cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->hdr.len);
                 pkt = NULL;
                 remaining = 0;
                 continue;
@@ -606,15 +707,9 @@ static void nphy_task(void *param)
                 xQueueReceive(nphy.txq, &pkt, 0); // no reason in the universe that this should not just always pop the same pointer every time
                 retry = MAX_CCA_RETRY;
 
-                cca = true;//(pkt->len & 0x80) != 0;
+                cca = true;
 
-                if (!cca) {
-                    //cc_strobe(dev, CC1200_SIDLE); // needed?
-                } else {
-                    pkt->len &= 0x7f;
-                }
-
-                cc_fifo_write(dev, (u8 *) pkt, sizeof(*pkt) + pkt->len);
+                cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
 
                 if (cca) {
                     cca_run();
@@ -629,18 +724,18 @@ static void nphy_task(void *param)
     }
 }
 
-static void nphy_dispatch_task(void *param)
+static void nphy_dispatch_task(void *param __unused)
 {
     const xQueueHandle rxq = nphy.rxq;
     const nphy_rx_t rx = nphy.rx;
-    cc_pkt_t *spkt = alloca(sizeof(cc_pkt_t) + 255);
-    cc_pkt_t *pkt;
+    phy_pkt_t *spkt = alloca(256);
+    phy_pkt_t *pkt = NULL;
 
     while (1) {
-        if (xQueueReceive(rxq, &pkt, portMAX_DELAY)) {
-            memcpy(spkt, pkt, sizeof(*pkt) + pkt->len);
+        if (xQueueReceive(rxq, &pkt, portMAX_DELAY) && pkt) {
+            memcpy(spkt, pkt, 1 + pkt->hdr.len);
             free(pkt);
-            if (rx) rx(spkt); // TODO: maybe require cb and remove check
+            if (rx) rx(spkt->hdr.flag, spkt->data, spkt->hdr.len - sizeof(phy_pkt_t) + 1); // TODO: maybe require cb and remove check
         }
     }
 }

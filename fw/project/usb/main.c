@@ -119,14 +119,7 @@ static const struct cc_cfg_reg CC_CFG_MAC[] = {
 };
 
 
-#define MSG_LEN 40
-
-typedef struct __packed {
-    u8 len;
-    u8 seq;
-    u8 data[MSG_LEN];
-
-} app_pkt_t;
+#define MSG_LEN 38
 
 static pit_t xsec_timer_0;
 static pit_t xsec_timer;
@@ -136,7 +129,7 @@ u32 sync_timestamp(void)
     return pit_get_elapsed(xsec_timer);
 }
 
-static void handle_rx(app_pkt_t *pkt);
+static void handle_rx(u8 flag, u8 *buf, u8 len);
 
 static void main_task(void *param)
 {
@@ -164,7 +157,7 @@ static void main_task(void *param)
     amp_ctrl(0, AMP_PA, true);
     amp_ctrl(0, AMP_HGM, true);
 
-    if (nphy_init((nphy_rx_t)handle_rx)) {
+    if (nphy_init((nphy_rx_t)handle_rx, pflag_set())) {
         printf("nphy init successful.\r\n");
 
         /*if (!cc_cfg_regs(0, CC_CFG_MAC, COUNT_OF(CC_CFG_MAC))) {
@@ -179,7 +172,7 @@ static void main_task(void *param)
         } else {
             printf("mode: transmit\r\n");
 
-            app_pkt_t pkt = {.len = MSG_LEN + 2, .seq = 0, .data = {[0 ... MSG_LEN - 1] = 'a'}};
+            u8 data[MSG_LEN] = {'a'};
 
             u32 start_time = sync_timestamp();
             u32 sum_lengths = 0;
@@ -188,11 +181,10 @@ static void main_task(void *param)
 
             while (1) {
                 //pkt.chn = (u8) chan_cur;
-                nphy_tx((cc_pkt_t *) &pkt);
+                nphy_tx(0, data, MSG_LEN);
                 //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
-                ++pkt.seq;
 
-                sum_lengths += pkt.len;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
+                sum_lengths += MSG_LEN;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
                 num_packets++;
                 time_diff = sync_timestamp() - start_time;
 
@@ -236,9 +228,12 @@ static u32 sum_lengths = 0;
 static u32 num_packets = 0;
 static u32 time_diff;
 
-static void handle_rx(app_pkt_t *pkt)
+static void handle_rx(u8 flag, u8 *buf, u8 len)
 {
-    sum_lengths += pkt->len;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
+    (void)flag;
+    (void)buf;
+
+    sum_lengths += len;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
     num_packets++;
     if (!start_time) start_time = sync_timestamp();
     time_diff = sync_timestamp() - start_time;
@@ -253,7 +248,7 @@ static void handle_rx(app_pkt_t *pkt)
     //printf("\t\t\t\t\trx: seq=%u len=%u t=%lu\r\n", pkt->seq, pkt->len, sync_timestamp());
 
     LED_D_TOGGLE();
-    //if (!pflag_set()) nphy_tx((cc_pkt_t *)pkt);
+    //if (!pflag_set()) nphy_tx((pkt_t *)pkt);
 }
 
 

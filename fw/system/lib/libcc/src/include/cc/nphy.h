@@ -2,7 +2,7 @@
 
 #include <cc/common.h>
 
-typedef void (* nphy_rx_t)(cc_pkt_t *pkt);
+typedef void (* nphy_rx_t)(u8 flag, u8 *buf, u8 len);
 
-bool nphy_init(nphy_rx_t rx);
-void nphy_tx(cc_pkt_t *pkt);
+bool nphy_init(nphy_rx_t rx, bool sync_master);
+void nphy_tx(u8 flag, u8 *buf, u8 len);
