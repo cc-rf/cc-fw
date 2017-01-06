@@ -119,7 +119,7 @@ static const struct cc_cfg_reg CC_CFG_MAC[] = {
 };
 
 
-#define MSG_LEN 38
+#define MSG_LEN 38//88//48//38
 
 static pit_t xsec_timer_0;
 static pit_t xsec_timer;
@@ -188,7 +188,7 @@ static void main_task(void *param)
                 num_packets++;
                 time_diff = sync_timestamp() - start_time;
 
-                if (time_diff >= 1000) {
+                if (time_diff >= 1002) {
                     printf("tx: rate = %lu bps\t\t\tpkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
                     num_packets = 0;
                     sum_lengths = 0;
@@ -248,7 +248,7 @@ static void handle_rx(u8 flag, u8 *buf, u8 len)
     //printf("\t\t\t\t\trx: seq=%u len=%u t=%lu\r\n", pkt->seq, pkt->len, sync_timestamp());
 
     LED_D_TOGGLE();
-    //if (!pflag_set()) nphy_tx((pkt_t *)pkt);
+    if (!pflag_set()) nphy_tx(flag, buf, len);
 }
 
 

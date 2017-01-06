@@ -466,6 +466,7 @@ static void nphy_task(void *param)
                             if (!retry--) {
                                 cc_dbg_v("tx: cca max retry t=%lu", sync_timestamp());
                                 cc_strobe(dev, CC1200_SFTX);
+                                tx_time = 0;
                                 goto _end_tx;
                             }
 
@@ -474,9 +475,11 @@ static void nphy_task(void *param)
                             vTaskDelay(pdMS_TO_TICKS(st));*/
 
                         _re_cca:
+                            // would be able to update tx_time to remain correct if it werent for the need for this check...
                             if ((sync_timestamp() - tx_time) >= MAX_CCA_TIME) {
                                 cc_dbg_v("tx: cca timeout t=%lu", sync_timestamp());
                                 cc_strobe(dev, CC1200_SFTX);
+                                tx_time = 0;
                                 goto _end_tx;
                             }
 
@@ -527,7 +530,9 @@ static void nphy_task(void *param)
                             // an awkward situation, sort of -- packet received during cca, which is totally possible in some
                             // cases. might as well handle it as 'normal'. RX during CCA can be disabled by disabling sync word
                             // detection, but we probably care about packets all the time.
-                            if (!pkt) tx_time = 0; // only ungate next tx if not currently busy with a tx
+
+                            // never happens
+                            //if (!pkt) tx_time = 0; // only ungate next tx if not currently busy with a tx
                             nphy_rx(true);
                             cc_strobe(dev, CC1200_SIDLE); // NOTE: could be unnecessary/impactful
                             //break;
@@ -581,6 +586,7 @@ static void nphy_task(void *param)
                             cc_strobe(dev, CC1200_SIDLE); // seems important (more sure: rx fifo fails often shortly after)?
                             cc_strobe(dev, CC1200_SFRX); // ^ same as above reason
                             cc_strobe(dev, CC1200_SFTX);
+                            tx_time = 0;
                             cc_dbg_v("tx: tx fifo overflow");
                             goto _end_tx;
 
@@ -611,7 +617,7 @@ static void nphy_task(void *param)
                 } else if (ms) {
                     switch (ms) {
                         case CC1200_MARC_STATUS1_RX_FINISHED:
-                            if (!pkt) tx_time = 0; // only ungate next tx if not currently busy with a tx
+                            /*if (!pkt)*/ tx_time = 0; // only ungate next tx if not currently busy with a tx
                             nphy_rx(true);
                             cc_strobe(dev, CC1200_SIDLE); // NOTE: could be unnecessary/impactful (copied from RX_FIN above)
                             break;
@@ -672,9 +678,9 @@ static void nphy_task(void *param)
         }
 
         if (boss) {
-            if ((sync_chan != chan_cur) /*&& !pkt*//*guaranteed by tx checks below!*/ /*&& (remaining > 1)*//*sanity check, should always pass*/) {
-                assert(!pkt); //guaranteed by tx checks below!
-                assert(remaining > 1);
+            if (!pkt && (sync_chan != chan_cur) /*&& !pkt*//*guaranteed by tx checks below!*/ /*&& (remaining > 1)*//*sanity check, should always pass*/) {
+                //assert(!pkt); //should be??saw! -- guaranteed by tx checks below!
+                //assert(remaining > 1);
                 sync_chan = chan_cur;
                 pkt_sync.ts = ticks;
                 pkt = (rf_pkt_t *) &pkt_sync;
@@ -694,10 +700,10 @@ static void nphy_task(void *param)
         }
 
         if (!pkt /*&& (ticks >= 3)*/ && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
-            ticks = sync_timestamp() - tx_time;
-            const u32 pkt_time = cc_get_tx_time(dev, pkt->len) /*+ 1*/;
+            //ticks = sync_timestamp() - tx_time;
+            const u32 pkt_time = cc_get_tx_time(dev, pkt->len) + 1;
 
-            if (remaining <= pkt_time || ticks <= pkt_time/**2 TODO: do this when we know an ACK is coming*/) {
+            if (remaining <= (/*1+*/pkt_time) || /*ticks*/(sync_timestamp() - tx_time) <= (1/*1:fair 0:fast*/+((pkt_time*2)/3))/**2 TODO: do this when we know an ACK is coming*/) {
                 cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u", remaining, pkt_time, pkt->hdr.len);
                 pkt = NULL;
                 remaining = 0;
