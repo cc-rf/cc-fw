@@ -11,6 +11,7 @@ add_library(
         src/io.c
         src/freq.c
         src/nphy.c
+        src/nmac.c
         src/chan.c
 )
 

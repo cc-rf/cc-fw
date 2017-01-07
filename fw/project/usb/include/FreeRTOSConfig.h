@@ -99,7 +99,7 @@
  * See http://www.freertos.org/a00110.html.
  *----------------------------------------------------------*/
 
-#define configUSE_PREEMPTION 0U/*1U*/
+#define configUSE_PREEMPTION 1U//0U/*1U*/
 #define configUSE_IDLE_HOOK 0U
 #define configUSE_TICK_HOOK 0U
 
@@ -124,7 +124,7 @@
 #define configUSE_MALLOC_FAILED_HOOK 0U
 #define configUSE_APPLICATION_TASK_TAG 0U
 #define configUSE_COUNTING_SEMAPHORES 1U
-#define configUSE_TIME_SLICING 0U/*1U*/
+#define configUSE_TIME_SLICING 1U//0U/*1U*/
 
 /* Co-routine definitions. */
 #define configUSE_CO_ROUTINES 0U
