@@ -21,7 +21,7 @@
 #include <cc/type.h>
 
 
-#define MAC_PENDING_ACK_MAX     1
+#define MAC_PENDING_ACK_MAX     4
 #define MAC_ACK_TIMEOUT         20
 
 #define nmac_debug(format, ...) cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )

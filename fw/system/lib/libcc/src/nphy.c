@@ -149,6 +149,8 @@ static struct {
 
 volatile u32 chan_cur = UINT32_MAX;
 
+void cca_disable(void);
+
 static inline bool chan_set(const u32 chan)
 {
     if (chan != chan_cur) {
@@ -212,8 +214,8 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    nphy.txq = xQueueCreate(2/*2*//*24*//*8*//*8*/, sizeof(void *));
-    nphy.rxq = xQueueCreate(2/*2*//*16*//*4*//*8*/, sizeof(void *));
+    nphy.txq = xQueueCreate(3/*2*//*24*//*8*//*8*/, sizeof(void *));
+    nphy.rxq = xQueueCreate(3/*2*//*16*//*4*//*8*/, sizeof(void *));
     nphy.rx = rx;
 
     if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE * 2, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
@@ -455,6 +457,19 @@ void cca_enable(void)
 {
     if (!cca_enabled) {
         cca_enabled = true;
+
+        /*u8 st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
+
+        if ((st & CC1200_STATUS_STATE_M) != CC1200_STATE_IDLE) {
+            //cc_dbg("SIDLE");
+            cc_strobe(dev, CC1200_SIDLE);
+        }
+
+        if (st & CC1200_STATUS_EXTRA_M) {
+            //cc_dbg("SFRX");
+            cc_strobe(dev, CC1200_SFRX);
+        }*/
+
         //cc_update(dev, CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_M, CC1200_RFEND_CFG1_RXOFF_MODE_TX);
         cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT);
         //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_CARRIER_SENSE);
@@ -525,7 +540,7 @@ static void nphy_task(void *param)
                     switch (ms) {
                         case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
                             if (!retry--) {
-                                cc_dbg_v("tx: cca max retry t=%lu", sync_timestamp());
+                                cc_dbg_v("tx: cca max retry t=%lu time=%lu", sync_timestamp(), sync_timestamp() - tx_time);
                                 st = cc_strobe(dev, CC1200_SIDLE);
                                 if (st & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFTX);
                                 tx_time = 0;
@@ -556,8 +571,10 @@ static void nphy_task(void *param)
                             //cc_dbg("tx: cca retry t=%lu ch=%u st=0x%02X", sync_timestamp(), chan_cur, cc_strobe(dev,CC1200_SNOP));
 
                             // TODO: maybe make sure CCA is actually definitely enabled before this
+                            assert(cca_enabled);
                             cca_run();
                             cc_strobe(dev, CC1200_STX); // TODO: Should this be SFTXON?
+                            tx_time = sync_timestamp();
 
                             // update wait time but NOT channel
                             if (sync_time) {
@@ -576,6 +593,9 @@ static void nphy_task(void *param)
                             // an awkward situation, sort of -- packet received during cca, which is totally possible in some
                             // cases. might as well handle it as 'normal'. RX during CCA can be disabled by disabling sync word
                             // detection, but we probably care about packets all the time.
+
+                            cc_dbg("WHOA: RX DURING TX");
+
                             cc_strobe(dev, CC1200_SIDLE); // NOTE: could be unnecessary/impactful
                             nphy_rx(true);
                             //break;
@@ -666,10 +686,17 @@ static void nphy_task(void *param)
                                 }
                             }*/
 
-                            if ((void*)pkt != &pkt_sync) free(pkt);
-                            else {
+                            if ((void*)pkt != &pkt_sync) {
+
+                                if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
+                                    //tx_time = 0; // hmm
+                                }
+
+                                free(pkt);
+
+                            } else {
                                 sync_needed = false;
-                                tx_time = 0;
+                                tx_time = 0; // could be redundant depending on what done when sent
                             }
 
                             pkt = NULL;
@@ -700,7 +727,7 @@ static void nphy_task(void *param)
                                 cc_strobe(dev, CC1200_STX);
                                 cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
 
-                                tx_time = sync_timestamp(); // maybe different for this?
+                                tx_time = sync_timestamp();
                                 //cc_dbg_v("sync: ch=%lu ts=%lu", sync_chan, pkt_sync.ts);
                             }
                             break;
@@ -796,7 +823,7 @@ static void nphy_task(void *param)
                     cc_strobe(dev, CC1200_STX);
                     cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
 
-                    tx_time = sync_timestamp(); // maybe different for this?
+                    tx_time = sync_timestamp(); // maybe different for this? -- no; will affect ability to time out
                     //cc_dbg_v("sync: ch=%lu ts=%lu", sync_chan, pkt_sync.ts);
                 }
             }
@@ -821,49 +848,55 @@ static void nphy_task(void *param)
             if (xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
                 //ticks = sync_timestamp() - tx_time;
                 u32 pkt_time = cc_get_tx_time(dev, pkt->len) /*+ 1*/;
-                //if (pkt_time) --pkt_time;
 
                 if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
-                    pkt_time = 1; // is this quite right?
-                }
 
-                //if (/*(chan_ticks < 7) ||*/ remaining <= (ticks=(5/*LBT minimum is 5ms*/+pkt_time)) || (sync_timestamp() - tx_time) < (ticks=(0/*1:fair 0:fast*/+pkt_time)/**3*/) ) {
-                if ((sync_timestamp() - tx_time) < (ticks=pkt_time*2) || (chan_ticks <= (ticks=20)) || remaining <= (ticks=(20/*LBT minimum is 5ms*/+pkt_time))) {
-                    //cc_dbg_v("tx: delay: remaining=%lu pkt_time=%lu len=%u ticks=%lu", remaining, pkt_time, pkt->len, ticks);
-                    pkt = NULL;
-                    remaining = ticks/*0*/;
-                    continue;
+                    //pkt_time = 0; // is this quite right?
 
-                } else {
-                    xQueueReceive(nphy.txq, &pkt, 0); // no reason in the universe that this should not just always pop the same pointer every time
-                    retry = MAX_CCA_RETRY;
-                    cca = !(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE);
-
-                    // trying this out....
-                    //cc_strobe(dev, CC1200_SIDLE);
-
-                    if (!sync_time) ((phy_pkt_t *)pkt)->hdr.flag |= PHY_PKT_FLAG_NOSYNC;
-
-                    cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
-
-                    if (cca) {
-                        cca_enable();
-                        cca_run();
-                    } else {
-                        cca_disable();
-                        cc_strobe(dev, CC1200_SIDLE); // is this needed? always?
+                    if (chan_ticks < (ticks=10) || remaining < (ticks=(10+pkt_time))) {
+                        pkt = NULL;
+                        remaining = ticks;
+                        continue;
                     }
 
-                    cc_strobe(dev, CC1200_STX);
-                    tx_time = sync_timestamp();
+                } else {
+
+                    // LBT minimum is 5ms
+
+                    if ((sync_timestamp() - tx_time) < (ticks=pkt_time*2) || chan_ticks <= (ticks=20) || remaining <= (ticks=(20+pkt_time))) {
+                        pkt = NULL;
+                        remaining = ticks;
+                        continue;
+                    }
+
                 }
+
+                xQueueReceive(nphy.txq, &pkt, 0);
+
+                cca = !(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE);
+
+
+                if (!sync_time) ((phy_pkt_t *)pkt)->hdr.flag |= PHY_PKT_FLAG_NOSYNC;
+
+                if (cca) {
+                    retry = MAX_CCA_RETRY;
+                    //cc_strobe(dev, CC1200_SIDLE);
+                    cca_enable();
+                    cca_run();
+                } else {
+                    cca_disable();
+                    cc_strobe(dev, CC1200_SIDLE); // is this needed? always?
+                }
+
+                cc_strobe(dev, CC1200_STX);
+                cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
+                tx_time = sync_timestamp();
             }
         }
 
-
-        if (!pkt) ensure_rx();
-        // ...
-
+        if (!pkt) {
+            ensure_rx();
+        }
 
         if (sync_time) {
             ticks = sync_timestamp() - sync_time;

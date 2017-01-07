@@ -163,7 +163,7 @@ static void main_task(void *param)
     amp_ctrl(0, AMP_HGM, true);
 
     transmitter = pflag_set();
-    boss = !transmitter;
+    boss = transmitter;
     addr = (u16)(transmitter ? 2 : 1);
 
     #if 0
@@ -322,7 +322,7 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
 #endif
 {
     if (size != MSG_LEN) {
-        printf("rx: wrong size? %u != %u (expected)\r\n", size, MSG_LEN);
+        //printf("rx: wrong size? %u != %u (expected)\r\n", size, MSG_LEN);
     } else {
         u32 id = ((u32 *)data)[0];
         u32 magic = ((u32 *)data)[1];
