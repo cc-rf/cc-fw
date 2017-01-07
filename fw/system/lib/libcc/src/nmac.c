@@ -21,7 +21,7 @@
 #include <cc/type.h>
 
 
-#define MAC_PENDING_ACK_MAX     4
+#define MAC_PENDING_ACK_MAX     1
 #define MAC_ACK_TIMEOUT         20
 
 #define nmac_debug(format, ...) cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
@@ -213,9 +213,9 @@ extern u32 sync_timestamp(void);
 
 static void ack_timeout(TimerHandle_t xTimer)
 {
-    mac_pkt_t *const pkt = pvTimerGetTimerID(xTimer); assert(pkt);
+    mac_pkt_t *const pkt = pvTimerGetTimerID(xTimer); //assert(pkt); // NOTE: THIS HAPPENS
 
-    if (!(pkt->flag & MAC_FLAG_ACK_RQR)) {
+    if (pkt && !(pkt->flag & MAC_FLAG_ACK_RQR)) {
         pkt->flag |= MAC_FLAG_ACK_RQR;
 
         nmac_debug_pkt(

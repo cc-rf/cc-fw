@@ -283,7 +283,7 @@ static void main_task(void *param)
 
                 LED_D_TOGGLE();
 
-                vTaskDelay(pdMS_TO_TICKS(10));
+                vTaskDelay(pdMS_TO_TICKS(5));
             }
 
         }
