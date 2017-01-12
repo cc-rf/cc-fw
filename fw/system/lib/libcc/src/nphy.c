@@ -990,26 +990,26 @@ static void rf_task_NEW(void *param __unused)
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if ((ts - tx_time) < (pkt_time * 2)) {
+                            /*if ((ts - tx_time) < (pkt_time * 1)) {
 
-                                tx_next = ts + ((pkt_time * 2) - (ts - tx_time));
+                                tx_next = ts + ((pkt_time * 1) - (ts - tx_time));
                                 pkt = NULL;
                                 continue;
 
-                            } else if (chan_ticks < 2) {
+                            } else*/ if (chan_ticks < 2) {
 
                                 tx_next = ts + (2 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining < (10 + pkt_time)) {
+                            } else if (remaining < (5 + pkt_time)) {
 
-                                tx_next = ts + ((10 + pkt_time) - remaining);
+                                tx_next = ts + ((5 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
 
-                            tx_next = 2 * pkt_time;
+                            tx_next = 1 * pkt_time;
                             cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
 
                         } else {
@@ -1032,15 +1032,15 @@ static void rf_task_NEW(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else if (chan_ticks <= 10) {
+                            } else if (chan_ticks <= 5) {
 
-                                tx_next = ts + (10 - chan_ticks);
+                                tx_next = ts + (5 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining <= (20 + pkt_time)) {
+                            } else if (remaining <= (10 + pkt_time)) {
 
-                                tx_next = ts + ((20 + pkt_time) - remaining);
+                                tx_next = ts + ((10 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
