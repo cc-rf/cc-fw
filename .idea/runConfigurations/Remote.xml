@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Remote" type="CLion_Remote" factoryName="GDB Remote Debug" singleton="true" debugger="/usr/bin/arm-none-eabi-gdb" remoteCommand=":2341" symbolFile="$PROJECT_DIR$/build/fw/fw.elf" sysroot="$PROJECT_DIR$/build">
+  <configuration default="false" name="Remote" type="CLion_Remote" factoryName="GDB Remote Debug" singleton="true" debugger="/usr/bin/arm-none-eabi-gdb" remoteCommand=":2331" symbolFile="$PROJECT_DIR$/build/fw/fw.elf" sysroot="$PROJECT_DIR$/build">
     <method />
   </configuration>
 </component>

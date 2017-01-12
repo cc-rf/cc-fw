@@ -261,12 +261,12 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC1,             0x90}, // Sync Word Configuration [15:8]
         {CC1200_SYNC0,             0x4E}, // Sync Word Configuration [7:0]
 
-        {CC1200_SYNC_CFG1,         0x49/*new: forgot to change sync word length to 2 bytes. thr is 0x07.*//*0xA7*//*0xA9*//*0xA8*/},
+        {CC1200_SYNC_CFG1,         0x45/*new: forgot to change sync word length to 2 bytes. thr is 0x07.*//*0xA7*//*0xA9*//*0xA8*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         0x33/*0x13*/}, // 2byte sync. bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
         /*!!UNCONFIRMED CHANGE*/{CC1200_DEVIATION_M,       /*0x48*//*0xCB*/0x1F/*0x9A*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_MODCFG_DEV_E,      0x0D/*new,same but no DSSS*/ /*0x8D*//*0x8C*//*0x8D*//*0x8C*/}, // 0x80: coding gain
         {CC1200_DCFILT_CFG,        0x4B},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_PREAMBLE_CFG1,     0x10/*new,2byte*/ /*0x18*//*0x34*/}, // 0x34: 30-byte preamble (4 == 0x18)
+        /*!!UNCONFIRMED CHANGE*/{CC1200_PREAMBLE_CFG1,     0x18/*newnew: back to 4*/ /*0x10*//*new,2byte*/ /*0x18*//*0x34*/}, // 0x34: 30-byte preamble (4 == 0x18)
         {CC1200_PREAMBLE_CFG0,     0x8A},
         {CC1200_IQIC,              0x58/*NOTE: changing back to 0x58 improved AGC/RSSI performance*//*0x80*//*0x58*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_CHAN_BW,           /*0x05*//*0x04*/0x03},
@@ -284,7 +284,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},
         {CC1200_PKT_CFG0,          0x20},
-        {CC1200_PA_CFG1,           0x77/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG1,           0x43/*0x77*//*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
         /*!!UNCONFIRMED CHANGE*/{CC1200_IF_MIX_CFG,        0x1C/*0x1C*/}, // IF: highest freq

@@ -98,8 +98,6 @@ int main(void)
 
     xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
 
-    vcom_init();
-    printf("<vcom init>\r\n");
     LED_C_ON();
 
     // Theoretically this will make sure the sub-priority on all interrupt configs is zero.
@@ -128,7 +126,7 @@ static bool transmitter = false;
 static bool boss = false;
 static u16 addr = 0;
 
-#if 0
+#if 1
 static void handle_rx(u8 flag, u8 *data, u8 size);
 #else
 static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[]);
@@ -138,6 +136,10 @@ static void main_task(void *param)
 {
     (void)param;
     printf("<main task>\r\n");
+
+    vcom_init();
+    printf("<vcom init>\r\n");
+    vTaskDelay(pdMS_TO_TICKS(500));
 
     //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
 
@@ -156,17 +158,17 @@ static void main_task(void *param)
     pit_start(xsec_timer);
     pit_start(xsec_timer_0);
 
-    #define MSG_LEN 88//38//88//48//38
+    #define MSG_LEN 48//88//38//88//48//38
 
     amp_ctrl(0, AMP_LNA, true);
     amp_ctrl(0, AMP_PA, true);
-    amp_ctrl(0, AMP_HGM, true);
+    amp_ctrl(0, AMP_HGM, false);
 
     transmitter = pflag_set();
     boss = transmitter;
     addr = (u16)(transmitter ? 2 : 1);
 
-    #if 0
+    #if 1
 
     if (nphy_init((nphy_rx_t)handle_rx, boss)) {
         printf("nphy init successful.\r\n");
@@ -197,19 +199,22 @@ static void main_task(void *param)
             u32 num_packets = 0;
             u32 time_diff;
 
-            u8 pkt_len = 88;
+            u8 pkt_len = MSG_LEN;
+
+            *((u8 *)data) = 0;
 
             while (1) {
                 //pkt.chn = (u8) chan_cur;
                 //nphy_tx(0, data, (u8)(pkt_len % 3 ? pkt_len : 3));
-                nphy_tx(0, data, pkt_len);
+                nphy_tx(/*PHY_PKT_FLAG_IMMEDIATE*/0, data, pkt_len);
                 //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
+                ++(*((u8 *)data));
 
                 sum_lengths += (u8)(pkt_len);// % 3 ? pkt_len : 3);// + 3 + /*being generous: 2 sync, 2 preamble*/4;
                 num_packets++;
                 time_diff = sync_timestamp() - start_time;
 
-                if (time_diff >= 1002) {
+                if (time_diff >= 1000) {
                     printf("tx: rate = %lu bps\t\t\tpkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
                     num_packets = 0;
                     sum_lengths = 0;
@@ -218,7 +223,7 @@ static void main_task(void *param)
 
                 //if (++pkt_len > MSG_LEN) pkt_len = 4;
 
-                vTaskDelay(pdMS_TO_TICKS(2));
+                vTaskDelay(pdMS_TO_TICKS(5));
 
                 //const u32 pkt_time = cc_get_tx_time(0, pkt.len);
 
@@ -272,7 +277,7 @@ static void main_task(void *param)
                 num_packets++;
                 time_diff = sync_timestamp() - start_time;
 
-                if (time_diff >= 1002) {
+                if (time_diff >= 1000) {
                     printf("tx: rate = %lu bps \t\t pkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
                     num_packets = 0;
                     sum_lengths = 0;
@@ -283,7 +288,7 @@ static void main_task(void *param)
 
                 LED_D_TOGGLE();
 
-                vTaskDelay(pdMS_TO_TICKS(5));
+                vTaskDelay(pdMS_TO_TICKS(1000));
             }
 
         }
@@ -315,13 +320,13 @@ static u8 ack_data[1];
 static u32 id_last = 0;
 static u32 id_missed = 0;
 
-#if 0
+#if 1
 static void handle_rx(u8 flag, u8 *data, u8 size)
 #else
 static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
 #endif
 {
-    if (size != MSG_LEN) {
+    /*if (size != MSG_LEN) {
         //printf("rx: wrong size? %u != %u (expected)\r\n", size, MSG_LEN);
     } else {
         u32 id = ((u32 *)data)[0];
@@ -335,7 +340,7 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
             else if (id > id_last && (id - id_last) > 1) id_missed += (id - id_last) - 1;
             id_last = id;
         }
-    }
+    }*/
 
 
     sum_lengths += size;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
@@ -344,20 +349,22 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
     time_diff = sync_timestamp() - start_time;
 
     if (time_diff >= 1000) {
-        printf("rx: rate = %lu bps \t\t pkts = %lu \t miss = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets, id_missed);
+        printf("rx: rate = %lu bps \t\t pkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
         num_packets = 0;
         sum_lengths = 0;
         start_time = 0;
         id_missed = 0;
     }
 
-    //printf("\t\t\t\t\trx: seq=%u len=%u t=%lu\r\n", pkt->seq, pkt->len, sync_timestamp());
+    //printf("\t\t\t\t\trx: seq=%lu t=%lu\r\n", *(u32 *)data, sync_timestamp());
 
     // do a "fake ack"
-    //if (size != ack_data_len) {
-    //    //nphy_tx(flag, ack_data, ack_data_len);
-    //    nmac_tx(0, ack_data_len, ack_data);
-    //}
+    if (size != ack_data_len) {
+        //vTaskDelay(pdMS_TO_TICKS(3)); // this allows symmetric rates. next step: implement in mac.
+        *((u8 *)ack_data) = data[0];
+        nphy_tx(/*flag*/PHY_PKT_FLAG_IMMEDIATE, ack_data, ack_data_len);
+        //nmac_tx(0, ack_data_len, ack_data);
+    }
 
     //if (!transmitter) /*nmac_tx(0, size, data)*/ nphy_tx(flag, data, size);
 
