@@ -330,8 +330,8 @@ static void process_packet(rf_pkt_t *pkt)
         // TODO: make sure size is big enough before reading flag
 
         if (!boss) {
-            sync_time = sync_timestamp() - spkt->ts - cc_get_tx_time(dev, spkt->hdr.len)/*NEW: include pkt_time + fudge*/;
-            //itm_puts(0, ".sync\r\n");
+            sync_time = sync_timestamp() - spkt->ts - cc_get_tx_time(dev, spkt->hdr.len) - 1/*NEW: include pkt_time + fudge*/;
+            itm_puts(0, ".sync\r\n");
 
             //static s32 last_sync = 0;
             //u32 now = sync_timestamp();
@@ -679,8 +679,8 @@ static void rf_task_NEW(void *param __unused)
                         //tx_time = sync_timestamp();
                         //tx_next = tx_time + 5;
 
-                        ///loop_state = LOOP_STATE_TX;
-                        loop_state = LOOP_STATE_RX;
+                        /*if (sync_needed) loop_state = LOOP_STATE_TX;
+                        else */loop_state = LOOP_STATE_RX;
                         break;
 
                     case CC1200_MARC_STATUS1_TX_FINISHED:
@@ -977,7 +977,7 @@ static void rf_task_NEW(void *param __unused)
                         //ticks = sync_timestamp() - tx_time;
                         u32 pkt_time = cc_get_tx_time(dev, pkt->len) /*+ 1*/; // NOTE: things work because this rounds up, and is never zero.
 
-                        if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
+                        if (sync_time && ((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
 
                             ts = sync_timestamp();
 
@@ -986,7 +986,7 @@ static void rf_task_NEW(void *param __unused)
                                 continue;
                             }*/
 
-                            ticks = ts - (sync_time ? sync_time : start_time);
+                            ticks = ts - /*(sync_time ? */sync_time/* : start_time)*/;
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
@@ -996,9 +996,9 @@ static void rf_task_NEW(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else*/ if (chan_ticks < 2) {
+                            } else*/ if (chan_ticks < 5) {
 
-                                tx_next = ts + (2 - chan_ticks);
+                                tx_next = ts + (5 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
@@ -1020,6 +1020,14 @@ static void rf_task_NEW(void *param __unused)
                                 continue;
                             }
 
+                            if (!sync_time) {
+                                ((phy_pkt_t *)pkt)->hdr.flag |= PHY_PKT_FLAG_NOSYNC;
+
+                                // NEW: this will trigger a response, so give some time and make not immediate flagged
+                                if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)
+                                    ((phy_pkt_t *)pkt)->hdr.flag &= ~PHY_PKT_FLAG_IMMEDIATE;
+                            }
+
                             ticks = ts - (sync_time ? sync_time : start_time);
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
@@ -1032,15 +1040,15 @@ static void rf_task_NEW(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else if (chan_ticks <= 5) {
+                            } else if (chan_ticks <= 10) {
 
-                                tx_next = ts + (5 - chan_ticks);
+                                tx_next = ts + (10 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining <= (10 + pkt_time)) {
+                            } else if (remaining <= (20 + pkt_time)) {
 
-                                tx_next = ts + ((10 + pkt_time) - remaining);
+                                tx_next = ts + ((20 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
@@ -1052,8 +1060,6 @@ static void rf_task_NEW(void *param __unused)
                         xQueueReceive(nphy.txq, &pkt, 0);
 
                         cca = false;//!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE);
-
-                        if (!sync_time) ((phy_pkt_t *)pkt)->hdr.flag |= PHY_PKT_FLAG_NOSYNC;
 
                         /*if (cca) {
                             retry = MAX_CCA_RETRY;

@@ -126,7 +126,7 @@ static bool transmitter = false;
 static bool boss = false;
 static u16 addr = 0;
 
-#if 0
+#if 1
 static void handle_rx(u8 flag, u8 *data, u8 size);
 #else
 static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[]);
@@ -165,10 +165,10 @@ static void main_task(void *param)
     amp_ctrl(0, AMP_HGM, false);
 
     transmitter = pflag_set();
-    boss = transmitter;
+    boss = !transmitter;
     addr = (u16)(transmitter ? 2 : 1);
 
-    #if 0
+    #if 1
 
     if (nphy_init((nphy_rx_t)handle_rx, boss)) {
         printf("nphy init successful.\r\n");
@@ -206,7 +206,7 @@ static void main_task(void *param)
             while (1) {
                 //pkt.chn = (u8) chan_cur;
                 //nphy_tx(0, data, (u8)(pkt_len % 3 ? pkt_len : 3));
-                nphy_tx(/*PHY_PKT_FLAG_IMMEDIATE*/0, data, pkt_len);
+                nphy_tx(PHY_PKT_FLAG_IMMEDIATE, data, pkt_len);
                 //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
                 ++(*((u8 *)data));
 
@@ -214,7 +214,7 @@ static void main_task(void *param)
                 num_packets++;
                 time_diff = sync_timestamp() - start_time;
 
-                if (time_diff >= 1000) {
+                if (time_diff >= 1001) {
                     printf("tx: rate = %lu bps\t\t\tpkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
                     num_packets = 0;
                     sum_lengths = 0;
@@ -320,7 +320,7 @@ static u8 ack_data[1];
 static u32 id_last = 0;
 static u32 id_missed = 0;
 
-#if 0
+#if 1
 static void handle_rx(u8 flag, u8 *data, u8 size)
 #else
 static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
