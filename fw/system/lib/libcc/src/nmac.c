@@ -32,6 +32,7 @@ typedef enum __packed {
     MAC_FLAG_ACK_REQ = 1 << 1,
     MAC_FLAG_ACK_RSP = 1 << 2,
     MAC_FLAG_ACK_RQR = 1 << 4,
+    MAC_FLAG_PKT_BLK = 1 << 6,
 
 } mac_flag_t;
 
@@ -46,10 +47,14 @@ typedef struct __packed {
 } mac_pkt_t;
 
 extern u32 sync_timestamp(void);
+
+static void tx_task(void *param);
 static void handle_rx(u8 flags, u8 *buf, u8 len);
 
 static struct {
     mac_rx_t rx;
+    xQueueHandle txq;
+
     mac_pkt_t *ack_pend;
     xSemaphoreHandle ack;
 
@@ -63,32 +68,48 @@ bool nmac_init(u16 addr, bool sync_master, mac_rx_t rx)
     mac_addr = addr;
     nmac.rx = rx;
 
-    nmac.ack_pend = false;
+    nmac.txq = xQueueCreate(3, sizeof(void *)); assert(nmac.txq);
     nmac.ack = xSemaphoreCreateBinary(); assert(nmac.ack);
+
+    if (!xTaskCreate(tx_task, "nmac:send", TASK_STACK_SIZE_SMALL, NULL, TASK_PRIO_HIGH, NULL)) {
+        cc_dbg("error: unable to create send task");
+        return false;
+    }
 
     return nphy_init(handle_rx, sync_master);
 }
 
-static bool send(u16 dest, u8 flag, u8 size, u8 data[])
+static bool send_packet(mac_pkt_t *pkt)
 {
-    const u8 pkt_len = sizeof(mac_pkt_t) + size;
-    const bool needs_ack = flag & MAC_FLAG_ACK_REQ;
+    const u8 pkt_len = sizeof(mac_pkt_t) + pkt->size;
+    const bool needs_ack = pkt->flag & MAC_FLAG_ACK_REQ;
     u8 nphy_flag = 0;
-
-    mac_pkt_t *const pkt = alloca(pkt_len);
-
-    pkt->addr = mac_addr;
-    pkt->dest = dest;
-    pkt->seqn = mac_seqn++;
-    pkt->flag = flag;
-    pkt->size = size;
-
-    if (size && data) memcpy(pkt->data, data, size);
 
     if (pkt->flag & MAC_FLAG_ACK_RSP) {
         nphy_flag |= PHY_PKT_FLAG_IMMEDIATE;
         // ... but hang on a (milli)sec
         //vTaskDelay(pdMS_TO_TICKS(3));
+    }
+
+    if (needs_ack) {
+        if (!(pkt->flag & MAC_FLAG_PKT_BLK)) {
+            // TODO: Error check
+            if (nphy_flag & PHY_PKT_FLAG_IMMEDIATE) {
+                xQueueSendToFront(nmac.txq, &pkt, portMAX_DELAY);
+            } else {
+                xQueueSend(nmac.txq, &pkt, portMAX_DELAY);
+            }
+
+            // packet was queued. what to return here?
+            return true;
+        }
+
+        if (nmac.ack_pend) {
+            cc_dbg("tx fail: no more pending packet slots!");
+            return false;
+        }
+
+        nmac.ack_pend = pkt;
     }
 
     _retry_tx:
@@ -101,12 +122,9 @@ static bool send(u16 dest, u8 flag, u8 size, u8 data[])
 
 
     if (needs_ack) {
-        // NOTE: ASSUMPTION: Only ONE task at a time doing this.
 
-        nmac.ack_pend = pkt;
-
-        if (!xSemaphoreTake(nmac.ack, pdMS_TO_TICKS(23))) {
-            nmac.ack_pend = NULL;
+        if (!xSemaphoreTake(nmac.ack, pdMS_TO_TICKS(27))) {
+            //nmac.ack_pend[pend_idx] = NULL;
             //nmac_debug("not acked: t=%lu", sync_timestamp());
             goto _retry_tx;
             return false;
@@ -119,9 +137,44 @@ static bool send(u16 dest, u8 flag, u8 size, u8 data[])
     return true;
 }
 
+static bool send(u16 dest, u8 flag, u8 size, u8 data[])
+{
+    const u8 pkt_len = sizeof(mac_pkt_t) + size;
+    const bool needs_ack = flag & MAC_FLAG_ACK_REQ;
+    u8 nphy_flag = 0;
+    u8 pend_idx = 0;
+
+    mac_pkt_t *const pkt = malloc(pkt_len); assert(pkt);
+
+    pkt->addr = mac_addr;
+    pkt->dest = dest;
+    pkt->seqn = mac_seqn++;
+    pkt->flag = flag;
+    pkt->size = size;
+
+    if (size && data) memcpy(pkt->data, data, size);
+
+    return send_packet(pkt);
+}
+
 void nmac_tx(u16 dest, u8 size, u8 data[])
 {
     send(dest, MAC_FLAG_ACK_REQ, size, data);
+}
+
+static void tx_task(void *param __unused)
+{
+    const xQueueHandle txq = nmac.txq;
+    mac_pkt_t *pkt;
+
+    while (1) {
+        if (xQueueReceive(txq, &pkt, portMAX_DELAY)) {
+            // TODO: Maybe copy packet to stack?
+            pkt->flag |= MAC_FLAG_PKT_BLK;
+            send_packet(pkt);
+            free(pkt);
+        }
+    }
 }
 
 static void handle_rx(u8 flags, u8 *buf, u8 len)
@@ -148,10 +201,9 @@ static void handle_rx(u8 flags, u8 *buf, u8 len)
             }
 
             if (pkt->flag & MAC_FLAG_ACK_RSP) {
-                if (nmac.ack_pend && *(u8 *)pkt->data == nmac.ack_pend->seqn && (!nmac.ack_pend->dest || pkt->addr == nmac.ack_pend->dest)) {
+                const mac_pkt_t *const pend = nmac.ack_pend;
+                if (nmac.ack_pend && *(u8 *)pkt->data == pend->seqn && (!pend->dest || pkt->addr == pend->dest)) {
                     xSemaphoreGive(nmac.ack);
-                } else {
-                    // ?
                 }
 
             } else {

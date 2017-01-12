@@ -228,13 +228,11 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
 
     if (!xTaskCreate(/*nphy_task*/rf_task_NEW, "nphy:main", TASK_STACK_SIZE_LARGE/*(TASK_STACK_SIZE_DEFAULT * 3) / 2*/, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
         cc_dbg("[%u] error: unable to create main task", dev);
-        isrd_configure(2, 10, kPORT_InterruptOrDMADisabled, NULL);
         return false;
     }
 
     if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", (TASK_STACK_SIZE_DEFAULT * 3) / 2, NULL, TASK_PRIO_HIGH-1, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
-        isrd_configure(2, 10, kPORT_InterruptOrDMADisabled, NULL);
         return false;
     }
 
@@ -346,20 +344,28 @@ static void process_packet(rf_pkt_t *pkt)
         }
 
         // TODO: maybe work out some sort of intelligent synchronization
+        return;
 
-    } else if (spkt->hdr.flag & PHY_PKT_FLAG_NOSYNC) {
+    }
+
+    if (spkt->hdr.flag & PHY_PKT_FLAG_NOSYNC) {
         if (boss && !sync_needed) {
             sync_needed = true;
         }
+    }
+
+    // TODO: check for size underflow vs. phy packet size
+    phy_pkt_t *dpkt = malloc(1 + pkt->len);
+    assert(dpkt);
+    memcpy(dpkt, pkt, 1 + pkt->len);
+
+    if (spkt->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
+        if (!xQueueSendToFront(nphy.rxq, &dpkt, pdMS_TO_TICKS(100))) {
+            cc_dbg("rx pkt queue immediate fail");
+            free(dpkt);
+            // TODO: anything else?
+        }
     } else {
-        // TODO: check for size underflow vs. phy packet size
-        phy_pkt_t *dpkt = malloc(1 + pkt->len);
-        assert(dpkt);
-        memcpy(dpkt, pkt, 1 + pkt->len);
-
-        ////if (nphy.rx) nphy.rx(0, pkt->data, 1 + pkt->len - sizeof(phy_pkt_hdr_t));
-        ////free(dpkt);
-
         if (!xQueueSend(nphy.rxq, &dpkt, pdMS_TO_TICKS(100))) {
             cc_dbg("rx pkt queue fail");
             free(dpkt);
@@ -669,7 +675,7 @@ static void rf_task_NEW(void *param __unused)
                         //tx_next = tx_time + 1;
                         // NEW: Maybe the opposite
                         tx_time = 0;
-                        tx_next = 0;
+                        tx_next = sync_timestamp();
                         //tx_time = sync_timestamp();
                         //tx_next = tx_time + 5;
 
@@ -827,10 +833,14 @@ static void rf_task_NEW(void *param __unused)
                 case LOOP_STATE_RX:
                     //assert(!pkt);
                     if (pkt) {
-                        cc_dbg("WARNING: rx during tx. t=%lu len=%u is_sync=%u",
+                        cc_dbg("WARNING: rx during tx. t=%lu len=%u is_sync=%u tx_time=%lu tx_next=%lu",
                                sync_timestamp(), pkt->len,
-                               ((phy_pkt_hdr_t *)pkt)->flag & PHY_PKT_FLAG_SYNC != 0
+                               ((phy_pkt_hdr_t *)pkt)->flag & PHY_PKT_FLAG_SYNC != 0,
+                               tx_time, tx_next
                         );
+
+                        loop_state_next = LOOP_STATE_TX;
+                        continue;
                     }
 
                     if (!pkt) {
@@ -888,7 +898,7 @@ static void rf_task_NEW(void *param __unused)
 
                                 if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
                                     if ((void*)pkt == &pkt_sync) {
-                                        //NEW/tx_time = 0;
+                                        //tx_time = 0;
                                         //tx_next = 0;
                                         //cc_dbg_v("tx: <sync>sent t=%lu", sync_timestamp());
                                     } else {
@@ -905,8 +915,6 @@ static void rf_task_NEW(void *param __unused)
 
                                     //if (!sync_needed) {
                                         // NOTE: ^ This should actually always happen!
-
-                                        //cc_strobe(dev, CC1200_SIDLE);
 
                                         loop_state_next = LOOP_STATE_RX;
                                         pkt = NULL;
@@ -982,26 +990,26 @@ static void rf_task_NEW(void *param __unused)
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                           /*if ((ts - tx_time) < (pkt_time * 1)) {
+                            if ((ts - tx_time) < (pkt_time * 2)) {
 
-                                tx_next = ts + ((pkt_time * 1) - (ts - tx_time));
+                                tx_next = ts + ((pkt_time * 2) - (ts - tx_time));
                                 pkt = NULL;
                                 continue;
 
-                            } else if (chan_ticks < 1) {
+                            } else if (chan_ticks < 2) {
 
-                                tx_next = ts + (1 - chan_ticks);
+                                tx_next = ts + (2 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
-                            } else*/ if (remaining < (2 + pkt_time)) {
+                            } else if (remaining < (10 + pkt_time)) {
 
-                                tx_next = ts + ((2 + pkt_time) - remaining);
+                                tx_next = ts + ((10 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
 
-                            tx_next = pkt_time;
+                            tx_next = 2 * pkt_time;
                             cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
 
                         } else {
@@ -1024,9 +1032,9 @@ static void rf_task_NEW(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else if (chan_ticks <= 5) {
+                            } else if (chan_ticks <= 10) {
 
-                                tx_next = ts + (5 - chan_ticks);
+                                tx_next = ts + (10 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
@@ -1070,7 +1078,23 @@ static void rf_task_NEW(void *param __unused)
                         if (tx_next) {
                             tx_next = 0;
                         }
+
                         loop_state_next = LOOP_STATE_RX;
+                    } else if (pkt) {
+                        // NEW: timeout
+                        if (!tx_next) {
+                            cc_dbg("WARNING: packet timeout cannot check due to zero tx_next");
+                        } else {
+                            ts = sync_timestamp();
+
+                            if (ts >= (tx_next+7)) {
+                                cc_dbg("tx: timed out: t=%lu tx_time=%lu tx_next=%lu", ts, tx_time, tx_next);
+                                if ((void *)pkt != &pkt_sync) free(pkt);
+                                pkt = NULL;
+                                loop_state_next = LOOP_STATE_RX;
+                                continue;
+                            }
+                        }
                     }
 
                     continue;
