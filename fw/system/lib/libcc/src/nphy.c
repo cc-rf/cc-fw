@@ -43,6 +43,9 @@ typedef struct __packed {
 
 
 static void isr_mcu_wake(void);
+static void isr_marc_2pin_status_0(void);
+static void isr_marc_2pin_status_1(void);
+
 static void cca_setup(void);
 static void cca_run(void);
 static void cca_end(void);
@@ -133,6 +136,7 @@ static const u32 chan_time      = CHAN_TIME;
 #include <cc/chan.h>
 #include <fsl_rnga.h>
 #include <itm.h>
+#include <stdatomic.h>
 
 
 static struct {
@@ -241,6 +245,12 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
     isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake);
 
+    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(1), CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS0);
+    isrd_configure(2, 11, kPORT_InterruptRisingEdge | kPORT_InterruptFallingEdge, isr_marc_2pin_status_0);
+
+    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(2), CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1);
+    isrd_configure(2, 12, kPORT_InterruptRisingEdge | kPORT_DMAFallingEdge, isr_marc_2pin_status_1);
+
     cc_strobe(dev, CC1200_SRX);
     return true;
 }
@@ -277,6 +287,39 @@ static void isr_mcu_wake(void)
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xTaskNotifyFromISR(nphy.task, NOTIFY_MASK_ISR, eSetBits, &xHigherPriorityTaskWoken);
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
+}
+
+
+typedef enum __packed {
+    MARC_2PIN_STATUS_SETTLING,
+    MARC_2PIN_STATUS_TX,
+    MARC_2PIN_STATUS_IDLE,
+    MARC_2PIN_STATUS_RX,
+
+} marc_2pin_status_t;
+
+static volatile atomic_uint marc_2pin_status_field = 0;
+
+static void isr_marc_2pin_status_0(void)
+{
+    if (isrd_state(2, 11)) {
+        atomic_fetch_or(&marc_2pin_status_field, (1u << 0));
+    } else {
+        atomic_fetch_and(&marc_2pin_status_field, ~(1u << 0));
+    }
+}
+
+static void isr_marc_2pin_status_1(void)
+{
+    if (isrd_state(2, 12)) {
+        atomic_fetch_or(&marc_2pin_status_field, (1u << 1));
+    } else {
+        atomic_fetch_and(&marc_2pin_status_field, ~(1u << 1));
+    }
+}
+
+static marc_2pin_status_t marc_2pin_status(void) {
+    return (marc_2pin_status_t)marc_2pin_status_field;
 }
 
 static bool sync_needed = false;
@@ -415,6 +458,9 @@ void nphy_free_buf(u8 *buf)
 
 static void ensure_rx(void)
 {
+    if (marc_2pin_status() == MARC_2PIN_STATUS_RX)
+        return;
+
     u8 st;
 
     do {
@@ -451,6 +497,8 @@ static void ensure_rx(void)
             break;
     }
 
+    //itm_puts(0, "SRX\n");
+    //printf("SRX: st=0x%02X t=%lu\n", st, sync_timestamp());
     cc_strobe(dev, CC1200_SRX);
 
     do {
@@ -542,7 +590,7 @@ static void nphy_task(void *param)
                 // handle isr
                 ms = cc_get(dev, CC1200_MARC_STATUS1);
 
-                //cc_dbg_v("ms1=0x%02X st=0x%02X t=%lu", ms, cc_strobe(dev,CC1200_SNOP), sync_timestamp());
+                //cc_dbg_v("ms1=0x%02X st=0x%02X t=%lu 2Ps=%u", ms, cc_strobe(dev,CC1200_SNOP), sync_timestamp(), marc_2pin_status());
 
                 if (pkt) {
                     switch (ms) {
@@ -1480,7 +1528,7 @@ static void rf_task_NEW(void *param __unused)
                 ms = cc_get(dev, CC1200_MARC_STATUS1);
 
                 if (ms) {
-                    //cc_dbg_v("isr: ms1=0x%02X st=0x%02X t=%lu", ms, cc_strobe(dev, CC1200_SNOP), sync_timestamp());
+                    //cc_dbg_v("isr: ms1=0x%02X st=0x%02X t=%lu 2Ps=%u", ms, cc_strobe(dev, CC1200_SNOP), sync_timestamp(), marc_2pin_status());
                 }
 
                 switch (ms) {
@@ -1491,9 +1539,13 @@ static void rf_task_NEW(void *param __unused)
                         //tx_time = sync_timestamp();
                         //tx_next = tx_time + 1;
                         // NEW: Maybe the opposite
-                        //tx_time = 0;
+                        tx_time = 0;
                         tx_next = 0;
-                        loop_state = LOOP_STATE_TX;
+                        //tx_time = sync_timestamp();
+                        //tx_next = tx_time + 5;
+
+                        ///loop_state = LOOP_STATE_TX;
+                        loop_state = LOOP_STATE_RX;
                         break;
 
                     case CC1200_MARC_STATUS1_TX_FINISHED:
@@ -1644,7 +1696,13 @@ static void rf_task_NEW(void *param __unused)
 
             switch (loop_state) {
                 case LOOP_STATE_RX:
-                    assert(!pkt);
+                    //assert(!pkt);
+                    if (pkt) {
+                        cc_dbg("WARNING: rx during tx. t=%lu len=%u is_sync=%u",
+                               sync_timestamp(), pkt->len,
+                               ((phy_pkt_hdr_t *)pkt)->flag & PHY_PKT_FLAG_SYNC != 0
+                        );
+                    }
 
                     if (!pkt) {
                         if (tx_next && sync_timestamp() >= tx_next) {
@@ -1672,9 +1730,9 @@ static void rf_task_NEW(void *param __unused)
                             //cc_strobe(dev, CC1200_SRX);
 
                             // NEW: maybe time to tx now
-                            //rf_state = RF_STATE_RX_RUN;
-                            //loop_state_next = LOOP_STATE_TX;
-                            //continue;
+                            rf_state = RF_STATE_RX_RUN;
+                            loop_state_next = LOOP_STATE_TX;
+                            continue;
 
                             break;
                     }
@@ -1747,8 +1805,7 @@ static void rf_task_NEW(void *param __unused)
                         pkt_sync.ts = ticks; // TODO: update?
                         pkt = (rf_pkt_t *) &pkt_sync;
 
-                        cc_strobe(dev, CC1200_SIDLE); // not needed, but slows the tx a tiny bit to improve chance of receipt
-
+                        //cc_strobe(dev, CC1200_SIDLE); // not needed, but slows the tx a tiny bit to improve chance of receipt
                         ///cca_disable();
 
                         // NEW: SNOP instead of SIDLE?
@@ -1758,6 +1815,9 @@ static void rf_task_NEW(void *param __unused)
                             st = cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M;
 
                         } while (st != CC1200_STATE_IDLE);
+
+                        // NEW: go straight to idle after this for potential immediate tx
+                        cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
 
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
@@ -1784,16 +1844,16 @@ static void rf_task_NEW(void *param __unused)
 
                             ts = sync_timestamp();
 
-                            if (tx_next && tx_next > ts) {
+                            /*if (tx_next && tx_next > ts) {
                                 pkt = NULL;
                                 continue;
-                            }
+                            }*/
 
                             ticks = ts - (sync_time ? sync_time : start_time);
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                           if ((ts - tx_time) < (pkt_time * 1)) {
+                           /*if ((ts - tx_time) < (pkt_time * 1)) {
 
                                 tx_next = ts + ((pkt_time * 1) - (ts - tx_time));
                                 pkt = NULL;
@@ -1805,14 +1865,15 @@ static void rf_task_NEW(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining < (10 + pkt_time)) {
+                            } else*/ if (remaining < (2 + pkt_time)) {
 
-                                tx_next = ts + ((10 + pkt_time) - remaining);
+                                tx_next = ts + ((2 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
 
                             tx_next = pkt_time;
+                            cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
 
                         } else {
                             ts = sync_timestamp();
@@ -1848,6 +1909,7 @@ static void rf_task_NEW(void *param __unused)
                             }
 
                             tx_next = 3 * pkt_time;
+                            cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_RX);
                         }
 
                         xQueueReceive(nphy.txq, &pkt, 0);
@@ -1866,7 +1928,7 @@ static void rf_task_NEW(void *param __unused)
                         } else*/ {
                             //cca_disable();
                             // ARGH WTF DO I DO HERE
-                            cc_strobe(dev, CC1200_SIDLE); // is this needed? always?
+                            //cc_strobe(dev, CC1200_SIDLE); // is this needed? always?
                         }
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);

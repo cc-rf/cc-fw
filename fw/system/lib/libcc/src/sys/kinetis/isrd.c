@@ -92,6 +92,11 @@ static PORT_Type *const ports[] = PORT_BASE_PTRS;
 static GPIO_Type *const gpios[] = GPIO_BASE_PTRS;
 static IRQn_Type const irqns[] = PORT_IRQS;
 
+bool isrd_state(const u8 port, const u8 pin)
+{
+    return !!GPIO_ReadPinInput(gpios[port], pin);
+}
+
 void isrd_configure(const u8 port, const u8 pin, const port_interrupt_t type, const isr_t isr)
 {
     if (isr) isr_maps[port][pin] = isr;

@@ -261,8 +261,8 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC1,             0x90}, // Sync Word Configuration [15:8]
         {CC1200_SYNC0,             0x4E}, // Sync Word Configuration [7:0]
 
-        {CC1200_SYNC_CFG1,         0x45/*new: forgot to change sync word length to 2 bytes. thr is 0x07.*//*0xA7*//*0xA9*//*0xA8*/},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         0x33/*0x13*/}, // 2byte sync. bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
+        {CC1200_SYNC_CFG1,         /*newnew: 4-byte sync thr 5*/0xA5 /*0x45*//*new: forgot to change sync word length to 2 bytes. thr is 0x07.*//*0xA7*//*0xA9*//*0xA8*/},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         0x13/*newnew: no more auto clear, also clears iqic coeff when on*/ /*0x33*//*0x13*/}, // 2byte sync. bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
         /*!!UNCONFIRMED CHANGE*/{CC1200_DEVIATION_M,       /*0x48*//*0xCB*/0x1F/*0x9A*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_MODCFG_DEV_E,      0x0D/*new,same but no DSSS*/ /*0x8D*//*0x8C*//*0x8D*//*0x8C*/}, // 0x80: coding gain
         {CC1200_DCFILT_CFG,        0x4B},

@@ -25,7 +25,7 @@
 #define MAC_ACK_TIMEOUT         50
 
 #define nmac_debug(format, ...) cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
-#define nmac_debug_pkt(format, ...) cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
+#define nmac_debug_pkt(format, ...) //cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
 #define nmac_debug_v(format, ...)
 
 typedef enum __packed {
@@ -88,7 +88,7 @@ static bool send(u16 dest, u8 flag, u8 size, u8 data[])
     if (pkt->flag & MAC_FLAG_ACK_RSP) {
         nphy_flag |= PHY_PKT_FLAG_IMMEDIATE;
         // ... but hang on a (milli)sec
-        vTaskDelay(pdMS_TO_TICKS(2));
+        //vTaskDelay(pdMS_TO_TICKS(3));
     }
 
     _retry_tx:
@@ -105,9 +105,9 @@ static bool send(u16 dest, u8 flag, u8 size, u8 data[])
 
         nmac.ack_pend = pkt;
 
-        if (!xSemaphoreTake(nmac.ack, pdMS_TO_TICKS(103))) {
+        if (!xSemaphoreTake(nmac.ack, pdMS_TO_TICKS(23))) {
             nmac.ack_pend = NULL;
-            //nmac_debug("not acked.");
+            //nmac_debug("not acked: t=%lu", sync_timestamp());
             goto _retry_tx;
             return false;
         }
