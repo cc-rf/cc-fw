@@ -158,7 +158,7 @@ static void main_task(void *param)
     pit_start(xsec_timer);
     pit_start(xsec_timer_0);
 
-    #define MSG_LEN 48//88//38//88//48//38
+    #define MSG_LEN 88//38//88//48//38
 
     amp_ctrl(0, AMP_LNA, true);
     amp_ctrl(0, AMP_PA, true);
