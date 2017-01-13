@@ -26,6 +26,8 @@
 #include <fsl_port.h>
 #include <semphr.h>
 #include <cc/nmac.h>
+#include <fsl_enet.h>
+#include <fsl_sim.h>
 
 
 #define PFLAG_PORT PORTB
@@ -169,7 +171,14 @@ static void main_task(void *param)
 
     transmitter = pflag_set();
     boss = transmitter;
-    addr = (u16)(transmitter ? 2 : 1);
+    //addr = (u16)(transmitter ? 2 : 1);
+
+    sim_uid_t sim_uid;
+    SIM_GetUniqueId(&sim_uid);
+
+    addr =  (u16)0x4000 | (u16)(~0x4000 & ((u16)sim_uid.L) ^ ((u16)(sim_uid.L>>16)));
+
+    printf("address: 0x%04X L=0x%08X ML=0x%08X MH=0x%08X\r\n", addr, sim_uid.L, sim_uid.ML, sim_uid.MH);
 
     #if 0
 
@@ -291,7 +300,7 @@ static void main_task(void *param)
 
                 LED_D_TOGGLE();
 
-                //vTaskDelay(pdMS_TO_TICKS(50));
+                vTaskDelay(pdMS_TO_TICKS(1000));
             }
 
         }
@@ -360,6 +369,7 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
     }
 
     //printf("\t\t\t\t\trx: seq=%lu t=%lu\r\n", *(u32 *)data, sync_timestamp());
+    printf("rx: addr=0x%04X dest=0x%04X seqn=%lu time=%lu\r\n", addr, dest, *(u32 *)data, sync_timestamp());
 
     // do a "fake ack"
     //if (size != ack_data_len) {
