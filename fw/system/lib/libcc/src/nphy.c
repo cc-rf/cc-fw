@@ -123,7 +123,7 @@ static void ensure_rx(void);
 #define FREQ_BASE       905000000
 #define FREQ_BW         800000
 #define CHAN_COUNT      25
-#define CHAN_TIME       400//100//200//60//400/*100*///200  //30
+#define CHAN_TIME       200//100//200//60//400/*100*///200  //30
 #define MAX_CCA_RETRY   3//4//3//2//3
 #define MAX_CCA_TIME    11 //NOTE: When using LBT, backoff time minimum is 5
 #define MAX_PACKET_LEN  120
@@ -261,11 +261,11 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
     isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake);
 
-    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(1), CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS0);
+    /*cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(1), CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS0);
     isrd_configure(2, 11, kPORT_InterruptRisingEdge | kPORT_InterruptFallingEdge, isr_marc_2pin_status_0);
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(2), CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1);
-    isrd_configure(2, 12, kPORT_InterruptRisingEdge | kPORT_DMAFallingEdge, isr_marc_2pin_status_1);
+    isrd_configure(2, 12, kPORT_InterruptRisingEdge | kPORT_DMAFallingEdge, isr_marc_2pin_status_1);*/
 
     cc_strobe(dev, CC1200_SRX);
     return true;
@@ -482,9 +482,9 @@ void nphy_free_buf(u8 *buf)
 
 static void ensure_rx(void)
 {
-    if (marc_2pin_status() == MARC_2PIN_STATUS_RX) {
-        return;
-    }
+    //if (marc_2pin_status() == MARC_2PIN_STATUS_RX) {
+    //    return;
+    //}
 
     u8 st;
 

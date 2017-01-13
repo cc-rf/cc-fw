@@ -587,7 +587,7 @@ void USB_DeviceTask(void *handle)
 
 
 
-#define USB_QUEUE_LEN       1
+#define USB_QUEUE_LEN       4
 #define USB_IO_MAX_LEN      16
 
 typedef struct {

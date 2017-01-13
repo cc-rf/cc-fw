@@ -7,7 +7,7 @@
 #include <FreeRTOS.h>
 #include <semphr.h>
 
-#define CC_SPI_DMA
+//#define CC_SPI_DMA
 //#define CC_SPI_LOCK
 
 // TODO: see if CC1200 will accept 8-bit addresses with leading zeroes in upper 8 bits

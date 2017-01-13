@@ -161,7 +161,7 @@ static void main_task(void *param)
     pit_start(xsec_timer);
     pit_start(xsec_timer_0);
 
-    #define MSG_LEN 48//88//38//88//48//38
+    #define MSG_LEN 8//88//38//88//48//38
 
     amp_ctrl(0, AMP_LNA, true);
     amp_ctrl(0, AMP_PA, true);
@@ -291,7 +291,7 @@ static void main_task(void *param)
 
                 LED_D_TOGGLE();
 
-                vTaskDelay(pdMS_TO_TICKS(100));
+                //vTaskDelay(pdMS_TO_TICKS(50));
             }
 
         }
@@ -318,7 +318,7 @@ static u32 num_packets = 0;
 static u32 time_diff;
 
 static const u8 ack_data_len = 7;
-static u8 ack_data[1];
+static u8 ack_data[/*1*/7];
 
 static u32 id_last = 0;
 static u32 id_missed = 0;
@@ -362,12 +362,12 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
     //printf("\t\t\t\t\trx: seq=%lu t=%lu\r\n", *(u32 *)data, sync_timestamp());
 
     // do a "fake ack"
-    if (size != ack_data_len) {
-        //vTaskDelay(pdMS_TO_TICKS(1)); // this allows symmetric rates. next step: implement in mac.
-        *((u8 *)ack_data) = data[0];
-        //nphy_tx(/*flag*/PHY_PKT_FLAG_IMMEDIATE, ack_data, ack_data_len);
-        nmac_tx(0, ack_data_len, ack_data);
-    }
+    //if (size != ack_data_len) {
+    //    //vTaskDelay(pdMS_TO_TICKS(1)); // this allows symmetric rates. next step: implement in mac.
+    //    *((u8 *)ack_data) = data[0];
+    //    //nphy_tx(/*flag*/PHY_PKT_FLAG_IMMEDIATE, ack_data, ack_data_len);
+    //    nmac_tx(0, ack_data_len, ack_data);
+    //}
 
     //if (!transmitter) /*nmac_tx(0, size, data)*/ nphy_tx(flag, data, size);
 
