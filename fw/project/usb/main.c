@@ -39,6 +39,9 @@ static void main_task(void *param);
 
 static SemaphoreHandle_t write_sem = NULL;
 
+// For the GDB helper
+bool dbgPendSVHookState = 0;
+
 int main(void)
 {
     BOARD_InitPins();
@@ -126,7 +129,7 @@ static bool transmitter = false;
 static bool boss = false;
 static u16 addr = 0;
 
-#if 1
+#if 0
 static void handle_rx(u8 flag, u8 *data, u8 size);
 #else
 static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[]);
@@ -165,10 +168,10 @@ static void main_task(void *param)
     amp_ctrl(0, AMP_HGM, false);
 
     transmitter = pflag_set();
-    boss = !transmitter;
+    boss = transmitter;
     addr = (u16)(transmitter ? 2 : 1);
 
-    #if 1
+    #if 0
 
     if (nphy_init((nphy_rx_t)handle_rx, boss)) {
         printf("nphy init successful.\r\n");
@@ -288,7 +291,7 @@ static void main_task(void *param)
 
                 LED_D_TOGGLE();
 
-                //vTaskDelay(pdMS_TO_TICKS(40));
+                vTaskDelay(pdMS_TO_TICKS(100));
             }
 
         }
@@ -320,7 +323,7 @@ static u8 ack_data[1];
 static u32 id_last = 0;
 static u32 id_missed = 0;
 
-#if 1
+#if 0
 static void handle_rx(u8 flag, u8 *data, u8 size)
 #else
 static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
@@ -359,12 +362,12 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
     //printf("\t\t\t\t\trx: seq=%lu t=%lu\r\n", *(u32 *)data, sync_timestamp());
 
     // do a "fake ack"
-    //if (size != ack_data_len) {
-    //    //vTaskDelay(pdMS_TO_TICKS(1)); // this allows symmetric rates. next step: implement in mac.
-    //    *((u8 *)ack_data) = data[0];
-    //    //nphy_tx(/*flag*/PHY_PKT_FLAG_IMMEDIATE, ack_data, ack_data_len);
-    //    nmac_tx(0, ack_data_len, ack_data);
-    //}
+    if (size != ack_data_len) {
+        //vTaskDelay(pdMS_TO_TICKS(1)); // this allows symmetric rates. next step: implement in mac.
+        *((u8 *)ack_data) = data[0];
+        //nphy_tx(/*flag*/PHY_PKT_FLAG_IMMEDIATE, ack_data, ack_data_len);
+        nmac_tx(0, ack_data_len, ack_data);
+    }
 
     //if (!transmitter) /*nmac_tx(0, size, data)*/ nphy_tx(flag, data, size);
 

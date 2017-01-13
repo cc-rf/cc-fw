@@ -190,7 +190,8 @@ void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
 {
     static int hard_fault_count_init;
 
-    printf("\r\n\v\r\n ======== HARD FAULT ======== \r\n pc: %p\r\n\r\n", fr->pc);
+    itm_puts(0, "\r\n\v\r\n ======== HARD FAULT ======== \r\n\r\n");
+    //printf("\r\n\v\r\n ======== HARD FAULT ======== \r\n pc: %p\r\n\r\n", fr->pc);
     while (!hard_fault_continue) asm("nop");
     NVIC_SystemReset();
 

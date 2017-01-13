@@ -51,6 +51,14 @@ extern u32 sync_timestamp(void);
 static void tx_task(void *param);
 static void handle_rx(u8 flags, u8 *buf, u8 len);
 
+typedef struct __packed {
+    u16 addr;
+    u8 seqn;
+
+} nmac_peer_t;
+
+#define NMAC_MAX_PEER 10
+
 static struct {
     mac_rx_t rx;
     xQueueHandle txq;
@@ -58,10 +66,52 @@ static struct {
     mac_pkt_t *ack_pend;
     xSemaphoreHandle ack;
 
+    nmac_peer_t peer[NMAC_MAX_PEER];
+
 } nmac = {NULL};
 
 static u16 mac_addr = 0;
 static u8 mac_seqn = 0;
+
+
+
+s32 nmac_mem_count = 0;
+
+static inline void *nmac_malloc(size_t size)
+{
+    void *ptr = malloc(size);
+    if (ptr) ++nmac_mem_count;
+    return ptr;
+}
+
+static inline void nmac_free(void *ptr)
+{
+    if (ptr) --nmac_mem_count;
+    return free(ptr);
+}
+
+
+static nmac_peer_t *peer_get_or_add(u16 addr)
+{
+    nmac_peer_t *pp = NULL;
+
+    if (!addr) return NULL;
+
+    for (u8 i = 0; i < NMAC_MAX_PEER; ++i) {
+        if (nmac.peer[i].addr == addr) {
+            return &nmac.peer[i];
+        } else if (!pp && !nmac.peer[i].addr) {
+            pp = &nmac.peer[i];
+        }
+    }
+
+    if (pp) {
+        pp->seqn = 0;
+        return pp;
+    }
+
+    return NULL;
+}
 
 bool nmac_init(u16 addr, bool sync_master, mac_rx_t rx)
 {
@@ -93,11 +143,18 @@ static bool send_packet(mac_pkt_t *pkt)
 
     if (needs_ack) {
         if (!(pkt->flag & MAC_FLAG_PKT_BLK)) {
-            // TODO: Error check
             if (nphy_flag & PHY_PKT_FLAG_IMMEDIATE) {
-                xQueueSendToFront(nmac.txq, &pkt, portMAX_DELAY);
+                if (!xQueueSendToFront(nmac.txq, &pkt, portMAX_DELAY)) {
+                    cc_dbg("mac/tx: queue immediate failed");
+                    nmac_free(pkt);
+                    return false;
+                }
             } else {
-                xQueueSend(nmac.txq, &pkt, portMAX_DELAY);
+                if (!xQueueSend(nmac.txq, &pkt, portMAX_DELAY)) {
+                    cc_dbg("mac/tx: queue failed");
+                    nmac_free(pkt);
+                    return false;
+                }
             }
 
             // packet was queued. what to return here?
@@ -106,6 +163,7 @@ static bool send_packet(mac_pkt_t *pkt)
 
         if (nmac.ack_pend) {
             cc_dbg("tx fail: no more pending packet slots!");
+            nmac_free(pkt);
             return false;
         }
 
@@ -131,9 +189,9 @@ static bool send_packet(mac_pkt_t *pkt)
         }
 
         nmac.ack_pend = NULL;
-        return true;
     }
 
+    nmac_free(pkt);
     return true;
 }
 
@@ -144,11 +202,13 @@ static bool send(u16 dest, u8 flag, u8 size, u8 data[])
     u8 nphy_flag = 0;
     u8 pend_idx = 0;
 
-    mac_pkt_t *const pkt = malloc(pkt_len); assert(pkt);
+    mac_pkt_t *const pkt = nmac_malloc(pkt_len); assert(pkt);
+
+    mac_seqn = (u8)((mac_seqn + 1) % UINT8_MAX);
 
     pkt->addr = mac_addr;
     pkt->dest = dest;
-    pkt->seqn = mac_seqn++;
+    pkt->seqn = mac_seqn;
     pkt->flag = flag;
     pkt->size = size;
 
@@ -165,14 +225,14 @@ void nmac_tx(u16 dest, u8 size, u8 data[])
 static void tx_task(void *param __unused)
 {
     const xQueueHandle txq = nmac.txq;
-    mac_pkt_t *pkt;
+    mac_pkt_t *pkt = NULL;
 
     while (1) {
-        if (xQueueReceive(txq, &pkt, portMAX_DELAY)) {
+        if (xQueueReceive(txq, &pkt, portMAX_DELAY) && pkt) {
             // TODO: Maybe copy packet to stack?
             pkt->flag |= MAC_FLAG_PKT_BLK;
             send_packet(pkt);
-            free(pkt);
+            pkt = NULL;
         }
     }
 }
@@ -195,22 +255,26 @@ static void handle_rx(u8 flags, u8 *buf, u8 len)
             nmac_debug_v("(rx) drop: addr mismatch");
             
         } else {
+            nmac_peer_t *const peer = peer_get_or_add(pkt->addr);
 
-            if (pkt->flag & MAC_FLAG_ACK_REQ) {
-                send(pkt->addr, MAC_FLAG_ACK_RSP, sizeof(pkt->seqn), &pkt->seqn);
-            }
+            if (peer && (!(pkt->flag & MAC_FLAG_ACK_RQR) || (pkt->seqn != peer->seqn))) {
+                peer->seqn = pkt->seqn;
 
-            if (pkt->flag & MAC_FLAG_ACK_RSP) {
-                const mac_pkt_t *const pend = nmac.ack_pend;
-                if (nmac.ack_pend && *(u8 *)pkt->data == pend->seqn && (!pend->dest || pkt->addr == pend->dest)) {
-                    xSemaphoreGive(nmac.ack);
+                if (pkt->flag & MAC_FLAG_ACK_REQ) {
+                    send(pkt->addr, MAC_FLAG_ACK_RSP, sizeof(pkt->seqn), &pkt->seqn);
                 }
 
-            } else {
-                // NOTE: RQR might be set here, and unfortunately sometimes the packet has already been handled
-                nmac.rx(pkt->addr, pkt->dest, pkt->size, pkt->data);
+                if (pkt->flag & MAC_FLAG_ACK_RSP) {
+                    const mac_pkt_t *const pend = nmac.ack_pend;
+                    if (nmac.ack_pend && *(u8 *) pkt->data == pend->seqn && (!pend->dest || pkt->addr == pend->dest)) {
+                        xSemaphoreGive(nmac.ack);
+                    }
+
+                } else {
+                    // NOTE: RQR might be set here, and unfortunately sometimes the packet has already been handled
+                    nmac.rx(pkt->addr, pkt->dest, pkt->size, pkt->data);
+                }
             }
-            
         }
     }
 }

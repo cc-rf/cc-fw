@@ -587,7 +587,7 @@ void USB_DeviceTask(void *handle)
 
 
 
-#define USB_QUEUE_LEN       12
+#define USB_QUEUE_LEN       1
 #define USB_IO_MAX_LEN      16
 
 typedef struct {
@@ -678,7 +678,7 @@ static usb_io_t io = {0};
 
 void usb_write(char *buf, size_t len)
 {
-    if (!usb_tx_q || !s_cdcVcom.attach || !s_cdcVcom.startTransactions || !s_cdcVcom.cdcAcmHandle || !buf) return;
+    if (!usb_tx_q || !s_cdcVcom.attach /*|| !s_cdcVcom.startTransactions || !s_cdcVcom.cdcAcmHandle*/ || !buf) return;
 
     size_t sent = 0;
     bool is_interrupt = isInterrupt();
@@ -703,16 +703,24 @@ void usb_write(char *buf, size_t len)
     }
 
     io.len = len;
-    io.buf = malloc(len);
+    io.buf = malloc(len); assert(io.buf);
 
     memcpy(io.buf, buf, len);
 
     if (is_interrupt) {
-        xQueueSendFromISR(usb_tx_q, &io, &xHigherPriorityTaskWoken);
-        xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+        if (xQueueSendFromISR(usb_tx_q, &io, &xHigherPriorityTaskWoken)) {
+            xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+        } else {
+            free(io.buf);
+            io.buf = NULL;
+        }
+
 
     } else {
-        xQueueSend(usb_tx_q, &io, portMAX_DELAY);
+        if (!xQueueSend(usb_tx_q, &io, portMAX_DELAY)) {
+            free(io.buf);
+            io.buf = NULL;
+        }
 
     }
 

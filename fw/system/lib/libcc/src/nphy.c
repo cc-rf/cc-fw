@@ -137,6 +137,7 @@ static const u32 chan_time      = CHAN_TIME;
 #include <fsl_rnga.h>
 #include <itm.h>
 #include <stdatomic.h>
+#include <malloc.h>
 
 
 static struct {
@@ -188,8 +189,25 @@ static inline bool chan_set(const u32 chan)
     return false;
 }
 
-
 static bool boss = false;
+
+
+
+s32 nphy_mem_count = 0;
+
+static inline void *nphy_malloc(size_t size)
+{
+    void *ptr = malloc(size);
+    if (ptr) ++nphy_mem_count;
+    return ptr;
+}
+
+static inline void nphy_free(void *ptr)
+{
+    if (ptr) --nphy_mem_count;
+    return free(ptr);
+}
+
 
 bool nphy_init(nphy_rx_t rx, bool sync_master)
 {
@@ -222,8 +240,8 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    nphy.txq = xQueueCreate(3/*2*//*24*//*8*//*8*/, sizeof(void *));
-    nphy.rxq = xQueueCreate(3/*2*//*16*//*4*//*8*/, sizeof(void *));
+    nphy.txq = xQueueCreate(5/*3*//*2*//*24*//*8*//*8*/, sizeof(void *));
+    nphy.rxq = xQueueCreate(5/*3*//*2*//*16*//*4*//*8*/, sizeof(void *));
     nphy.rx = rx;
 
     if (!xTaskCreate(/*nphy_task*/rf_task_NEW, "nphy:main", TASK_STACK_SIZE_LARGE/*(TASK_STACK_SIZE_DEFAULT * 3) / 2*/, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
@@ -231,7 +249,7 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", (TASK_STACK_SIZE_DEFAULT * 3) / 2, NULL, TASK_PRIO_HIGH-1, &nphy.disp)) {
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH-1, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
         return false;
     }
@@ -258,7 +276,7 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
 
 void nphy_tx(u8 flag, u8 *buf, u8 len)
 {
-    phy_data_pkt_t *qpkt = malloc(sizeof(phy_data_pkt_t) + len); assert(qpkt);
+    phy_data_pkt_t *qpkt = nphy_malloc(sizeof(phy_data_pkt_t) + len); assert(qpkt);
     if (len && buf) memcpy(qpkt->data, buf, len);
     qpkt->hdr.len = sizeof(phy_data_pkt_t) - 1 + len;
     qpkt->hdr.flag = flag & (u8)PHY_PKT_FLAG_IMMEDIATE;
@@ -271,12 +289,14 @@ void nphy_tx(u8 flag, u8 *buf, u8 len)
             xTaskNotify(nphy.task, NOTIFY_MASK_TX, eSetBits);
         } else {
             cc_dbg("tx pkt queue immediate fail");
+            nphy_free(qpkt);
         }
 
     } else if (xQueueSend(nphy.txq, &qpkt, portMAX_DELAY/*pdMS_TO_TICKS(500)*/)) {
         xTaskNotify(nphy.task, NOTIFY_MASK_TX, eSetBits);
     } else {
         cc_dbg("tx pkt queue fail");
+        nphy_free(qpkt);
     }
 }
 
@@ -331,7 +351,6 @@ static void process_packet(rf_pkt_t *pkt)
 
         if (!boss) {
             sync_time = sync_timestamp() - spkt->ts - cc_get_tx_time(dev, spkt->hdr.len) - 1/*NEW: include pkt_time + fudge*/;
-            itm_puts(0, ".sync\r\n");
 
             //static s32 last_sync = 0;
             //u32 now = sync_timestamp();
@@ -355,20 +374,19 @@ static void process_packet(rf_pkt_t *pkt)
     }
 
     // TODO: check for size underflow vs. phy packet size
-    phy_pkt_t *dpkt = malloc(1 + pkt->len);
-    assert(dpkt);
+    phy_pkt_t *dpkt = nphy_malloc(1 + pkt->len); assert(dpkt);
     memcpy(dpkt, pkt, 1 + pkt->len);
 
     if (spkt->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
         if (!xQueueSendToFront(nphy.rxq, &dpkt, pdMS_TO_TICKS(100))) {
             cc_dbg("rx pkt queue immediate fail");
-            free(dpkt);
+            nphy_free(dpkt);
             // TODO: anything else?
         }
     } else {
         if (!xQueueSend(nphy.rxq, &dpkt, pdMS_TO_TICKS(100))) {
             cc_dbg("rx pkt queue fail");
-            free(dpkt);
+            nphy_free(dpkt);
             // TODO: anything else?
         }
     }
@@ -459,7 +477,7 @@ bool nphy_recv(u8 **buf, u8 *len, u32 timeout)
 void nphy_free_buf(u8 *buf)
 {
     phy_pkt_t *pkt = buf - offsetof(phy_pkt_t, data);
-    free(pkt);
+    nphy_free(pkt);
 }
 
 static void ensure_rx(void)
@@ -566,13 +584,13 @@ static void nphy_dispatch_task(void *param __unused)
 {
     const xQueueHandle rxq = nphy.rxq;
     const nphy_rx_t rx = nphy.rx;
-    phy_pkt_t *spkt = alloca(256);
+    phy_pkt_t *spkt = nphy_malloc(256); // NEW: nphy_malloc instead. never freed!
     phy_pkt_t *pkt = NULL;
 
     while (1) {
         if (xQueueReceive(rxq, &pkt, portMAX_DELAY) && pkt) {
             memcpy(spkt, pkt, 1 + pkt->hdr.len);
-            free(pkt);
+            nphy_free(pkt);
             if (rx) rx(spkt->hdr.flag, spkt->data, spkt->hdr.len - sizeof(phy_pkt_t) + 1); // TODO: maybe require cb and remove check
         }
     }
@@ -794,7 +812,7 @@ static void rf_task_NEW(void *param __unused)
                     //tx_time = 0;
                     //tx_next = 0;
 
-                    if ((void *) pkt != &pkt_sync) free(pkt);
+                    if ((void *) pkt != &pkt_sync) nphy_free(pkt);
                     pkt = NULL;
                     cc_strobe(dev, CC1200_SIDLE); // may cause redundancies but probably safer...
                     ///cca_disable();
@@ -903,14 +921,14 @@ static void rf_task_NEW(void *param __unused)
                                         //cc_dbg_v("tx: <sync>sent t=%lu", sync_timestamp());
                                     } else {
                                         //cc_dbg_v("tx: <immd>sent t=%lu", sync_timestamp());
-                                        free(pkt);
+                                        nphy_free(pkt);
                                         //tx_time = 0; // hmm
                                         //tx_next = 0; // allow after any immediate
 
                                     }
                                 } else {
                                     assert(pkt != (void*)&pkt_sync);
-                                    free(pkt);
+                                    nphy_free(pkt);
                                     //cc_dbg_v("tx: <norm>sent t=%lu", sync_timestamp());
 
                                     //if (!sync_needed) {
@@ -1002,9 +1020,9 @@ static void rf_task_NEW(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining < (5 + pkt_time)) {
+                            } else if (remaining <= (10 + pkt_time)) {
 
-                                tx_next = ts + ((5 + pkt_time) - remaining);
+                                tx_next = ts + ((10 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
@@ -1095,7 +1113,7 @@ static void rf_task_NEW(void *param __unused)
 
                             if (ts >= (tx_next+7)) {
                                 cc_dbg("tx: timed out: t=%lu tx_time=%lu tx_next=%lu", ts, tx_time, tx_next);
-                                if ((void *)pkt != &pkt_sync) free(pkt);
+                                if ((void *)pkt != &pkt_sync) nphy_free(pkt);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
