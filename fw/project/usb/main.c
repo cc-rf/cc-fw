@@ -280,9 +280,9 @@ static void main_task(void *param)
             u8 pkt_len = MSG_LEN;
 
             while (1) {
-                my_packet.magic = ~my_packet.seq;
-                nmac_tx(0, pkt_len, (u8 *)&my_packet);
                 my_packet.seq++;
+                my_packet.magic = ~my_packet.seq;
+                nmac_send(NMAC_SEND_TRXN, 0, pkt_len, (u8 *)&my_packet);
                 //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
 
                 sum_lengths += pkt_len;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
@@ -300,7 +300,7 @@ static void main_task(void *param)
 
                 LED_D_TOGGLE();
 
-                vTaskDelay(pdMS_TO_TICKS(1000));
+                //vTaskDelay(pdMS_TO_TICKS(100));
             }
 
         }
@@ -369,14 +369,14 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
     }
 
     //printf("\t\t\t\t\trx: seq=%lu t=%lu\r\n", *(u32 *)data, sync_timestamp());
-    printf("rx: addr=0x%04X dest=0x%04X seqn=%lu time=%lu\r\n", addr, dest, *(u32 *)data, sync_timestamp());
+    //printf("rx: addr=0x%04X dest=0x%04X seqn=%lu time=%lu\r\n", addr, dest, *(u32 *)data, sync_timestamp());
 
     // do a "fake ack"
     //if (size != ack_data_len) {
     //    //vTaskDelay(pdMS_TO_TICKS(1)); // this allows symmetric rates. next step: implement in mac.
     //    *((u8 *)ack_data) = data[0];
     //    //nphy_tx(/*flag*/PHY_PKT_FLAG_IMMEDIATE, ack_data, ack_data_len);
-    //    nmac_tx(0, ack_data_len, ack_data);
+    //    nmac_send(NMAC_TYPE_DGRM, addr, ack_data_len, ack_data);
     //}
 
     //if (!transmitter) /*nmac_tx(0, size, data)*/ nphy_tx(flag, data, size);
