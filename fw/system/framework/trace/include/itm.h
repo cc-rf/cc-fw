@@ -2,7 +2,8 @@
 
 #include <usr/type.h>
 #include <core_cm4.h>
-
+#include <stdio.h>
+#include <stdarg.h>
 
 static inline void itm_init(void)
 {
@@ -55,6 +56,23 @@ static inline void itm_write(const uint8_t port, const uint8_t *buf, const size_
         while (ITM->PORT[port].u32 == 0UL) __NOP();
         ITM->PORT[port].u8 = *buf++;
     }
+}
+
+static inline void itm_printf(const uint8_t port, const char *format, ...)
+{
+    va_list va;
+    char *output;
+    int result;
+
+    va_start(va, format);
+    result = vasprintf(&output, format, va);
+
+    if (result >= 0) {
+        itm_write(port, output, (size_t)result);
+        free(output);
+    }
+
+    va_end(va);
 }
 
 /*#define itm_writeXX(port, buf, len) _Generic((buf), \
