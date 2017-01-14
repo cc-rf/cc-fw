@@ -28,6 +28,8 @@
 #include <cc/nmac.h>
 #include <fsl_enet.h>
 #include <fsl_sim.h>
+#include <virtual_com.h>
+#include <malloc.h>
 
 
 #define PFLAG_PORT PORTB
@@ -35,9 +37,8 @@
 #define PFLAG_PIN  5
 
 
-extern void vcom_init(void);
-
 static void main_task(void *param);
+static void usb_recv(size_t size, u8 *data);
 
 static SemaphoreHandle_t write_sem = NULL;
 
@@ -140,10 +141,13 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[]);
 static void main_task(void *param)
 {
     (void)param;
-    printf("<main task>\r\n");
+    //printf("<main task>\r\n");
 
-    vcom_init();
-    printf("<vcom init>\r\n");
+    if (!vcom_init(usb_recv)) {
+        printf("vcom: init fail\r\n");
+        goto _end;
+    }
+
     vTaskDelay(pdMS_TO_TICKS(500));
 
     //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
@@ -163,7 +167,7 @@ static void main_task(void *param)
     pit_start(xsec_timer);
     pit_start(xsec_timer_0);
 
-    #define MSG_LEN 8//88//38//88//48//38
+    #define MSG_LEN 88//38//88//48//38
 
     amp_ctrl(0, AMP_LNA, true);
     amp_ctrl(0, AMP_PA, true);
@@ -176,9 +180,9 @@ static void main_task(void *param)
     sim_uid_t sim_uid;
     SIM_GetUniqueId(&sim_uid);
 
-    addr =  (u16)0x4000 | (u16)(~0x4000 & ((u16)sim_uid.L) ^ ((u16)(sim_uid.L>>16)));
+    addr =  (u16)0x4000 | (u16)(~0x4000 & ( ((u16)sim_uid.L) ^ ((u16)(sim_uid.L>>16)) ) );
 
-    printf("address: 0x%04X L=0x%08X ML=0x%08X MH=0x%08X\r\n", addr, sim_uid.L, sim_uid.ML, sim_uid.MH);
+    printf("address: 0x%04X L=0x%08lX ML=0x%08lX MH=0x%08lX\r\n", addr, sim_uid.L, sim_uid.ML, sim_uid.MH);
 
     #if 0
 
@@ -310,6 +314,7 @@ static void main_task(void *param)
 
     #endif
 
+    _end:
     vTaskDelay(portMAX_DELAY);
     vTaskDelete(NULL);
     while (1) {}
@@ -385,7 +390,137 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
 }
 
 
-extern void usb_write(char *buf, size_t len);
+#include <usr/cobs.h>
+
+
+
+#define SERF_CODE_PROTO_M    0xE0 // 0b11100000
+#define SERF_CODE_PROTO_VAL  0xA0 // 0b10100000
+#define SERF_CODE_M          0x1f // 0b00011111
+
+typedef struct __packed {
+    u8  code;
+    u8  data[];
+
+} serf_t;
+
+
+static void frame_recv(size_t size, u8 *data)
+{
+    serf_t *const frame = (serf_t *)data;
+
+    if ((frame->code & SERF_CODE_PROTO_M) != SERF_CODE_PROTO_VAL) {
+        printf("(frame) SIZE=%u CODE=0x%02x -- BAD PROTO BITS\r\n", size, frame->code);
+        return;
+    }
+
+    size -= sizeof(serf_t);
+    frame->code &= SERF_CODE_M;
+
+    printf("(frame) size=%u code=0x%02x\r\n", size, frame->code);
+    printf("(frame) data: \"%s\"\r\n", frame->data);
+}
+
+
+size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame)
+{
+    code = (u8)(SERF_CODE_PROTO_VAL | (code & SERF_CODE_M));
+    size_t frame_size = sizeof(serf_t) + size;
+
+    serf_t *raw_frame = malloc(frame_size); assert(raw_frame);
+    *frame = malloc(sizeof(serf_t) + cobs_encode_size_max(frame_size) + 1); assert(*frame);
+
+    raw_frame->code = code;
+    memcpy(raw_frame->data, data, size);
+
+    frame_size = cobs_encode((u8 *)raw_frame, frame_size, *frame);
+    free(raw_frame);
+
+    if (!frame_size) {
+        itm_puts(0, "(frame) error: cobs encode failed\r\n");
+        free(*frame);
+        *frame = NULL;
+        return 0;
+    }
+
+    (*frame)[frame_size] = 0;
+
+    return frame_size + 1;
+}
+
+
+static size_t usb_in_size = 0;
+static u8 *usb_in_data = NULL;
+
+static void usb_recv(size_t size, u8 *data)
+{
+    //printf("usb: (recv) size=%u data=0x%p\r\n", size, (void *)data);
+
+    if (!size || !data) return;
+
+    size_t i, frame_size;
+
+    for (i = 0; i < size; ++i) {
+        if (!data[i]) break;
+    }
+
+    if (i == size) {
+        //itm_puts(0, "usb: (recv) no mark found\r\n");
+
+        usb_in_data = realloc(usb_in_data, usb_in_size + size); assert(usb_in_data);
+        memcpy(&usb_in_data[usb_in_size], data, size);
+        usb_in_size += size;
+        return;
+    }
+
+    frame_size = i;
+    //printf("usb: (recv) frame_size=%u\r\n", frame_size);
+
+    if (usb_in_size) {
+        usb_in_data = realloc(usb_in_data, usb_in_size + frame_size);
+        memcpy(&usb_in_data[usb_in_size], data, frame_size);
+        frame_size += usb_in_size;
+        usb_in_size = frame_size;
+        //printf("usb: (recv) frame_size=%u (updated)\r\n", frame_size);
+
+    } else {
+        if (usb_in_data) {
+            free(usb_in_data);
+            usb_in_data = NULL;
+        }
+
+        usb_in_data = data;
+    }
+
+    // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
+    // max decode length: size
+
+    u8 *decoded = malloc(size + 1); assert(decoded);
+    size_t decoded_size = cobs_decode(usb_in_data, frame_size, decoded);
+
+    if (usb_in_data != data) {
+        free(usb_in_data);
+    }
+
+    usb_in_data = NULL;
+    usb_in_size = 0;
+
+    if (decoded_size) {
+        decoded[decoded_size] = 0;
+        frame_recv(decoded_size, decoded);
+        free(decoded);
+    }
+
+    if ((size - 1) > i) {
+
+        // copy tail to usb_in_data
+        //usb_in_size = size - i;
+        //usb_in_data = realloc(usb_in_data, usb_in_size); assert(usb_in_data);
+        //memcpy(usb_in_data, &data[i], usb_in_size);
+        printf("usb: (recv) dropping %u tail byte(s): size=%u frame_size=%u usb_in_size=%u\r\n", size - i, size, frame_size, usb_in_size);
+    }
+}
+
 
 static inline bool isInterrupt()
 {
@@ -413,7 +548,7 @@ int _write(int handle, char *buffer, int size)
     }
 
     itm_write(0, (const u8 *)buffer, (size_t)size);
-    usb_write(buffer, (size_t)size);
+    usb_write((u8 *)buffer, (size_t)size);
 
     if (!is_interrupt) xSemaphoreGive(write_sem);
     else {

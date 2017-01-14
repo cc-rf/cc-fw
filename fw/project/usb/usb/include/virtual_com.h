@@ -30,9 +30,25 @@
 #ifndef _USB_CDC_VCOM_H_
 #define _USB_CDC_VCOM_H_ 1
 
+#include "usb_device_config.h"
+#include "usb.h"
+#include "usb_device.h"
+#include "usb_device_class.h"
+#include "usb_device_cdc_acm.h"
+#include "usb_device_descriptor.h"
+
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "event_groups.h"
+
+#include <cc/common.h>
+
+typedef void (* usb_rx_cb_t)(size_t size, u8 *data);
+
+bool vcom_init(usb_rx_cb_t rx_cb);
+
+void usb_write(u8 *buf, size_t len);
+
 
 /*******************************************************************************
 * Definitions

@@ -20,6 +20,12 @@
 #include <cc/type.h>
 
 
+
+/**
+ * TODO: At the PHY level, we're really dealing with FRAMES rather than PACKETS.
+ *          Change the semantics here to reflect that.
+ */
+
 #define PHY_PKT_FLAG_SYNC       1   // is a sync packet
 #define PHY_PKT_FLAG_NOSYNC     2   // not synced
 

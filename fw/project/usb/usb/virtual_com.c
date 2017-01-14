@@ -1,32 +1,3 @@
-/*
-* Copyright (c) 2015, Freescale Semiconductor, Inc.
-* All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without modification,
-* are permitted provided that the following conditions are met:
-*
-* o Redistributions of source code must retain the above copyright notice, this list
-*   of conditions and the following disclaimer.
-*
-* o Redistributions in binary form must reproduce the above copyright notice, this
-*   list of conditions and the following disclaimer in the documentation and/or
-*   other materials provided with the distribution.
-*
-* o Neither the name of Freescale Semiconductor, Inc. nor the names of its
-*   contributors may be used to endorse or promote products derived from this
-*   software without specific prior written permission.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-* ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-* ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
 #include "fsl_device_registers.h"
 #include "clock_config.h"
 #include "board.h"
@@ -43,6 +14,7 @@
 #include "usb_device_ch9.h"
 //#include "fsl_debug_console.h"
 #include <usr/type.h>
+#include <itm.h>
 
 
 #include "usb_device_descriptor.h"
@@ -60,6 +32,30 @@
 #endif
 
 #include "pin_mux.h"
+
+
+
+
+
+
+
+#define USB_QUEUE_LEN       4
+#define USB_IO_MAX_LEN      16
+
+typedef struct {
+    size_t len;
+    u8 *buf;
+
+} usb_io_t;
+
+static QueueHandle_t usb_tx_q = NULL;
+
+
+
+static usb_rx_cb_t usb_rx_cb = NULL;
+
+
+
 /*******************************************************************************
 * Definitions
 ******************************************************************************/
@@ -215,6 +211,21 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                     s_waitForDataReceive = 1;
                     USB0->INTEN &= ~USB_INTEN_SOFTOKEN_MASK;
 #endif
+                } else {
+                    // phillip: copy out to queue
+                    //usb_io_t *io = malloc(sizeof(usb_io_t) + s_recvSize); assert(io);
+                    //io->len = s_recvSize;
+                    //memcpy(io->buf, s_currRecvBuf, s_recvSize);
+                    // actually, just be lazy and call a callback
+
+                    if (usb_rx_cb) {
+                        usb_rx_cb(s_recvSize, s_currRecvBuf);
+                    }
+
+                    s_recvSize = 0;
+
+                    // flush
+                    error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
                 }
             }
         }
@@ -546,11 +557,11 @@ void USB_DeviceApplicationInit(void)
 
     if (kStatus_USB_Success != USB_DeviceClassInit(CONTROLLER_ID, &s_cdcAcmConfigList, &s_cdcVcom.deviceHandle))
     {
-        usb_echo("USB device init failed\r\n");
+        usb_echo("usb: init failed\r\n");
     }
     else
     {
-        usb_echo("USB device CDC virtual com demo\r\n");
+        usb_echo("usb: initialized\r\n");
         s_cdcVcom.cdcAcmHandle = s_cdcAcmConfigList.config->classHandle;
     }
 
@@ -587,16 +598,6 @@ void USB_DeviceTask(void *handle)
 
 
 
-#define USB_QUEUE_LEN       4
-#define USB_IO_MAX_LEN      16
-
-typedef struct {
-    size_t len;
-    u8 *buf;
-
-} usb_io_t;
-
-static QueueHandle_t usb_tx_q = NULL;
 
 /*!
  * @brief Application task function.
@@ -607,7 +608,8 @@ static QueueHandle_t usb_tx_q = NULL;
  */
 void APPTask(void *handle)
 {
-    usb_tx_q = xQueueCreate(USB_QUEUE_LEN, sizeof(usb_io_t));
+    usb_tx_q = xQueueCreate(USB_QUEUE_LEN, sizeof(usb_io_t)); assert(usb_tx_q);
+
     usb_tx_s = xSemaphoreCreateBinary();
 
     xSemaphoreGive(usb_tx_s);
@@ -642,12 +644,10 @@ void APPTask(void *handle)
     }
 }
 
-#if defined(__CC_ARM) || defined(__GNUC__)
-int vcom_init(void)
-#else
-void vcom_init(void)
-#endif
+bool vcom_init(usb_rx_cb_t rx_cb)
 {
+    usb_rx_cb = rx_cb;
+
     if (xTaskCreate(APPTask,                         /* pointer to the task                      */
                     s_appName,                       /* task name for kernel awareness debugging */
                     5000L / sizeof(portSTACK_TYPE),  /* task stack size                          */
@@ -657,11 +657,7 @@ void vcom_init(void)
                     ) != pdPASS)
     {
         usb_echo("app task create failed!\r\n");
-#if (defined(__CC_ARM) || defined(__GNUC__))
-        return 1;
-#else
-        return;
-#endif
+        return false;
     }
 
 #if (defined(__CC_ARM) || defined(__GNUC__))
@@ -676,7 +672,9 @@ static inline bool isInterrupt()
 
 static usb_io_t io = {0};
 
-void usb_write(char *buf, size_t len)
+extern size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame);
+
+void usb_write(u8 *buf, size_t len)
 {
     if (!usb_tx_q || !s_cdcVcom.attach /*|| !s_cdcVcom.startTransactions || !s_cdcVcom.cdcAcmHandle*/ || !buf) return;
 
@@ -702,10 +700,11 @@ void usb_write(char *buf, size_t len)
         io.buf = NULL;
     }
 
-    io.len = len;
-    io.buf = malloc(len); assert(io.buf);
+    io.len = frame_encode(0x00, len, buf, &io.buf);
 
-    memcpy(io.buf, buf, len);
+    if (!io.len) {
+        goto _end;
+    }
 
     if (is_interrupt) {
         if (xQueueSendFromISR(usb_tx_q, &io, &xHigherPriorityTaskWoken)) {
@@ -741,6 +740,7 @@ void usb_write(char *buf, size_t len)
         len -= io.len;
     }*/
 
+    _end:
     if (!is_interrupt) xSemaphoreGive(usb_tx_s);
     else {
         xSemaphoreGiveFromISR(usb_tx_s, &xHigherPriorityTaskWoken);
