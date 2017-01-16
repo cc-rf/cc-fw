@@ -381,6 +381,9 @@ size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame);
 #define CODE_ID_STATUS      1
 #define CODE_ID_SEND        2
 #define CODE_ID_RECV        3
+#define CODE_ID_RESET       9
+
+#define RESET_MAGIC         0xD1E00D1E
 
 typedef struct __packed {
     u32 version;
@@ -442,6 +445,16 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     if (frame) free(frame);
 }
 
+static void handle_code_reset(size_t size, u8 *data)
+{
+    if (size == sizeof(u32) && *(u32 *)data == RESET_MAGIC) {
+        printf("<reset>\r\n");
+        vTaskDelay(pdMS_TO_TICKS(2317));
+        NVIC_SystemReset();
+    } else {
+        printf("reset: malformed magic code\r\n");
+    }
+}
 
 static void handle_code_status(size_t size, u8 *data)
 {
@@ -547,6 +560,9 @@ static void frame_recv(size_t size, u8 *data)
 
         case CODE_ID_STATUS:
             return handle_code_status(size, frame->data);
+
+        case CODE_ID_RESET:
+            return handle_code_reset(size, frame->data);
     }
 }
 

@@ -13,6 +13,9 @@ CODE_ID_ECHO = 0
 CODE_ID_STATUS = 1
 CODE_ID_SEND = 2
 CODE_ID_RECV = 3
+CODE_ID_RESET = 9
+
+RESET_MAGIC = 0xD1E00D1E
 
 
 def handle_code_echo(data):
@@ -53,6 +56,10 @@ NMAC_SEND_TRXN = 2
 NMAC_SEND_STRM = 3
 
 
+def encode_code_reset():
+    return serf_encode(CODE_ID_RESET, struct.pack("<L", RESET_MAGIC))
+
+
 def encode_code_status():
     return serf_encode(CODE_ID_STATUS, '')
 
@@ -64,7 +71,8 @@ def encode_code_send(typ, dest, data):
 encode_map = {
     CODE_ID_ECHO: encode_code_echo,
     CODE_ID_SEND: encode_code_send,
-    CODE_ID_STATUS: encode_code_status
+    CODE_ID_STATUS: encode_code_status,
+    CODE_ID_RESET: encode_code_reset
 }
 
 
@@ -159,44 +167,60 @@ def handle_status(version, serial, uptime, node, recv_total, send_total):
     ))
 
 
+def device_init(tty, baud):
+    serial = get_serial(tty, baud)
+    thr = input_start(serial)
+    return thr, serial
+
+
+def reset_device(serial, tty, baud):
+    serial.write(encode_code_reset())
+    time.sleep(.5)
+    serial.reset_input_buffer()
+    serial.close()
+    time.sleep(3)
+    return device_init(tty, baud)
+
+
 def main(args):
     tty = args[0]
     baud = 115200
 
     try:
-        serial = get_serial(tty, baud)
-        read = serial.read
-        write = serial.write
-        flush = serial.flush
+        thr, serial = device_init(tty, baud)
 
-        input_start(read)
-
-        write(encode_code_status())
-        flush()
-        time.sleep(5)
+        serial.write(encode_code_status())
+        thr, serial = reset_device(serial, tty, baud)
+        serial.write(encode_code_status())
 
         # for frame in next_frame():
         #    write(frame)
         #    flush()
 
-        sys.exit(0)
+        thr.join()
+        # sys.exit(0)
 
     # except Exception, e:
     #    print e
     except KeyboardInterrupt:
         print
 
-    sys.exit(1)
+    # sys.exit(1)
 
 
-def input_thread(read):
+def input_thread(serial):
     try:
         data = ''
 
-        while 1:
-            data = data + read()
+        while serial.isOpen():
+            in_data = serial.read()
 
-            if not '\0' in data:
+            if not in_data or not len(in_data):
+                continue
+
+            data = data + in_data
+
+            if '\0' not in data:
                 continue
 
             idx = data.index('\0')
@@ -208,16 +232,18 @@ def input_thread(read):
 
             data = ''
 
-    # except Exception, e:
-    #    print e
+    except Exception, e:
+        # print e
+        pass
     except KeyboardInterrupt:
         print
 
-    sys.exit(1)
+    # print "done"
+    # sys.exit(1)
 
 
-def input_start(read):
-    thr = threading.Thread(target=input_thread, args=(read,))
+def input_start(serial):
+    thr = threading.Thread(target=input_thread, args=(serial,))
     thr.setDaemon(True)
     thr.start()
     return thr
@@ -228,6 +254,7 @@ def get_serial(tty, baud):
     ser = serial.Serial()
     ser.port = tty
     ser.baudrate = baud
+    ser.timeout = .25
     ser.open()
     return ser
 
