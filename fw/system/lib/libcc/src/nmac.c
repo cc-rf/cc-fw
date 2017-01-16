@@ -63,7 +63,7 @@ typedef struct __packed {
 
 extern u32 sync_timestamp(void);
 
-static bool send(u16 dest, u8 flag, u8 size, u8 data[]);
+static bool send(u16 dest, u8 flag, u16 size, u8 data[]);
 static void tx_task(void *param);
 static void handle_rx(u8 flags, u8 *buf, u8 len);
 
@@ -159,7 +159,7 @@ u16 nmac_get_addr(void)
     return mac_addr;
 }
 
-bool nmac_send(nmac_send_t type, u16 dest, u8 size, u8 data[])
+bool nmac_send(nmac_send_t type, u16 dest, u16 size, u8 data[])
 {
     switch (type) {
         case NMAC_SEND_DGRM:
@@ -271,8 +271,13 @@ static bool send_packet(nmac_pkt_t *pkt)
     return do_send(&txqi);
 }
 
-static bool send(u16 dest, u8 flag, u8 size, u8 data[])
+static bool send(u16 dest, u8 flag, u16 size, u8 data[])
 {
+    if (size > MAC_PKT_SIZE_MAX) {
+        nmac_debug("(tx) packet too big, truncating");
+        size = MAC_PKT_SIZE_MAX;
+    }
+
     const u8 pkt_len = sizeof(nmac_pkt_t) + size;
 
     nmac_pkt_t *const pkt = nmac_malloc(pkt_len); assert(pkt);
@@ -284,7 +289,7 @@ static bool send(u16 dest, u8 flag, u8 size, u8 data[])
     pkt->dest = dest;
     pkt->seqn = mac_seqn;
     pkt->flag = flag;
-    pkt->size = size;
+    pkt->size = (u8)size;
 
     if (size && data) memcpy(pkt->data, data, size);
 

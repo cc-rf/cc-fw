@@ -18,6 +18,8 @@ CODE_ID_RESET = 9
 
 RESET_MAGIC = 0xD1E00D1E
 
+status_sem = threading.Semaphore(0)
+
 
 def handle_code_echo(data):
     sys.stdout.write(data)
@@ -40,11 +42,11 @@ def decode_code_echo(data):
 
 
 def decode_code_status(data):
-    return struct.unpack("<LQLHLL%is" % (len(data) - 26), data)[:-1]
+    return struct.unpack("<LQLHLLLL%is" % (len(data) - 34), data)[:-1]
 
 
 def decode_code_recv(data):
-    return struct.unpack("<HHHB%is" % (len(data) - 7), data)
+    return struct.unpack("<HHHH%is" % (len(data) - 8), data)
 
 
 def encode_code_echo(data):
@@ -66,7 +68,16 @@ def encode_code_status():
 
 
 def encode_code_send(typ, dest, data):
-    return serf_encode(CODE_ID_SEND, struct.pack("<BH%is" % len(data), typ & 0xFF, dest & 0xFFFF, data))
+    flag = 0
+    node = 0
+    size = len(data)
+    return serf_encode(
+        CODE_ID_SEND,
+        struct.pack(
+            "<BBHHH%is" % size,
+            flag & 0xFF, typ & 0xFF, node & 0xFFFF, dest & 0xFFFF, size, data
+        )
+    )
 
 
 encode_map = {
@@ -149,28 +160,63 @@ def handle_frame(code, data):
         traceback.print_exc()
 
 
-def next_frame():
+def send_frames(serial):
     count = 0
 
     while 1:
         count += 1
-        data = "Hello %i" % count
-        print data
-        # yield encode_code_echo(data)
-        yield encode_code_send(NMAC_SEND_DGRM, 0x0000, data)
-        time.sleep(5)
+        data = 'x' * 36
+        serf_send(serial, NMAC_SEND_DGRM, 0x0000, data)
+        # time.sleep(5)
+
+
+def serf_status(serial):
+    serial.write(encode_code_status())
+
+
+def serf_send(serial, typ, dest, data):
+    serial.write(encode_code_send(typ, dest, data))
+
+
+def serf_echo(serial, data):
+    serial.write(encode_code_echo(data))
+
+
+recv_time = 0
+recv_count = 0
+recv_size = 0
 
 
 def handle_recv(node, peer, dest, data):
-    print("recv: @{:04X}:{:04X}->{:04X} #{:02X} \t {}".format(
-        node, peer, dest, len(data), ' '.join('{:02X}'.format(ord(ch)) for ch in data)
-    ))
+    # print("recv: @{:04X}:{:04X}->{:04X} #{:02X} \t {}".format(
+    #     node, peer, dest, len(data), ' '.join('{:02X}'.format(ord(ch)) for ch in data)
+    # ))
+    global recv_count
+    global recv_time
+    global recv_size
+
+    if not recv_count:
+        recv_time = time.time()
+
+    recv_size += len(data)
+    recv_count += 1
+
+    if recv_count == 100:
+        diff = time.time() - recv_time
+        d_rate = recv_size / diff
+        p_rate = recv_count / diff
+        recv_count = 0
+        recv_size = 0
+        print("recv: {} Bps / {} pps".format(int(round(d_rate)), int(round(p_rate))))
 
 
-def handle_status(version, serial, uptime, node, recv_total, send_total):
-    print("status: version={:08X} serial={:016X} node={:04X} uptime={}ms recv={} send={}".format(
-        version, serial, node, uptime, recv_total, send_total
+def handle_status(version, serial, uptime, node, recv_count, recv_bytes, send_count, send_bytes):
+    print("Cloud Chaser {:016X}-{:08X}@{:04X} up={} rx={}/{} tx={}/{}".format(
+        serial, version, node, uptime // 1000, recv_count, recv_bytes, send_count, send_bytes
     ))
+    print
+
+    status_sem.release()
 
 
 def device_init(tty, baud):
@@ -193,18 +239,19 @@ def main(args):
     tty = args[0]
     baud = 115200
 
+    tx = False
+
+    if len(args) > 1 and args[1] == 'tx':
+        tx = True
+
     try:
         thr, serial = device_init(tty, baud)
 
-        serial.write(encode_code_status())
-        serial.flush()
+        serf_status(serial)
+        status_sem.acquire()
 
-        # thr, serial = reset_device(serial, tty, baud)
-        # serial.write(encode_code_status())
-
-        for frame in next_frame():
-            serial.write(frame)
-            serial.flush()
+        if tx:
+            send_frames(serial)
 
         time.sleep(0.25)
         thr.join()
@@ -254,7 +301,7 @@ def input_thread(serial):
 
 def input_start(serial):
     thr = threading.Thread(target=input_thread, args=(serial,))
-    thr.setDaemon(True)
+    # thr.setDaemon(False)
     thr.start()
     return thr
 

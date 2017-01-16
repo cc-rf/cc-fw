@@ -131,13 +131,13 @@ u32 sync_timestamp(void)
 static bool boss = false;
 static u16 addr = 0;
 
-static u32 recv_total = 0;
-static u32 send_total = 0;
+static u32 recv_count = 0, recv_bytes = 0;
+static u32 send_count = 0, send_bytes = 0;
 
 #if 0
 static void handle_rx(u8 flag, u8 *data, u8 size);
 #else
-static void handle_rx(u16 node, u16 peer, u16 dest, size_t size, u8 data[]);
+static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[]);
 #endif
 
 static void main_task(void *param)
@@ -352,11 +352,12 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
 #if 0
 static void handle_rx(u8 flag, u8 *data, u8 size)
 #else
-static void handle_rx(u16 node, u16 peer, u16 dest, size_t size, u8 data[])
+static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[])
 #endif
 {
+    ++recv_count;
+    recv_bytes += size;
 
-    ++recv_total;
     //itm_printf(0, "recv: total=%lu\r\n", recv_total);
 
 
@@ -396,8 +397,10 @@ typedef struct __packed {
     u64 serial;
     u32 uptime;
     u16 node;
-    u32 recv_total;
-    u32 send_total;
+    u32 recv_count;
+    u32 recv_bytes;
+    u32 send_count;
+    u32 send_bytes;
 
 } code_status_t;
 
@@ -405,11 +408,20 @@ typedef struct __packed {
     u16 node;
     u16 peer;
     u16 dest;
-    u8 size;
+    u16 size;
     u8 data[];
 
 } code_recv_t;
 
+typedef struct __packed {
+    u8 type;
+    u8 flag;
+    u16 node;
+    u16 dest;
+    u16 size;
+    u8 data[];
+
+} code_send_t;
 
 
 static void write_code_status(code_status_t *code_status)
@@ -434,7 +446,7 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     code_recv->node = node;
     code_recv->peer = peer;
     code_recv->dest = dest;
-    code_recv->size = (u8)size;
+    code_recv->size = (u16)size;
 
     memcpy(code_recv->data, data, size);
     size += sizeof(code_recv_t);
@@ -476,8 +488,10 @@ static void handle_code_status(size_t size, u8 *data)
             .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32),
             .uptime = sync_timestamp(),
             .node = nmac_get_addr(),
-            .recv_total = recv_total,
-            .send_total = send_total
+            .recv_count = recv_count,
+            .recv_bytes = recv_bytes,
+            .send_count = send_count,
+            .send_bytes = send_bytes
     };
 
     write_code_status(&code_status);
@@ -492,35 +506,34 @@ static void handle_code_echo(size_t size, u8 *data)
         printf("(remote) %s", data);
 }
 
-typedef struct __packed {
-    u8 type;
-    u16 dest;
-    u8 data[];
-
-} code_send_t;
-
 static void handle_code_send(size_t size, u8 *data)
 {
     assert(size >= sizeof(code_send_t)); assert(data);
 
-    code_send_t *code_send = (code_send_t *)data;
+    code_send_t *const code_send = (code_send_t *)data;
 
-    if (size > MAC_PKT_SIZE_MAX) {
-        printf("(send) warning: truncating size from %u to %u\r\n", size, MAC_PKT_SIZE_MAX);
-        size = MAC_PKT_SIZE_MAX;
+    if (code_send->size != (size - sizeof(code_send_t))) {
+        printf("(send) error: size mismatch: %u != %u\r\n", code_send->size, size - sizeof(code_send_t));
+        return;
     }
 
-    const u8 pkt_size = (u8)(size - sizeof(code_send_t));
+    if (code_send->size > MAC_PKT_SIZE_MAX) {
+        printf("(send) warning: truncating size from %u to %u\r\n", size, MAC_PKT_SIZE_MAX);
+        code_send->size = MAC_PKT_SIZE_MAX;
+    }
 
-    const bool result = nmac_send(
-            (nmac_send_t)code_send->type,
-            code_send->dest,
-            pkt_size,
-            code_send->data
-    );
+    if (!code_send->node || code_send->node == nmac_get_addr()) {
+        const bool result = nmac_send(
+                (nmac_send_t) code_send->type,
+                code_send->dest,
+                code_send->size,
+                code_send->data
+        );
 
-    if (result) {
-        ++send_total;
+        if (result) {
+            ++send_count;
+            send_bytes += code_send->size;
+        }
     }
 
     /*itm_printf(0, "(send) type=0x%02X dest=0x%04X size=0x%02X result=%u\r\n",
