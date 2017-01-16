@@ -53,10 +53,10 @@ typedef struct __packed {
     u8  size;
     u8  data[];
 
-} mac_pkt_t;
+} nmac_pkt_t;
 
 typedef struct __packed {
-    mac_pkt_t *pkt;
+    nmac_pkt_t *pkt;
     xSemaphoreHandle sem;
 
 } mac_txq_t;
@@ -74,7 +74,7 @@ typedef struct __packed {
 
 
 static struct {
-    mac_rx_t rx;
+    mac_recv_t rx;
     xQueueHandle txq;
     xQueueHandle pendq;
 
@@ -128,7 +128,7 @@ static nmac_peer_t *peer_get_or_add(u16 addr)
     return NULL;
 }
 
-bool nmac_init(u16 addr, bool sync_master, mac_rx_t rx)
+bool nmac_init(u16 addr, bool sync_master, mac_recv_t rx)
 {
     mac_addr = addr;
     nmac.rx = rx;
@@ -154,6 +154,11 @@ bool nmac_init(u16 addr, bool sync_master, mac_rx_t rx)
     return nphy_init(handle_rx, sync_master);
 }
 
+u16 nmac_get_addr(void)
+{
+    return mac_addr;
+}
+
 bool nmac_send(nmac_send_t type, u16 dest, u8 size, u8 data[])
 {
     switch (type) {
@@ -176,8 +181,8 @@ bool nmac_send(nmac_send_t type, u16 dest, u8 size, u8 data[])
 
 static bool do_send(mac_txq_t *txqi)
 {
-    mac_pkt_t *const pkt = txqi->pkt;
-    const u8 pkt_len = sizeof(mac_pkt_t) + pkt->size;
+    nmac_pkt_t *const pkt = txqi->pkt;
+    const u8 pkt_len = sizeof(nmac_pkt_t) + pkt->size;
     const bool needs_ack = pkt->flag & MAC_FLAG_ACK_REQ;
     mac_txq_t **pend_txqi = NULL;
     u8 nphy_flag = 0;
@@ -260,7 +265,7 @@ static bool do_send(mac_txq_t *txqi)
     return true;
 }
 
-static bool send_packet(mac_pkt_t *pkt)
+static bool send_packet(nmac_pkt_t *pkt)
 {
     mac_txq_t txqi = {.pkt = pkt, .sem = NULL };
     return do_send(&txqi);
@@ -268,9 +273,9 @@ static bool send_packet(mac_pkt_t *pkt)
 
 static bool send(u16 dest, u8 flag, u8 size, u8 data[])
 {
-    const u8 pkt_len = sizeof(mac_pkt_t) + size;
+    const u8 pkt_len = sizeof(nmac_pkt_t) + size;
 
-    mac_pkt_t *const pkt = nmac_malloc(pkt_len); assert(pkt);
+    nmac_pkt_t *const pkt = nmac_malloc(pkt_len); assert(pkt);
 
     mac_seqn = (u8)((mac_seqn + 1) % UINT8_MAX);
     if (!mac_seqn) mac_seqn = 1;
@@ -301,10 +306,10 @@ static void tx_task(void *param __unused)
 
 static void handle_rx(u8 flags, u8 *buf, u8 len)
 {
-    mac_pkt_t *const pkt = (mac_pkt_t *)buf;
+    nmac_pkt_t *const pkt = (nmac_pkt_t *)buf;
 
-    if (len != sizeof(mac_pkt_t) + pkt->size) {
-        nmac_debug("(rx) bad length: len=%u != size=%u + sizeof(mac_pkt_t)=%u", len, pkt->size, sizeof(mac_pkt_t));
+    if (len != sizeof(nmac_pkt_t) + pkt->size) {
+        nmac_debug("(rx) bad length: len=%u != size=%u + sizeof(nmac_pkt_t)=%u", len, pkt->size, sizeof(nmac_pkt_t));
 
     } else {
         nmac_debug_pkt(
@@ -327,7 +332,7 @@ static void handle_rx(u8 flags, u8 *buf, u8 len)
                 if (pkt->flag & MAC_FLAG_ACK_RSP) {
                     for (u8 i = 0; i < NMAC_PEND_MAX; ++i) {
                         if (nmac.pend[i]) {
-                            mac_pkt_t *const pend = nmac.pend[i]->pkt; assert(pend);
+                            nmac_pkt_t *const pend = nmac.pend[i]->pkt; assert(pend);
                             const u8 seqn = *(u8 *)pkt->data;
 
                             if (seqn == pend->seqn && (!pend->dest || pkt->addr == pend->dest)) {
@@ -343,7 +348,7 @@ static void handle_rx(u8 flags, u8 *buf, u8 len)
                     }
 
                 } else {
-                    nmac.rx(pkt->addr, pkt->dest, pkt->size, pkt->data);
+                    nmac.rx(mac_addr, pkt->addr, pkt->dest, pkt->size, pkt->data);
                 }
 
             }

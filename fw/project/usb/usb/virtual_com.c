@@ -81,7 +81,6 @@ extern usb_device_endpoint_struct_t g_UsbDeviceCdcVcomDicEndpoints[];
 extern usb_device_class_struct_t g_UsbDeviceCdcVcomConfig;
 /* Data structure of virtual com device */
 static usb_cdc_vcom_struct_t s_cdcVcom;
-static char const *s_appName = "app task";
 
 /* Line codinig of cdc device */
 static uint8_t s_lineCoding[LINE_CODING_SIZE] = {
@@ -622,7 +621,7 @@ void APPTask(void *handle)
     if (s_cdcVcom.deviceHandle)
     {
         if (xTaskCreate(USB_DeviceTask,                  /* pointer to the task                      */
-                        (char const *)"usb device task", /* task name for kernel awareness debugging */
+                        (char const *)"usb:dev", /* task name for kernel awareness debugging */
                         5000L / sizeof(portSTACK_TYPE),  /* task stack size                          */
                         s_cdcVcom.deviceHandle,          /* optional task startup argument           */
                         TASK_PRIO_HIGH-1,                /* initial priority                         */
@@ -649,7 +648,7 @@ bool vcom_init(usb_rx_cb_t rx_cb)
     usb_rx_cb = rx_cb;
 
     if (xTaskCreate(APPTask,                         /* pointer to the task                      */
-                    s_appName,                       /* task name for kernel awareness debugging */
+                    "usb:vcom",                       /* task name for kernel awareness debugging */
                     5000L / sizeof(portSTACK_TYPE),  /* task stack size                          */
                     &s_cdcVcom,                      /* optional task startup argument           */
                     TASK_PRIO_HIGH,                  /* initial priority                         */
@@ -723,22 +722,69 @@ void usb_write(u8 *buf, size_t len)
 
     }
 
-    /*while (len > 0) {
-        if (len > USB_IO_MAX_LEN) io.len = USB_IO_MAX_LEN;
-        else io.len = (u8)len;
+    _end:
+    if (!is_interrupt) xSemaphoreGive(usb_tx_s);
+    else {
+        xSemaphoreGiveFromISR(usb_tx_s, &xHigherPriorityTaskWoken);
+        xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+    };
 
-        memcpy(io.data, &buf[sent], io.len);
+    if (is_interrupt) portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll)
 
-        if (is_interrupt) {
-            if (!xQueueSendFromISR(usb_tx_q, &io, &xHigherPriorityTaskWoken)) break;
+    return;
+}
+
+
+
+void usb_write_direct(u8 *buf, size_t len)
+{
+    if (!usb_tx_q || !s_cdcVcom.attach /*|| !s_cdcVcom.startTransactions || !s_cdcVcom.cdcAcmHandle*/ || !buf) return;
+
+    size_t sent = 0;
+    bool is_interrupt = isInterrupt();
+    BaseType_t xHigherPriorityTaskWokenAll = pdFALSE;
+    BaseType_t xHigherPriorityTaskWoken;
+
+    if (!is_interrupt) xSemaphoreTake(usb_tx_s, portMAX_DELAY);
+    else {
+        while (!xSemaphoreTakeFromISR(usb_tx_s, &xHigherPriorityTaskWoken));
+        xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
+    }
+
+    //if (!buf[len-1]) buf[len-1] = '!';
+    /*if (!buf[len-1]) {
+        --len;
+        ++sent;
+    }*/
+
+    if (io.buf) {
+        free(io.buf);
+        io.buf = NULL;
+    }
+
+    io.buf = buf;
+    io.len = len;
+
+    if (!io.len) {
+        goto _end;
+    }
+
+    if (is_interrupt) {
+        if (xQueueSendFromISR(usb_tx_q, &io, &xHigherPriorityTaskWoken)) {
             xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
         } else {
-            if (!xQueueSend(usb_tx_q, &io, portMAX_DELAY)) break;
+            free(io.buf);
+            io.buf = NULL;
         }
 
-        sent += io.len;
-        len -= io.len;
-    }*/
+
+    } else {
+        if (!xQueueSend(usb_tx_q, &io, portMAX_DELAY)) {
+            free(io.buf);
+            io.buf = NULL;
+        }
+
+    }
 
     _end:
     if (!is_interrupt) xSemaphoreGive(usb_tx_s);
@@ -747,7 +793,7 @@ void usb_write(u8 *buf, size_t len)
         xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
     };
 
-    if (/*xHigherPriorityTaskWokenAll*/is_interrupt) portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll)
+    if (is_interrupt) portEND_SWITCHING_ISR(xHigherPriorityTaskWokenAll)
 
     return;
 }

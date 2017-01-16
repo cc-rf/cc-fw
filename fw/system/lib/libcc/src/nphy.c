@@ -132,7 +132,6 @@ static void ensure_rx(void);
 #define CHAN_TIME       200//100//200//60//400/*100*///200  //30
 #define MAX_CCA_RETRY   3//4//3//2//3
 #define MAX_CCA_TIME    11 //NOTE: When using LBT, backoff time minimum is 5
-#define MAX_PACKET_LEN  120
 
 static const u32 freq_base      = FREQ_BASE;
 static const u32 freq_side_bw   = FREQ_BW / 2;
@@ -424,9 +423,9 @@ static void nphy_rx(bool flush)
     while (len > PKT_OVERHEAD) {
         spkt = (rf_pkt_t *)buf;
 
-        if (spkt->len > MAX_PACKET_LEN) {
+        if (spkt->len > PHY_FRAME_SIZE_MAX) {
             // NOTE: _v added newly, but this is a useful error to see when timing is off. same applies for below
-            cc_dbg_v("[%u] c=%u malformed: len[header]=%u > len[max]=%u  (len[fifo]=%u)", dev, pkt_count+1, spkt->len, MAX_PACKET_LEN, len);
+            cc_dbg_v("[%u] c=%u malformed: len[header]=%u > len[max]=%u  (len[fifo]=%u)", dev, pkt_count+1, spkt->len, PHY_FRAME_SIZE_MAX, len);
             break;
         }
 

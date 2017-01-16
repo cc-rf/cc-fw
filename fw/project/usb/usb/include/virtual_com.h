@@ -48,6 +48,7 @@ typedef void (* usb_rx_cb_t)(size_t size, u8 *data);
 bool vcom_init(usb_rx_cb_t rx_cb);
 
 void usb_write(u8 *buf, size_t len);
+void usb_write_direct(u8 *buf, size_t len);
 
 
 /*******************************************************************************

@@ -128,14 +128,16 @@ u32 sync_timestamp(void)
     return pit_get_elapsed(xsec_timer);
 }
 
-static bool transmitter = false;
 static bool boss = false;
 static u16 addr = 0;
+
+static u32 recv_total = 0;
+static u32 send_total = 0;
 
 #if 0
 static void handle_rx(u8 flag, u8 *data, u8 size);
 #else
-static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[]);
+static void handle_rx(u16 node, u16 peer, u16 dest, size_t size, u8 data[]);
 #endif
 
 static void main_task(void *param)
@@ -173,8 +175,7 @@ static void main_task(void *param)
     amp_ctrl(0, AMP_PA, true);
     amp_ctrl(0, AMP_HGM, false);
 
-    transmitter = pflag_set();
-    boss = transmitter;
+    boss = pflag_set();
     //addr = (u16)(transmitter ? 2 : 1);
 
     sim_uid_t sim_uid;
@@ -254,7 +255,7 @@ static void main_task(void *param)
         }
     }
 
-    #else
+    #elif 0
 
     if (nmac_init(addr, boss, handle_rx)) {
         printf("nphy init successful.\r\n");
@@ -310,6 +311,15 @@ static void main_task(void *param)
         }
     }
 
+    #else
+
+    if (nmac_init(addr, boss, handle_rx)) {
+
+        while (1) {
+            vTaskDelay(portMAX_DELAY);
+        }
+    }
+
     #endif
 
     #endif
@@ -322,45 +332,29 @@ static void main_task(void *param)
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
 {
-    printf("stack overflow in task '%s'\r\n", pcTaskName);
+    itm_printf(0, "stack overflow in task '%s'\r\n", pcTaskName);
 }
 
 
-static u32 start_time = 0;
+/*static u32 start_time = 0;
 static u32 sum_lengths = 0;
 static u32 num_packets = 0;
-static u32 time_diff;
+static u32 time_diff;*/
 
-static const u8 ack_data_len = 7;
-static u8 ack_data[/*1*/7];
 
-static u32 id_last = 0;
-static u32 id_missed = 0;
+
+static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]);
 
 #if 0
 static void handle_rx(u8 flag, u8 *data, u8 size)
 #else
-static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
+static void handle_rx(u16 node, u16 peer, u16 dest, size_t size, u8 data[])
 #endif
 {
-    /*if (size != MSG_LEN) {
-        //printf("rx: wrong size? %u != %u (expected)\r\n", size, MSG_LEN);
-    } else {
-        u32 id = ((u32 *)data)[0];
-        u32 magic = ((u32 *)data)[1];
 
-        if (magic != ~id) {
-            printf("rx: bad magic: id=%lu -> magic %lu != %lu (expected)\r\n", id, magic, ~id);
-        } else {
-            //printf("rx: id=%lu prev=%lu missed=%lu\r\n", id, id_last, id_missed);
-            if (id < id_last && id_missed > 0) --id_missed;
-            else if (id > id_last && (id - id_last) > 1) id_missed += (id - id_last) - 1;
-            id_last = id;
-        }
-    }*/
+    ++recv_total;
 
-
-    sum_lengths += size;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
+    /*sum_lengths += size;
     num_packets++;
     if (!start_time) start_time = sync_timestamp();
     time_diff = sync_timestamp() - start_time;
@@ -370,29 +364,155 @@ static void handle_rx(u16 addr, u16 dest, u8 size, u8 data[])
         num_packets = 0;
         sum_lengths = 0;
         start_time = 0;
-        id_missed = 0;
-    }
 
-    //printf("\t\t\t\t\trx: seq=%lu t=%lu\r\n", *(u32 *)data, sync_timestamp());
-    //printf("rx: addr=0x%04X dest=0x%04X seqn=%lu time=%lu\r\n", addr, dest, *(u32 *)data, sync_timestamp());
-
-    // do a "fake ack"
-    //if (size != ack_data_len) {
-    //    //vTaskDelay(pdMS_TO_TICKS(1)); // this allows symmetric rates. next step: implement in mac.
-    //    *((u8 *)ack_data) = data[0];
-    //    //nphy_tx(/*flag*/PHY_PKT_FLAG_IMMEDIATE, ack_data, ack_data_len);
-    //    nmac_send(NMAC_TYPE_DGRM, addr, ack_data_len, ack_data);
-    //}
-
-    //if (!transmitter) /*nmac_tx(0, size, data)*/ nphy_tx(flag, data, size);
+    }*/
 
     LED_D_TOGGLE();
+
+    write_code_recv(node, peer, dest, size, data);
+}
+
+
+
+size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame);
+
+
+#define CODE_ID_ECHO        0
+#define CODE_ID_STATUS      1
+#define CODE_ID_SEND        2
+#define CODE_ID_RECV        3
+
+typedef struct __packed {
+    u32 version;
+    u64 serial;
+    u32 uptime;
+    u16 node;
+    u32 recv_total;
+    u32 send_total;
+
+} code_status_t;
+
+typedef struct __packed {
+    u16 node;
+    u16 peer;
+    u16 dest;
+    u8 size;
+    u8 data[];
+
+} code_recv_t;
+
+
+
+static void write_code_status(code_status_t *code_status)
+{
+    u8 *frame;
+    size_t size = frame_encode(CODE_ID_STATUS, sizeof(code_status_t), (u8 *)code_status, &frame);
+
+    if (size) {
+        //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
+        usb_write_direct(frame, size);
+    }
+}
+
+
+
+static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[])
+{
+    //itm_printf(0, "<itm> recv: node=0x%04X peer=0x%04X dest=0x%04X size=%lu\n", node, peer, dest, size);
+    code_recv_t *code_recv = malloc(sizeof(code_recv_t) + size); assert(code_recv);
+
+    code_recv->node = node;
+    code_recv->peer = peer;
+    code_recv->dest = dest;
+    code_recv->size = (u8)size;
+
+    memcpy(code_recv->data, data, size);
+    size += sizeof(code_recv_t);
+
+    //itm_printf(0, "<itm> recv: raw frame data size=%lu\n", size);
+    u8 *frame;
+    size = frame_encode(CODE_ID_RECV, size, (u8 *)code_recv, &frame);
+    free(code_recv);
+
+    if (size) {
+        //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
+        usb_write_direct(frame, size);
+    }
+
+    if (frame) free(frame);
+}
+
+
+static void handle_code_status(size_t size, u8 *data)
+{
+    (void)size;
+    (void)data;
+
+    sim_uid_t sim_uid;
+    SIM_GetUniqueId(&sim_uid);
+
+    code_status_t code_status = {
+            .version = 1,
+            .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32),
+            .uptime = sync_timestamp(),
+            .node = nmac_get_addr(),
+            .recv_total = recv_total,
+            .send_total = send_total
+    };
+
+    write_code_status(&code_status);
+}
+
+static void handle_code_echo(size_t size, u8 *data)
+{
+    //itm_printf(0, "<itm> echo: \"%s\"\n", data);
+    if (data[size - 1] != '\n')
+        printf("(remote) %s\r\n", data);
+    else
+        printf("(remote) %s", data);
+}
+
+typedef struct __packed {
+    u8 type;
+    u16 dest;
+    u8 data[];
+
+} code_send_t;
+
+static void handle_code_send(size_t size, u8 *data)
+{
+    assert(size >= sizeof(code_send_t)); assert(data);
+
+    code_send_t *code_send = (code_send_t *)data;
+
+    if (size > MAC_PKT_SIZE_MAX) {
+        printf("(send) warning: truncating size from %u to %u\r\n", size, MAC_PKT_SIZE_MAX);
+        size = MAC_PKT_SIZE_MAX;
+    }
+
+    const u8 pkt_size = (u8)(size - sizeof(code_send_t));
+
+    const bool result = nmac_send(
+            (nmac_send_t)code_send->type,
+            code_send->dest,
+            pkt_size,
+            code_send->data
+    );
+
+    if (result) {
+        ++send_total;
+    }
+
+    printf("(send) type=0x%02X dest=0x%04X size=0x%02X result=%u\r\n",
+           (nmac_send_t)code_send->type,
+           code_send->dest,
+           pkt_size,
+           result
+    );
 }
 
 
 #include <usr/cobs.h>
-
-
 
 #define SERF_CODE_PROTO_M    0xE0 // 0b11100000
 #define SERF_CODE_PROTO_VAL  0xA0 // 0b10100000
@@ -417,8 +537,17 @@ static void frame_recv(size_t size, u8 *data)
     size -= sizeof(serf_t);
     frame->code &= SERF_CODE_M;
 
-    printf("(frame) size=%u code=0x%02x\r\n", size, frame->code);
-    printf("(frame) data: \"%s\"\r\n", frame->data);
+    switch (frame->code) {
+        default:
+        case CODE_ID_ECHO:
+            return handle_code_echo(size, frame->data);
+
+        case CODE_ID_SEND:
+            return handle_code_send(size, frame->data);
+
+        case CODE_ID_STATUS:
+            return handle_code_status(size, frame->data);
+    }
 }
 
 
