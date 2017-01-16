@@ -111,7 +111,7 @@
 #if defined(USB_STACK_FREERTOS_HEAP_SIZE) && (USB_STACK_FREERTOS_HEAP_SIZE > 0)
 #define configTOTAL_HEAP_SIZE ((size_t)(USB_STACK_FREERTOS_HEAP_SIZE))
 #else
-#define configTOTAL_HEAP_SIZE ((size_t)(24U * 1024U))
+#define configTOTAL_HEAP_SIZE ((size_t)(28U * 1024U))
 #endif
 #define configMAX_TASK_NAME_LEN (10U)
 #define configUSE_TRACE_FACILITY 1U

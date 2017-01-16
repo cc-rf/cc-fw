@@ -254,7 +254,7 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH-1, &nphy.disp)) {
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH-1, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
         return false;
     }

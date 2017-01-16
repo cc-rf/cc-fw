@@ -30,10 +30,10 @@
 #define NMAC_TXQ_SIZE       (NMAC_PEND_MAX * NMAC_TXQ_COUNT)
 
 
-
+//#include <itm.h>
 
 #define nmac_debug(format, ...) cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
-#define nmac_debug_pkt(format, ...) //cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
+#define nmac_debug_pkt(format, ...) //itm_printf(0, "<itm> " format "\r\n", ##__VA_ARGS__ ) //cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
 #define nmac_debug_v(format, ...)
 
 typedef enum __packed {

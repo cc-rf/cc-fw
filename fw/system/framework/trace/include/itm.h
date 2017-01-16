@@ -61,15 +61,17 @@ static inline void itm_write(const uint8_t port, const uint8_t *buf, const size_
 static inline void itm_printf(const uint8_t port, const char *format, ...)
 {
     va_list va;
-    char *output;
+    u8 *output;
     int result;
 
     va_start(va, format);
-    result = vasprintf(&output, format, va);
+    result = vasprintf((char **)&output, format, va);
 
     if (result >= 0) {
-        itm_write(port, output, (size_t)result);
+        itm_write(port, output, (size_t) result);
         free(output);
+    } else {
+        itm_puts(0, "\r\n\r\n<itm> WRITE FAILED\r\n\r\n");
     }
 
     va_end(va);

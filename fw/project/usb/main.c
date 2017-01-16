@@ -315,9 +315,15 @@ static void main_task(void *param)
 
     if (nmac_init(addr, boss, handle_rx)) {
 
-        while (1) {
-            vTaskDelay(portMAX_DELAY);
-        }
+        /*while (1) {
+            itm_puts(0, "<itm> usb: send periodic\n");
+            const char to_send[] = "Hello Peer\r\n";
+            usb_write((u8 *)to_send, strlen(to_send));
+            vTaskDelay(pdMS_TO_TICKS(5000));
+        }*/
+
+        //goto _end;
+        while(1) vTaskDelay(portMAX_DELAY);
     }
 
     #endif
@@ -325,9 +331,7 @@ static void main_task(void *param)
     #endif
 
     _end:
-    vTaskDelay(portMAX_DELAY);
     vTaskDelete(NULL);
-    while (1) {}
 }
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
@@ -353,6 +357,8 @@ static void handle_rx(u16 node, u16 peer, u16 dest, size_t size, u8 data[])
 {
 
     ++recv_total;
+    //itm_printf(0, "recv: total=%lu\r\n", recv_total);
+
 
     /*sum_lengths += size;
     num_packets++;
@@ -411,9 +417,10 @@ static void write_code_status(code_status_t *code_status)
     u8 *frame;
     size_t size = frame_encode(CODE_ID_STATUS, sizeof(code_status_t), (u8 *)code_status, &frame);
 
-    if (size) {
+    if (frame) {
         //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
         usb_write_direct(frame, size);
+        free(frame);
     }
 }
 
@@ -437,12 +444,12 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     size = frame_encode(CODE_ID_RECV, size, (u8 *)code_recv, &frame);
     free(code_recv);
 
-    if (size) {
+    if (frame) {
         //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
         usb_write_direct(frame, size);
+        //itm_printf(0, "<itm> recv: frame size=%lu <wrote>\n", size);
+        free(frame);
     }
-
-    if (frame) free(frame);
 }
 
 static void handle_code_reset(size_t size, u8 *data)
@@ -516,12 +523,12 @@ static void handle_code_send(size_t size, u8 *data)
         ++send_total;
     }
 
-    printf("(send) type=0x%02X dest=0x%04X size=0x%02X result=%u\r\n",
+    /*itm_printf(0, "(send) type=0x%02X dest=0x%04X size=0x%02X result=%u\r\n",
            (nmac_send_t)code_send->type,
            code_send->dest,
            pkt_size,
            result
-    );
+    );*/
 }
 
 
@@ -570,6 +577,8 @@ static void frame_recv(size_t size, u8 *data)
 size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame)
 {
     code = (u8)(SERF_CODE_PROTO_VAL | (code & SERF_CODE_M));
+    *frame = NULL;
+
     size_t frame_size = sizeof(serf_t) + size;
 
     serf_t *raw_frame = malloc(frame_size); assert(raw_frame);
@@ -584,7 +593,6 @@ size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame)
     if (!frame_size) {
         itm_puts(0, "(frame) error: cobs encode failed\r\n");
         free(*frame);
-        *frame = NULL;
         return 0;
     }
 

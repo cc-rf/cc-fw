@@ -8,6 +8,7 @@ import struct
 import time
 import cobs
 import threading
+import traceback
 
 CODE_ID_ECHO = 0
 CODE_ID_STATUS = 1
@@ -130,9 +131,11 @@ def serf_decode(data):
     data = cobs.cobs_decode(data)
 
     if not len(data):
+        print >> sys.stderr, "serf: empty data"
         return SERF_DECODE_ERROR
 
     if (ord(data[0]) & SERF_CODE_PROTO_M) != SERF_CODE_PROTO_VAL:
+        print >> sys.stderr, "serf: bad proto val"
         return SERF_DECODE_ERROR
 
     return ord(data[0]) & SERF_CODE_M, data[1:]
@@ -140,7 +143,10 @@ def serf_decode(data):
 
 def handle_frame(code, data):
     # print("frame: code={:02X} data='{}'".format(code, data))
-    return decode_code(code, data)
+    try:
+        return decode_code(code, data)
+    except:
+        traceback.print_exc()
 
 
 def next_frame():
@@ -150,14 +156,14 @@ def next_frame():
         count += 1
         data = "Hello %i" % count
         print data
-        yield encode_code_echo(data)
-        yield encode_code_send(NMAC_SEND_DGRM, 0x4040, data)
-        time.sleep(10)
+        # yield encode_code_echo(data)
+        yield encode_code_send(NMAC_SEND_DGRM, 0x0000, data)
+        time.sleep(5)
 
 
 def handle_recv(node, peer, dest, data):
-    print("recv: @{:04X}:{:04X}->{:04X} #{:02X}".format(
-        node, peer, dest, len(data)
+    print("recv: @{:04X}:{:04X}->{:04X} #{:02X} \t {}".format(
+        node, peer, dest, len(data), ' '.join('{:02X}'.format(ord(ch)) for ch in data)
     ))
 
 
@@ -174,6 +180,7 @@ def device_init(tty, baud):
 
 
 def reset_device(serial, tty, baud):
+    serial.timeout = .25
     serial.write(encode_code_reset())
     time.sleep(.5)
     serial.reset_input_buffer()
@@ -190,22 +197,27 @@ def main(args):
         thr, serial = device_init(tty, baud)
 
         serial.write(encode_code_status())
-        thr, serial = reset_device(serial, tty, baud)
-        serial.write(encode_code_status())
+        serial.flush()
 
-        # for frame in next_frame():
-        #    write(frame)
-        #    flush()
+        # thr, serial = reset_device(serial, tty, baud)
+        # serial.write(encode_code_status())
 
+        for frame in next_frame():
+            serial.write(frame)
+            serial.flush()
+
+        time.sleep(0.25)
         thr.join()
         # sys.exit(0)
 
-    # except Exception, e:
-    #    print e
     except KeyboardInterrupt:
         print
 
-    # sys.exit(1)
+    except:
+        traceback.print_exc()
+        sys.exit(1)
+
+    sys.exit(0)
 
 
 def input_thread(serial):
@@ -216,6 +228,7 @@ def input_thread(serial):
             in_data = serial.read()
 
             if not in_data or not len(in_data):
+                print >> sys.stderr, "input: empty"
                 continue
 
             data = data + in_data
@@ -232,14 +245,11 @@ def input_thread(serial):
 
             data = ''
 
-    except Exception, e:
-        # print e
-        pass
     except KeyboardInterrupt:
         print
 
-    # print "done"
-    # sys.exit(1)
+    except:
+        traceback.print_exc()
 
 
 def input_start(serial):
@@ -254,7 +264,7 @@ def get_serial(tty, baud):
     ser = serial.Serial()
     ser.port = tty
     ser.baudrate = baud
-    ser.timeout = .25
+    # ser.timeout = .25
     ser.open()
     return ser
 
