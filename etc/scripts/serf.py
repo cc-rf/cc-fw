@@ -166,7 +166,7 @@ def send_frames(serial):
     while 1:
         count += 1
         data = 'x' * 36
-        serf_send(serial, NMAC_SEND_DGRM, 0x0000, data)
+        serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
         # time.sleep(5)
 
 
@@ -258,7 +258,7 @@ def main(args):
         # sys.exit(0)
 
     except KeyboardInterrupt:
-        print
+        sys.exit(0)
 
     except:
         traceback.print_exc()
@@ -293,7 +293,7 @@ def input_thread(serial):
             data = ''
 
     except KeyboardInterrupt:
-        print
+        sys.exit(0)
 
     except:
         traceback.print_exc()
@@ -301,7 +301,7 @@ def input_thread(serial):
 
 def input_start(serial):
     thr = threading.Thread(target=input_thread, args=(serial,))
-    # thr.setDaemon(False)
+    thr.setDaemon(True)
     thr.start()
     return thr
 
