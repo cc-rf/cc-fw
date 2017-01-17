@@ -75,7 +75,7 @@ def encode_code_send(typ, dest, data):
         CODE_ID_SEND,
         struct.pack(
             "<BBHHH%is" % size,
-            flag & 0xFF, typ & 0xFF, node & 0xFFFF, dest & 0xFFFF, size, data
+            typ & 0xFF, flag & 0xFF, node & 0xFFFF, dest & 0xFFFF, size, data
         )
     )
 
@@ -158,16 +158,6 @@ def handle_frame(code, data):
         return decode_code(code, data)
     except:
         traceback.print_exc()
-
-
-def send_frames(serial):
-    count = 0
-
-    while 1:
-        count += 1
-        data = 'x' * 36
-        serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
-        # time.sleep(5)
 
 
 def serf_status(serial):
@@ -265,6 +255,16 @@ def main(args):
         sys.exit(1)
 
     sys.exit(0)
+
+
+def send_frames(serial):
+    count = 0
+
+    while 1:
+        count += 1
+        data = 'x' * 48
+        serf_send(serial, NMAC_SEND_STRM, 0x0000, data)
+        # time.sleep(5)
 
 
 def input_thread(serial):

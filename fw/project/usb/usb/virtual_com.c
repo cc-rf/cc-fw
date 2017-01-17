@@ -399,6 +399,9 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                             itm_printf(0, "<itm> usb: receive kickoff failed: error=%u\r\n", error);
                         }
                     }*/
+
+                    // phillip: we are receiving already at this point, I believe...
+                    receiving = true;
                 }
             }
             else
@@ -407,6 +410,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                 if (1 == s_cdcVcom.attach)
                 {
                     s_cdcVcom.startTransactions = 0;
+                    receiving = false;
                 }
             }
         }

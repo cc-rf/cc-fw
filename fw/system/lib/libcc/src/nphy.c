@@ -930,13 +930,6 @@ static void rf_task_NEW(void *param __unused)
                                         //tx_time = 0; // hmm
                                         //tx_next = 0; // allow after any immediate
                                     }
-
-                                    // NEW: immediate tx still goes back to rx for a bit to
-                                    //        prevent starvation.
-                                    loop_state_next = LOOP_STATE_RX;
-                                    pkt = NULL;
-                                    continue;
-
                                 } else {
                                     assert(pkt != (void*)&pkt_sync);
                                     nphy_free(pkt);
@@ -1038,8 +1031,7 @@ static void rf_task_NEW(void *param __unused)
                                 continue;
                             }
 
-                            // NEW: extend tx delay (coming from rx) by 1/2 packet time
-                            tx_next = (3 * pkt_time) / 2;
+                            tx_next = 1 * pkt_time;
                             cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
 
                         } else {
