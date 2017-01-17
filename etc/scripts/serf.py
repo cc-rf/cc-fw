@@ -201,7 +201,7 @@ def handle_recv(node, peer, dest, data):
 
 
 def handle_status(version, serial, uptime, node, recv_count, recv_bytes, send_count, send_bytes):
-    print("Cloud Chaser {:016X}-{:08X}@{:04X} up={} rx={}/{} tx={}/{}".format(
+    print("Cloud Chaser {:016X}-{:08X}@{:04X} up={}s rx={}/{} tx={}/{}".format(
         serial, version, node, uptime // 1000, recv_count, recv_bytes, send_count, send_bytes
     ))
     print
@@ -263,7 +263,7 @@ def send_frames(serial):
     while 1:
         count += 1
         data = 'x' * 48
-        serf_send(serial, NMAC_SEND_STRM, 0x0000, data)
+        serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
         # time.sleep(5)
 
 

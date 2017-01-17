@@ -182,8 +182,9 @@ static inline bool chan_set(const u32 chan)
         } while (st != CC1200_STATE_IDLE);
 
         //NOTE: for debug purposes, only use 2 channels
-        chan_select(&chnl.group, (chan_t) (4 + chan%2));
-        //chan_select(&chnl.group, (chan_t)chan);
+        //chan_select(&chnl.group, (chan_t) (4 + chan%2));
+
+        chan_select(&chnl.group, (chan_t)chan);
 
         // NEW: don't do this because we'll always be sending a sync packet!!
         //ensure_rx(); // this kills the in-progress tx
