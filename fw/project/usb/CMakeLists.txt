@@ -29,7 +29,7 @@ target_link_libraries(
         PUBLIC fw_system_framework_trace
         PUBLIC util_uart
         PUBLIC libcc
-        "-Xlinker -defsym=__heap_size__=0x14000"
+        "-Xlinker -defsym=__heap_size__=0x20000"
         "-Xlinker -defsym=__stack_size__=0x4000"
 )
 
