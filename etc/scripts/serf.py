@@ -244,7 +244,10 @@ def main(args):
             send_frames(serial)
 
         time.sleep(0.25)
-        thr.join()
+
+        while not thr.join(0.25):
+            pass
+
         # sys.exit(0)
 
     except KeyboardInterrupt:

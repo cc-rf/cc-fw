@@ -54,6 +54,7 @@ static QueueHandle_t usb_rx_q = NULL;
 
 static usb_rx_cb_t usb_rx_cb = NULL;
 
+static volatile bool flush_needed = false;
 
 
 /*******************************************************************************
@@ -148,6 +149,7 @@ static SemaphoreHandle_t usb_tx_s = NULL;
  */
 
 static volatile bool receiving = false;
+static volatile bool sending = false;
 
 usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, void *param)
 {
@@ -192,7 +194,16 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 #endif
                     }
 
-                    xSemaphoreGive(usb_tx_s);
+                    if (!sending && !uxQueueMessagesWaiting(usb_tx_q)) {
+                        // TODO: test this and determine if it is needed
+                        //itm_puts(0, "<itm> usb: post-tx flush\r\n");
+                        error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
+                    }
+
+                    if (sending) {
+                        sending = false;
+                        xSemaphoreGive(usb_tx_s);
+                    }
                 }
             }
         }
@@ -213,6 +224,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 #endif
 
                 if (s_recvSize) {
+                    //flush_needed = true;
 
                     if (s_recvSize != UINT32_MAX) {
                         // phillip: copy out to queue
@@ -232,6 +244,12 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                         s_recvSize = 0;
                     }
 
+
+                    if (!sending && !uxQueueMessagesWaiting(usb_tx_q)) {
+                        // TODO: test this and determine if it is needed
+                        //itm_puts(0, "<itm> usb: post-rx flush\r\n");
+                        error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
+                    }
                 }
 
                 if (!receiving) {
@@ -630,10 +648,6 @@ void USB_DeviceTask(void *handle)
 #endif
 
 
-
-
-static bool flush_needed = false;
-
 /*!
  * @brief Application task function.
  *
@@ -675,6 +689,8 @@ void APPTask(void *handle)
 
     while (1) {
         if (!xQueueReceive(usb_tx_q, &io, portMAX_DELAY)) continue;
+
+        sending = true;
         xSemaphoreTake(usb_tx_s, portMAX_DELAY);
         //itm_printf(0, "<itm> usb: send io=0x%08X size=%lu receiving=%u\n", io, io->len, receiving);
 

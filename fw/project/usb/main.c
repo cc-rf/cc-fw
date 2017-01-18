@@ -336,7 +336,7 @@ static void main_task(void *param)
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
 {
-    itm_printf(0, "stack overflow in task '%s'\r\n", pcTaskName);
+    itm_printf(0, "stack overflow in task 0x%08p '%s'\r\n", xTask, pcTaskName);
 }
 
 
