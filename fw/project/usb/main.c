@@ -173,7 +173,7 @@ static void main_task(void *param)
 
     amp_ctrl(0, AMP_LNA, true);
     amp_ctrl(0, AMP_PA, true);
-    amp_ctrl(0, AMP_HGM, false);
+    amp_ctrl(0, AMP_HGM, true);
 
     boss = pflag_set();
     //addr = (u16)(transmitter ? 2 : 1);

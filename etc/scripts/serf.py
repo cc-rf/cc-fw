@@ -260,7 +260,7 @@ def send_frames(serial):
     while 1:
         count += 1
         data = 'x' * 30
-        serf_send(serial, NMAC_SEND_DGRM, 0x0000, data)
+        serf_send(serial, NMAC_SEND_STRM, 0x0000, data)
         # time.sleep(5)
 
 

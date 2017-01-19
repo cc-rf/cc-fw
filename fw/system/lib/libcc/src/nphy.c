@@ -78,8 +78,8 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
          * forever despite the lack of a sync word detection.
          * For the timeout to always trigger an interrupt, RX_TIME_QUAL must be zero.
          * */
-        {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE/*TODO: what should this be?*/ | (0x7<<1) /*| CC1200_RFEND_CFG1_RX_TIME_QUAL_M*/},
-        {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_RX| CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN /*| 1*/},
+        {CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_IDLE /*TODO: what should this be?*/ | (0x7<<1) /*| CC1200_RFEND_CFG1_RX_TIME_QUAL_M*/},
+        {CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_RX | CC1200_RFEND_CFG0_TERM_ON_BAD_PACKET_EN /*| 1*/},
 
         // These may not necessarily be part of the phy handling
 
@@ -105,6 +105,7 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 #define cc_dbg_v(format, ...) cc_dbg(format, ##__VA_ARGS__ ) //cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
 
 
+
 static const cc_dev_t dev = 0;
 static xTaskHandle waiting_task = NULL;
 
@@ -127,7 +128,7 @@ static void ensure_rx(void);
 
 
 #define FREQ_BASE       905000000
-#define FREQ_BW            800000
+#define FREQ_BW         800000
 #define CHAN_COUNT      25
 #define CHAN_TIME       200//100//200//60//400/*100*///200  //30
 #define MAX_CCA_RETRY   3//4//3//2//3
@@ -881,7 +882,14 @@ static void rf_task_NEW(void *param __unused)
                             break;
 
                         case RF_STATE_RX_ERR:
-                            cc_dbg("rx fail: ms=0x%02X t=%lu e_t=%lu", ms, sync_timestamp(), sync_timestamp() - sync_time);
+                            //if (ms == CC1200_MARC_STATUS1_CRC) ++nphy_fail_crc;
+                            //++nphy_fail_all;
+                            //cc_dbg("rx fail: ms=0x%02X t=%lu e_t=%lu", ms, sync_timestamp(), sync_timestamp() - sync_time);
+                            // ^ this happens a lot
+                            // NEW: go straight back to RX
+                            rf_state = RF_STATE_RX_RUN;
+                            loop_state_next = LOOP_STATE_RX;
+                            continue;
 
                         default:
                             // TODO: Strobe here when below is not true
@@ -977,10 +985,7 @@ static void rf_task_NEW(void *param __unused)
 
                         } while (st != CC1200_STATE_IDLE);
 
-                        // NEW: go straight to idle after this for potential immediate tx
-                        // NEW NEW: Go back to RX because we block tx at the start of a channel
                         cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_RX);
-
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
@@ -1021,15 +1026,15 @@ static void rf_task_NEW(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else*/ if (chan_ticks <= 10) {
+                            } else*/ if (chan_ticks < 20) {
 
-                                tx_next = ts + (10 - chan_ticks);
+                                tx_next = ts + (20 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining <= (10 + pkt_time)) {
+                            } else if (remaining < (20 + pkt_time)) {
 
-                                tx_next = ts + ((10 + pkt_time) - remaining);
+                                tx_next = ts + ((20 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
