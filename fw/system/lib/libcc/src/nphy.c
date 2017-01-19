@@ -36,10 +36,17 @@ typedef struct __packed {
 } phy_pkt_hdr_t;
 
 typedef struct __packed {
+    u8 chan;
+    s8 rssi;
+    u8 lqi;
+
+} phy_pkt_meta_t;
+
+typedef struct __packed {
     phy_pkt_hdr_t hdr;
     u8 data[];
 
-} phy_pkt_t, phy_data_pkt_t;
+} phy_pkt_t;
 
 typedef struct __packed {
     phy_pkt_hdr_t hdr;
@@ -47,6 +54,11 @@ typedef struct __packed {
 
 } phy_sync_pkt_t;
 
+typedef struct __packed {
+    phy_pkt_meta_t meta;
+    phy_pkt_t pkt;
+
+} phy_recv_queue_t;
 
 static void isr_mcu_wake(void);
 static void isr_marc_2pin_status_0(void);
@@ -62,7 +74,6 @@ static void nphy_task(void *param);
 static void nphy_dispatch_task(void *param);
 
 static void rf_task(void *param);
-static void rf_task_NEW(void *param);
 
 #define CC_RSSI_OFFSET      (s8)(-81 - 15 + 11)
 
@@ -248,11 +259,11 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    nphy.txq = xQueueCreate(5/*3*//*2*//*24*//*8*//*8*/, sizeof(void *));
-    nphy.rxq = xQueueCreate(5/*3*//*2*//*16*//*4*//*8*/, sizeof(void *));
+    nphy.txq = xQueueCreate(5/*3*//*2*//*24*//*8*//*8*/, sizeof(void *)); assert(nphy.txq);
+    nphy.rxq = xQueueCreate(5/*3*//*2*//*16*//*4*//*8*/, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
     nphy.rx = rx;
 
-    if (!xTaskCreate(/*nphy_task*/rf_task_NEW, "nphy:main", TASK_STACK_SIZE_LARGE/*(TASK_STACK_SIZE_DEFAULT * 3) / 2*/, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
+    if (!xTaskCreate(/*nphy_task*/rf_task, "nphy:main", TASK_STACK_SIZE_LARGE/*(TASK_STACK_SIZE_DEFAULT * 3) / 2*/, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
         cc_dbg("[%u] error: unable to create main task", dev);
         return false;
     }
@@ -284,9 +295,9 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
 
 void nphy_tx(u8 flag, u8 *buf, u8 len)
 {
-    phy_data_pkt_t *qpkt = nphy_malloc(sizeof(phy_data_pkt_t) + len); assert(qpkt);
+    phy_pkt_t *qpkt = nphy_malloc(len + sizeof(phy_pkt_t)); assert(qpkt);
     if (len && buf) memcpy(qpkt->data, buf, len);
-    qpkt->hdr.len = sizeof(phy_data_pkt_t) - 1 + len;
+    qpkt->hdr.len = len + (sizeof(phy_pkt_t) - sizeof(rf_pkt_t)); // NOTE: upon receive, this reflects size minus phy header, but here it is all the data bytes
     qpkt->hdr.flag = flag & (u8)PHY_PKT_FLAG_IMMEDIATE;
 
     if (qpkt->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
@@ -350,11 +361,19 @@ static marc_2pin_status_t marc_2pin_status(void) {
 
 static bool sync_needed = false;
 
-static void process_packet(rf_pkt_t *pkt)
+static void process_packet(rf_pkt_t *pkt, u8 rssi, u8 lqi)
 {
-    phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *)pkt;
+    phy_pkt_t *const ppkt = (phy_pkt_t *)pkt;
 
-    if (spkt->hdr.flag & PHY_PKT_FLAG_SYNC) {
+    if (ppkt->hdr.len < sizeof(phy_pkt_hdr_t)) {
+        cc_dbg("rx: pkt too small for header");
+        return;
+    }
+
+    ppkt->hdr.len -= (sizeof(phy_pkt_t) - sizeof(rf_pkt_t));
+
+    if (ppkt->hdr.flag & PHY_PKT_FLAG_SYNC) {
+        const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *)pkt;
         // TODO: make sure size is big enough before reading flag
 
         if (!boss) {
@@ -375,26 +394,33 @@ static void process_packet(rf_pkt_t *pkt)
 
     }
 
-    if (spkt->hdr.flag & PHY_PKT_FLAG_NOSYNC) {
+    if (ppkt->hdr.flag & PHY_PKT_FLAG_NOSYNC) {
         if (boss && !sync_needed) {
             sync_needed = true;
         }
     }
 
     // TODO: check for size underflow vs. phy packet size
-    phy_pkt_t *dpkt = nphy_malloc(1 + pkt->len); assert(dpkt);
-    memcpy(dpkt, pkt, 1 + pkt->len);
+    phy_recv_queue_t *recv = nphy_malloc(sizeof(phy_recv_queue_t) + ppkt->hdr.len); assert(recv);
 
-    if (spkt->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
-        if (!xQueueSendToFront(nphy.rxq, &dpkt, pdMS_TO_TICKS(100))) {
+    recv->meta = (phy_pkt_meta_t){
+            .chan = (u8)chnl.group.cur->id,
+            .rssi = rssi,
+            .lqi = lqi
+    };
+
+    memcpy(&recv->pkt, ppkt, sizeof(phy_pkt_hdr_t) + ppkt->hdr.len);
+
+    if (recv->pkt.hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
+        if (!xQueueSendToFront(nphy.rxq, &recv, pdMS_TO_TICKS(100))) {
             cc_dbg("rx pkt queue immediate fail");
-            nphy_free(dpkt);
+            nphy_free(recv);
             // TODO: anything else?
         }
     } else {
-        if (!xQueueSend(nphy.rxq, &dpkt, pdMS_TO_TICKS(100))) {
+        if (!xQueueSend(nphy.rxq, &recv, pdMS_TO_TICKS(100))) {
             cc_dbg("rx pkt queue fail");
-            nphy_free(dpkt);
+            nphy_free(recv);
             // TODO: anything else?
         }
     }
@@ -449,7 +475,7 @@ static void nphy_rx(bool flush)
             const u8 lqi = spkt->data[spkt->len + 1] & (u8) CC1200_LQI_EST_BM;
 
             if (crc_ok) {
-                process_packet(spkt);
+                process_packet(spkt, rssi, lqi);
             } else {
                 cc_dbg_v("[%u] c=%u bad crc", dev, pkt_count);
                 // NEW: don't trust anything else in the buffer
@@ -591,15 +617,13 @@ void cca_disable(void)
 static void nphy_dispatch_task(void *param __unused)
 {
     const xQueueHandle rxq = nphy.rxq;
-    const nphy_rx_t rx = nphy.rx;
-    phy_pkt_t *spkt = nphy_malloc(256); // NEW: nphy_malloc instead. never freed!
-    phy_pkt_t *pkt = NULL;
+    const nphy_rx_t rx = nphy.rx; assert(rx);
+    phy_recv_queue_t *recv = NULL;
 
     while (1) {
-        if (xQueueReceive(rxq, &pkt, portMAX_DELAY) && pkt) {
-            memcpy(spkt, pkt, 1 + pkt->hdr.len);
-            nphy_free(pkt);
-            if (rx) rx(spkt->hdr.flag, spkt->data, spkt->hdr.len - sizeof(phy_pkt_t) + 1); // TODO: maybe require cb and remove check
+        if (xQueueReceive(rxq, &recv, portMAX_DELAY) && recv) {
+            rx(recv->pkt.hdr.flag, recv->pkt.hdr.len, recv->pkt.data, recv->meta.rssi, recv->meta.lqi); // TODO: maybe require cb and remove check
+            nphy_free(recv);
         }
     }
 }
@@ -640,7 +664,7 @@ const static char *const loop_state_str[3] = {
 };
 
 
-static void rf_task_NEW(void *param __unused)
+static void rf_task(void *param __unused)
 {
     rf_pkt_t *pkt = NULL;
     u8 ms = 0, st, retry = 0;

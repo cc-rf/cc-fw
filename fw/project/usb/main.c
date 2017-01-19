@@ -134,11 +134,8 @@ static u16 addr = 0;
 static u32 recv_count = 0, recv_bytes = 0;
 static u32 send_count = 0, send_bytes = 0;
 
-#if 0
-static void handle_rx(u8 flag, u8 *data, u8 size);
-#else
-static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[]);
-#endif
+static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi);
+
 
 static void main_task(void *param)
 {
@@ -154,9 +151,6 @@ static void main_task(void *param)
 
     //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
 
-    #if 1
-
-    amp_init(0);
 
     xsec_timer_0 = pit_alloc(&(pit_cfg_t){
             .period = pit_nsec_tick(1000000)
@@ -169,14 +163,12 @@ static void main_task(void *param)
     pit_start(xsec_timer);
     pit_start(xsec_timer_0);
 
-    #define MSG_LEN 88//38//88//48//38
-
+    amp_init(0);
     amp_ctrl(0, AMP_LNA, true);
     amp_ctrl(0, AMP_PA, true);
     amp_ctrl(0, AMP_HGM, true);
 
     boss = pflag_set();
-    //addr = (u16)(transmitter ? 2 : 1);
 
     sim_uid_t sim_uid;
     SIM_GetUniqueId(&sim_uid);
@@ -184,134 +176,6 @@ static void main_task(void *param)
     addr =  (u16)0x4000 | (u16)(~0x4000 & ( ((u16)sim_uid.L) ^ ((u16)(sim_uid.L>>16)) ) );
 
     printf("address: 0x%04X L=0x%08lX ML=0x%08lX MH=0x%08lX\r\n", addr, sim_uid.L, sim_uid.ML, sim_uid.MH);
-
-    #if 0
-
-    if (nphy_init((nphy_rx_t)handle_rx, boss)) {
-        printf("nphy init successful.\r\n");
-
-
-        if (!transmitter) {
-            printf("mode: receive\r\n");
-
-            u8 *buf;
-            u8 len;
-
-            //while (1) {
-            //    if (nphy_recv(&buf, &len, portMAX_DELAY)) {
-            //        handle_rx(0, buf, len);
-            //        nphy_free_buf(buf);
-            //    }
-            //}
-
-            vTaskDelay(portMAX_DELAY);
-
-        } else {
-            printf("mode: transmit\r\n");
-
-            u8 data[MSG_LEN] = {'a'};
-
-            u32 start_time = sync_timestamp();
-            u32 sum_lengths = 0;
-            u32 num_packets = 0;
-            u32 time_diff;
-
-            u8 pkt_len = MSG_LEN;
-
-            *((u8 *)data) = 0;
-
-            while (1) {
-                //pkt.chn = (u8) chan_cur;
-                //nphy_tx(0, data, (u8)(pkt_len % 3 ? pkt_len : 3));
-                nphy_tx(PHY_PKT_FLAG_IMMEDIATE, data, pkt_len);
-                //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
-                ++(*((u8 *)data));
-
-                sum_lengths += (u8)(pkt_len);// % 3 ? pkt_len : 3);// + 3 + /*being generous: 2 sync, 2 preamble*/4;
-                num_packets++;
-                time_diff = sync_timestamp() - start_time;
-
-                if (time_diff >= 1001) {
-                    printf("tx: rate = %lu bps\t\t\tpkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
-                    num_packets = 0;
-                    sum_lengths = 0;
-                    start_time = sync_timestamp();
-                }
-
-                //if (++pkt_len > MSG_LEN) pkt_len = 4;
-
-                //vTaskDelay(pdMS_TO_TICKS(5));
-
-                //const u32 pkt_time = cc_get_tx_time(0, pkt.len);
-
-                //pkt.len = (u8)((pkt.len + 1) % (MSG_LEN + 2));
-                //if (!pkt.len) pkt.len = 2;
-
-                LED_D_TOGGLE();
-                //vTaskDelay(pdMS_TO_TICKS(/*1137*/20 + (pkt.len % 2)*3 ));
-                //vTaskDelay(pdMS_TO_TICKS(pkt_time*3));
-            }
-
-        }
-    }
-
-    #elif 0
-
-    if (nmac_init(addr, boss, handle_rx)) {
-        printf("nphy init successful.\r\n");
-
-        struct {
-            u32 seq;
-            u32 magic;
-            u8 data[MSG_LEN-8];
-
-        } my_packet = {0};
-
-
-
-        if (!transmitter) {
-            printf("mode: receive\r\n");
-
-            vTaskDelay(portMAX_DELAY);
-
-        } else {
-            printf("mode: transmit\r\n");
-
-            u32 start_time = sync_timestamp();
-            u32 sum_lengths = 0;
-            u32 num_packets = 0;
-            u32 time_diff;
-
-            u8 pkt_len = MSG_LEN;
-
-            while (1) {
-                my_packet.seq++;
-                my_packet.magic = ~my_packet.seq;
-                nmac_send(NMAC_SEND_TRXN, 0, pkt_len, (u8 *)&my_packet);
-                //printf("tx/%lu: seq=%u\r\n", chan_cur, pkt.seq);
-
-                sum_lengths += pkt_len;// + 3 + /*being generous: 2 sync, 2 preamble*/4;
-                num_packets++;
-                time_diff = sync_timestamp() - start_time;
-
-                if (time_diff >= 1000) {
-                    printf("tx: rate = %lu bps \t\t pkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
-                    num_packets = 0;
-                    sum_lengths = 0;
-                    start_time = sync_timestamp();
-                }
-
-                //if (++pkt_len > MSG_LEN) pkt_len = 4;
-
-                LED_D_TOGGLE();
-
-                //vTaskDelay(pdMS_TO_TICKS(100));
-            }
-
-        }
-    }
-
-    #else
 
     if (nmac_init(addr, boss, handle_rx)) {
 
@@ -325,10 +189,6 @@ static void main_task(void *param)
         //goto _end;
         while(1) vTaskDelay(portMAX_DELAY);
     }
-
-    #endif
-
-    #endif
 
     _end:
     vTaskDelete(NULL);
@@ -349,11 +209,8 @@ static u32 time_diff;*/
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]);
 
-#if 0
-static void handle_rx(u8 flag, u8 *data, u8 size)
-#else
-static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[])
-#endif
+
+static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi)
 {
     ++recv_count;
     recv_bytes += size;

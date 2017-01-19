@@ -33,7 +33,7 @@
 //#include <itm.h>
 
 #define nmac_debug(format, ...) cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
-#define nmac_debug_pkt(format, ...) //itm_printf(0, "<itm> " format "\r\n", ##__VA_ARGS__ ) //cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
+#define nmac_debug_pkt(format, ...) /*itm_printf(0, "<itm> " format "\r\n", ##__VA_ARGS__ )*/ /*cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )*/
 #define nmac_debug_v(format, ...)
 
 typedef enum __packed {
@@ -65,7 +65,7 @@ extern u32 sync_timestamp(void);
 
 static bool send(u16 dest, u8 flag, u16 size, u8 data[]);
 static void tx_task(void *param);
-static void handle_rx(u8 flags, u8 *buf, u8 len);
+static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
 
 typedef struct __packed {
     u16 addr;
@@ -309,12 +309,12 @@ static void tx_task(void *param __unused)
     }
 }
 
-static void handle_rx(u8 flags, u8 *buf, u8 len)
+static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 {
-    nmac_pkt_t *const pkt = (nmac_pkt_t *)buf;
+    nmac_pkt_t *const pkt = (nmac_pkt_t *)data;
 
-    if (len != sizeof(nmac_pkt_t) + pkt->size) {
-        nmac_debug("(rx) bad length: len=%u != size=%u + sizeof(nmac_pkt_t)=%u", len, pkt->size, sizeof(nmac_pkt_t));
+    if (size != sizeof(nmac_pkt_t) + pkt->size) {
+        nmac_debug("(rx) bad length: len=%u != size=%u + sizeof(nmac_pkt_t)=%u", size, pkt->size, sizeof(nmac_pkt_t));
 
     } else {
         nmac_debug_pkt(
@@ -353,7 +353,7 @@ static void handle_rx(u8 flags, u8 *buf, u8 len)
                     }
 
                 } else {
-                    nmac.rx(mac_addr, pkt->addr, pkt->dest, pkt->size, pkt->data);
+                    nmac.rx(mac_addr, pkt->addr, pkt->dest, pkt->size, pkt->data, rssi, lqi);
                 }
 
             }

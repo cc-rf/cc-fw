@@ -6,7 +6,7 @@
 #define MAC_PKT_OVERHEAD    7
 #define MAC_PKT_SIZE_MAX    (PHY_FRAME_SIZE_MAX - MAC_PKT_OVERHEAD)
 
-typedef void (* mac_recv_t)(u16 node, u16 peer, u16 dest, u16 size, u8 data[]);
+typedef void (* mac_recv_t)(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi);
 
 typedef enum __packed {
     NMAC_SEND_DGRM,
