@@ -370,14 +370,12 @@ static void process_packet(rf_pkt_t *pkt, u8 rssi, u8 lqi)
         return;
     }
 
-    ppkt->hdr.len -= (sizeof(phy_pkt_t) - sizeof(rf_pkt_t));
-
     if (ppkt->hdr.flag & PHY_PKT_FLAG_SYNC) {
         const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *)pkt;
         // TODO: make sure size is big enough before reading flag
 
         if (!boss) {
-            sync_time = sync_timestamp() - spkt->ts - cc_get_tx_time(dev, spkt->hdr.len) - 1/*NEW: include pkt_time + fudge*/;
+            sync_time = sync_timestamp() - (spkt->ts + 1); /*NEW: include pkt_time + fudge*/
 
             //static s32 last_sync = 0;
             //u32 now = sync_timestamp();
@@ -393,6 +391,8 @@ static void process_packet(rf_pkt_t *pkt, u8 rssi, u8 lqi)
         return;
 
     }
+
+    ppkt->hdr.len -= (sizeof(phy_pkt_t) - sizeof(rf_pkt_t));
 
     if (ppkt->hdr.flag & PHY_PKT_FLAG_NOSYNC) {
         if (boss && !sync_needed) {

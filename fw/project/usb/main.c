@@ -207,7 +207,7 @@ static u32 time_diff;*/
 
 
 
-static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]);
+static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi);
 
 
 static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi)
@@ -233,7 +233,7 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
 
     LED_D_TOGGLE();
 
-    write_code_recv(node, peer, dest, size, data);
+    write_code_recv(node, peer, dest, size, data, rssi, lqi);
 }
 
 
@@ -266,6 +266,8 @@ typedef struct __packed {
     u16 peer;
     u16 dest;
     u16 size;
+    s8 rssi;
+    u8 lqi;
     u8 data[];
 
 } code_recv_t;
@@ -295,7 +297,7 @@ static void write_code_status(code_status_t *code_status)
 
 
 
-static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[])
+static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi)
 {
     //itm_printf(0, "<itm> recv: node=0x%04X peer=0x%04X dest=0x%04X size=%lu\n", node, peer, dest, size);
     code_recv_t *code_recv = malloc(sizeof(code_recv_t) + size); assert(code_recv);
@@ -304,6 +306,8 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     code_recv->peer = peer;
     code_recv->dest = dest;
     code_recv->size = (u16)size;
+    code_recv->rssi = rssi;
+    code_recv->lqi = lqi;
 
     memcpy(code_recv->data, data, size);
     size += sizeof(code_recv_t);

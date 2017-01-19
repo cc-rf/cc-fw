@@ -29,12 +29,12 @@ def handle_code_status(*args):
     handle_status(*args)
 
 
-def handle_code_recv(node, peer, dest, size, data):
+def handle_code_recv(node, peer, dest, size, rssi, lqi, data):
     if len(data) != size:
         print >>sys.stderr, "recv: size/{} != len(data)/{}".format(size, len(data))
         return
 
-    handle_recv(node, peer, dest, data)
+    handle_recv(node, peer, dest, rssi, lqi, data)
 
 
 def decode_code_echo(data):
@@ -46,7 +46,7 @@ def decode_code_status(data):
 
 
 def decode_code_recv(data):
-    return struct.unpack("<HHHH%is" % (len(data) - 8), data)
+    return struct.unpack("<HHHHbB%is" % (len(data) - 10), data)
 
 
 def encode_code_echo(data):
@@ -176,20 +176,27 @@ recv_time = 0
 recv_count = 0
 recv_size = 0
 
+rssi_sum = 0
+lqi_sum = 0
 
-def handle_recv(node, peer, dest, data):
+
+def handle_recv(node, peer, dest, rssi, lqi, data):
     # print("recv: @{:04X}:{:04X}->{:04X} #{:02X} \t {}".format(
     #     node, peer, dest, len(data), ' '.join('{:02X}'.format(ord(ch)) for ch in data)
     # ))
     global recv_count
     global recv_time
     global recv_size
+    global rssi_sum
+    global lqi_sum
 
     if not recv_count:
         recv_time = time.time()
 
     recv_size += len(data)
     recv_count += 1
+    rssi_sum += rssi
+    lqi_sum += lqi
 
 
 def handle_status(version, serial, uptime, node, recv_count, recv_bytes, send_count, send_bytes):
@@ -268,6 +275,8 @@ def stats_thread():
     global recv_count
     global recv_time
     global recv_size
+    global rssi_sum
+    global lqi_sum
 
     recv_count_prev = -1
 
@@ -286,9 +295,13 @@ def stats_thread():
             recv_count_prev = recv_count
             d_rate = float(recv_size) / diff
             p_rate = float(recv_count) / diff
+            rssi_avg = rssi_sum / recv_count
+            lqi_avg = lqi_sum / recv_count
             recv_count = 0
             recv_size = 0
-            print("recv: {} Bps / {} pps".format(int(round(d_rate)), int(round(p_rate))))
+            rssi_sum = 0
+            lqi_sum = 0
+            print("recv: {} Bps / {} pps \t rssi {}  lqi {}".format(int(round(d_rate)), int(round(p_rate)), rssi_avg, lqi_avg))
             # TODO: Maybe also add totals to this output ^
 
 
