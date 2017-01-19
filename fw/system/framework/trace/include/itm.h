@@ -4,6 +4,7 @@
 #include <core_cm4.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 static inline void itm_init(void)
 {
