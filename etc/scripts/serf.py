@@ -191,18 +191,10 @@ def handle_recv(node, peer, dest, data):
     recv_size += len(data)
     recv_count += 1
 
-    if recv_count == 100:
-        diff = time.time() - recv_time
-        d_rate = recv_size / diff
-        p_rate = recv_count / diff
-        recv_count = 0
-        recv_size = 0
-        print("recv: {} Bps / {} pps".format(int(round(d_rate)), int(round(p_rate))))
-
 
 def handle_status(version, serial, uptime, node, recv_count, recv_bytes, send_count, send_bytes):
-    print("Cloud Chaser {:016X}-{:08X}@{:04X} up={}s rx={}/{} tx={}/{}".format(
-        serial, version, node, uptime // 1000, recv_count, recv_bytes, send_count, send_bytes
+    print("Cloud Chaser {:016X}@{:04X} up={}s rx={}/{} tx={}/{}".format(
+        serial, node, uptime // 1000, recv_count, recv_bytes, send_count, send_bytes
     ))
     print
 
@@ -235,6 +227,8 @@ def main(args):
         tx = True
 
     try:
+        stats_start()
+
         thr, serial = device_init(tty, baud)
 
         serf_status(serial)
@@ -265,9 +259,44 @@ def send_frames(serial):
 
     while 1:
         count += 1
-        data = 'x' * 48
-        serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
+        data = 'x' * 30
+        serf_send(serial, NMAC_SEND_DGRM, 0x0000, data)
         # time.sleep(5)
+
+
+def stats_thread():
+    global recv_count
+    global recv_time
+    global recv_size
+
+    recv_count_prev = -1
+
+    while 1:
+        time.sleep(5)
+
+        if not recv_count:
+            continue
+
+        if recv_count == recv_count_prev:
+            continue
+
+        diff = time.time() - recv_time
+
+        if diff >= 1:
+            recv_count_prev = recv_count
+            d_rate = float(recv_size) / diff
+            p_rate = float(recv_count) / diff
+            recv_count = 0
+            recv_size = 0
+            print("recv: {} Bps / {} pps".format(int(round(d_rate)), int(round(p_rate))))
+            # TODO: Maybe also add totals to this output ^
+
+
+def stats_start():
+    thr = threading.Thread(target=stats_thread, args=())
+    thr.setDaemon(True)
+    thr.start()
+    return thr
 
 
 def input_thread(serial):

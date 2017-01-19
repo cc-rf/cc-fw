@@ -51,7 +51,7 @@ void cc_spi_init(cc_dev_t dev)
     DSPI_MasterGetDefaultConfig(&spi_config);
     spi_config.whichPcs = (dspi_which_pcs_t)(1u << cfg->pcs);
     spi_config.ctarConfig.pcsToSckDelayInNanoSec = /*1000*/0;
-    spi_config.ctarConfig.lastSckToPcsDelayInNanoSec = /*1000*/100;
+    spi_config.ctarConfig.lastSckToPcsDelayInNanoSec = /*1000*/1000;
     spi_config.ctarConfig.betweenTransferDelayInNanoSec = 0;
     spi_config.ctarConfig.baudRate = 8000000;
 

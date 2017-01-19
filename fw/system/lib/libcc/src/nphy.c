@@ -127,7 +127,7 @@ static void ensure_rx(void);
 
 
 #define FREQ_BASE       905000000
-#define FREQ_BW         800000
+#define FREQ_BW            800000
 #define CHAN_COUNT      25
 #define CHAN_TIME       200//100//200//60//400/*100*///200  //30
 #define MAX_CCA_RETRY   3//4//3//2//3
@@ -184,7 +184,8 @@ static inline bool chan_set(const u32 chan)
         //NOTE: for debug purposes, only use 2 channels
         //chan_select(&chnl.group, (chan_t) (4 + chan%2));
 
-        chan_select(&chnl.group, (chan_t)chan);
+        // NEW: start closer to 915MHz
+        chan_select(&chnl.group, (chan_t)((chan + 10) % chan_count));
 
         // NEW: don't do this because we'll always be sending a sync packet!!
         //ensure_rx(); // this kills the in-progress tx
@@ -977,7 +978,8 @@ static void rf_task_NEW(void *param __unused)
                         } while (st != CC1200_STATE_IDLE);
 
                         // NEW: go straight to idle after this for potential immediate tx
-                        cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
+                        // NEW NEW: Go back to RX because we block tx at the start of a channel
+                        cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_RX);
 
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
@@ -1019,9 +1021,9 @@ static void rf_task_NEW(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else*/ if (chan_ticks < 5) {
+                            } else*/ if (chan_ticks <= 10) {
 
-                                tx_next = ts + (5 - chan_ticks);
+                                tx_next = ts + (10 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 

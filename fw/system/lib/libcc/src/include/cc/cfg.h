@@ -256,27 +256,27 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
 // Whitening = false
 
 static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
-        {CC1200_SYNC3,             0x6F},
-        {CC1200_SYNC2,             0x4E},
-        {CC1200_SYNC1,             0x90}, // Sync Word Configuration [15:8]
-        {CC1200_SYNC0,             0x4E}, // Sync Word Configuration [7:0]
+        {CC1200_SYNC3,             0x5A},
+        {CC1200_SYNC2,             0x0F},
+        {CC1200_SYNC1,             0xBE}, // Sync Word Configuration [15:8]
+        {CC1200_SYNC0,             0x66}, // Sync Word Configuration [7:0]
 
-        {CC1200_SYNC_CFG1,         /*newnew: 4-byte sync thr 5*/0xA5 /*0x45*//*new: forgot to change sync word length to 2 bytes. thr is 0x07.*//*0xA7*//*0xA9*//*0xA8*/},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         0x13/*newnew: no more auto clear, also clears iqic coeff when on*/ /*0x33*//*0x13*/}, // 2byte sync. bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
+        {CC1200_SYNC_CFG1,         /*newnew: 4-byte sync, thr D*/0xAD /*0x45*//*new: forgot to change sync word length to 2 bytes. thr is 0x07.*//*0xA7*//*0xA9*//*0xA8*/},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_SYNC_CFG0,         /*new: do not need rx config limitation when bw is 500khz and rate is 250*/0x03/*0x13*//*newnew: no more auto clear, also clears iqic coeff when on*/ /*0x33*//*0x13*/}, // 2byte sync. bit 5: auto clear (|==0x33) (0x23: auto clear without rx bw cfg limitation)
         /*!!UNCONFIRMED CHANGE*/{CC1200_DEVIATION_M,       /*0x48*//*0xCB*/0x1F/*0x9A*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_MODCFG_DEV_E,      0x0D/*new,same but no DSSS*/ /*0x8D*//*0x8C*//*0x8D*//*0x8C*/}, // 0x80: coding gain
         {CC1200_DCFILT_CFG,        0x4B},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_PREAMBLE_CFG1,     0x18/*newnew: back to 4*/ /*0x10*//*new,2byte*/ /*0x18*//*0x34*/}, // 0x34: 30-byte preamble (4 == 0x18)
+        /*!!UNCONFIRMED CHANGE*/{CC1200_PREAMBLE_CFG1,     /*0x18*//*newnew: back to 4*/ 0x10/*new,2byte*/ /*0x18*//*0x34*/}, // 0x34: 30-byte preamble (4 == 0x18)
         {CC1200_PREAMBLE_CFG0,     0x8A},
         {CC1200_IQIC,              0x58/*NOTE: changing back to 0x58 improved AGC/RSSI performance*//*0x80*//*0x58*/},
         /*!!UNCONFIRMED CHANGE*/{CC1200_CHAN_BW,           /*0x05*//*0x04*/0x03},
-        {CC1200_MDMCFG1,           0x42 /*new: enable collision detect*/|0x08}, // |=0x80: CS gates sync search   |=((0x00-0x03)<<1) DVGA gain 0/-18/3/6 dB
+        {CC1200_MDMCFG1,           0x42 /*new: do not enable collision detect*//*|0x08*/}, // |=0x80: CS gates sync search   |=((0x00-0x03)<<1) DVGA gain 0/-18/3/6 dB
         {CC1200_MDMCFG0,           0x05},
         {CC1200_SYMBOL_RATE2,      /*0xB4*/0xB9},
         {CC1200_SYMBOL_RATE1,      /*0x7A*/0x99},
         {CC1200_SYMBOL_RATE0,      /*0xE1*/0x9A},
-        /*!!UNCONFIRMED CHANGE*/{CC1200_AGC_REF,           0x2E/*0x3D*//*0x37*/}, // Calibrated setting: 0x2E
-        {CC1200_AGC_CS_THR,        (u8)/*-103*/-77},
+        /*!!UNCONFIRMED CHANGE*/{CC1200_AGC_REF,           /*0x2E*//*new: was this the pa-based setting?*/0x3D/*0x37*/}, // Calibrated setting: 0x2E
+        {CC1200_AGC_CS_THR,        (u8)-107},
         /*!!UNCONFIRMED CHANGE*/{CC1200_AGC_CFG2,          /*0x80*/0x40/*new: put back to 0x40 -- does this depend on the PA state?*/}, //  Calibrated setting: 0x40. Default: 0x20 (Normal mode, max gain 39dB). 0x4:Performance/max=27dB
         {CC1200_AGC_CFG1,          0x16},
         {CC1200_AGC_CFG0,          0x84},
@@ -284,7 +284,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},
         {CC1200_PKT_CFG0,          0x20},
-        {CC1200_PA_CFG1,           0x43/*0x77*//*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG1,           /*0x43*/0x77/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
         /*!!UNCONFIRMED CHANGE*/{CC1200_IF_MIX_CFG,        0x1C/*0x1C*/}, // IF: highest freq

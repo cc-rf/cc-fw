@@ -106,9 +106,7 @@ static uint8_t s_countryCode[COMM_FEATURE_DATA_SIZE] = {(COUNTRY_SETTING >> 0U) 
 USB_DATA_ALIGNMENT static usb_cdc_acm_info_t s_usbCdcAcmInfo = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0, 0, 0};
 /* Data buffer for receiving and sending*/
 USB_DATA_ALIGNMENT static uint8_t s_currRecvBuf[DATA_BUFF_SIZE];
-USB_DATA_ALIGNMENT static uint8_t s_currSendBuf[DATA_BUFF_SIZE];
 volatile static uint32_t s_recvSize = 0;
-volatile static uint32_t s_sendSize = 0;
 
 /* USB device class information */
 static usb_device_class_config_struct_t s_cdcAcmConfig[1] = {{
@@ -574,6 +572,7 @@ void USB_DeviceApplicationInit(void)
 
     CLOCK_EnableUsbhs0PhyPllClock(USB_HS_PHY_CLK_SRC, USB_HS_PHY_CLK_FREQ);
     CLOCK_EnableUsbhs0Clock(USB_HS_CLK_SRC, USB_HS_CLK_FREQ);
+
     USB_EhciPhyInit(CONTROLLER_ID, BOARD_XTAL0_CLK_HZ);
 
 #endif
@@ -767,8 +766,15 @@ void usb_write_direct(u8 *buf, size_t len)
     memcpy(io->buf, buf, len);
 
     //itm_printf(0, "<itm> usb: queu io=0x%08X size=%lu\n", io, io->len);
-    if (!xQueueSend(usb_tx_q, &io, portMAX_DELAY)) {
-        free(io);
+
+    if (!isInterrupt()) {
+        if (!xQueueSend(usb_tx_q, &io, portMAX_DELAY)) {
+            free(io);
+        }
+    } else {
+        if (!xQueueSendFromISR(usb_tx_q, &io, NULL)) {
+            free(io);
+        }
     }
 
     /*xSemaphoreTake(usb_tx_s, portMAX_DELAY);

@@ -125,7 +125,7 @@ void BOARD_BootClockHSRUN(void)
             .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x0EU,
     };
     const sim_clock_config_t simConfig = {
-            .pllFllSel = 1U, .er32kSrc = 2U, .clkdiv1 = 0x02260000U,
+            .pllFllSel = 1U, .er32kSrc = 2U, .clkdiv1 = 0x01150000U,
     };
 
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
@@ -140,11 +140,39 @@ void BOARD_BootClockHSRUN(void)
 
     CLOCK_BootToPeeMode(kMCG_OscselOsc, kMCG_PllClkSelPll0, &pll0Config);
 
-    CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnableInStop, kMCG_IrcSlow, 0U);
+    CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0U);
 
     CLOCK_SetSimConfig(&simConfig);
 
     SystemCoreClock = 180000000U;
+}
+
+void BOARD_BootClockOCHSRUN(void)
+{
+    const mcg_pll_config_t pll0Config = {
+            .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x13U,
+    };
+    const sim_clock_config_t simConfig = {
+            .pllFllSel = 1U, .er32kSrc = 2U, .clkdiv1 = 0x01160000U,
+    };
+
+    SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
+    SMC_SetPowerModeHsrun(SMC);
+    while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateHsrun)
+    {
+    }
+
+    CLOCK_SetSimSafeDivs();
+
+    BOARD_InitOsc0();
+
+    CLOCK_BootToPeeMode(kMCG_OscselOsc, kMCG_PllClkSelPll0, &pll0Config);
+
+    CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0U);
+
+    CLOCK_SetSimConfig(&simConfig);
+
+    SystemCoreClock = 210000000U;
 }
 
 void BOARD_InitOsc0(void)

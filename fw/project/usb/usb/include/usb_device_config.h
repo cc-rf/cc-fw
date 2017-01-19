@@ -95,7 +95,7 @@
 #define USB_DEVICE_CONFIG_SELF_POWER (/*1U*/0U)
 
 /*! @brief Whether device remote wakeup supported. 1U supported, 0U not supported */
-#define USB_DEVICE_CONFIG_REMOTE_WAKEUP (0U)
+#define USB_DEVICE_CONFIG_REMOTE_WAKEUP (/*0U*/1U)
 
 /*! @brief How many endpoints are supported in the stack. */
 #define USB_DEVICE_CONFIG_ENDPOINTS (4U)
