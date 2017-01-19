@@ -14,6 +14,6 @@ target_link_libraries(
         INTERFACE usr
         INTERFACE kinetis_sdk
         INTERFACE kinetis_sdk_driver
-        INTERFACE kinetis_freertos
+        #INTERFACE kinetis_freertos # TODO: Find a way to make things like this available automatically when requested
         INTERFACE kinetis_middleware_dma_manager
 )
