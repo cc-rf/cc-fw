@@ -31,6 +31,7 @@
 #include <virtual_com.h>
 #include <malloc.h>
 #include <util/uart.h>
+#include <uhdcd.h>
 
 #define PFLAG_PORT PORTB
 #define PFLAG_GPIO GPIOB

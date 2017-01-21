@@ -15,6 +15,7 @@
 //#include "fsl_debug_console.h"
 #include <usr/type.h>
 #include <itm.h>
+#include <uhdcd.h>
 
 
 #include "usb_device_descriptor.h"
@@ -568,7 +569,12 @@ void USB_DeviceApplicationInit(void)
     uint8_t ehciIrq[] = USBHS_IRQS;
     irqNo = ehciIrq[CONTROLLER_ID - kUSB_ControllerEhci0];
 
-    CLOCK_EnableUsbfs0Clock(USB_FS_CLK_SRC, USB_FS_CLK_FREQ); // added but probably not needed
+    // TODO: Test using PFD clock here for hub detection & enumeration
+    //   This maps to "external PLL" in fsl_clock
+    //CLOCK_EnableUsbhs0PfdClock(0, kCLOCK_UsbPfdSrcExt);
+
+    // NOTE: Perhaps do not enable manually
+    //CLOCK_EnableUsbfs0Clock(USB_FS_CLK_SRC, USB_FS_CLK_FREQ); // added but probably not needed
 
     CLOCK_EnableUsbhs0PhyPllClock(USB_HS_PHY_CLK_SRC, USB_HS_PHY_CLK_FREQ);
     CLOCK_EnableUsbhs0Clock(USB_HS_CLK_SRC, USB_HS_CLK_FREQ);
@@ -585,6 +591,17 @@ void USB_DeviceApplicationInit(void)
 #if (defined(FSL_FEATURE_SOC_MPU_COUNT) && (FSL_FEATURE_SOC_MPU_COUNT > 0U))
     MPU_Enable(MPU, 0);
 #endif /* FSL_FEATURE_SOC_MPU_COUNT */
+
+    /**
+     * phillip: DCD here?
+     */
+    /*itm_puts(0, "usb: run dcd\r\n");
+
+    uhdcd_state_t state;
+    uhdcd_error_t error = uhdcd_run(&state);
+
+    itm_printf(0, "usb: dcd done: error=%u state=%u\r\n", error, state);*/
+
 
 /*
  * If the SOC has USB KHCI dedicated RAM, the RAM memory needs to be clear after

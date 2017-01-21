@@ -2,6 +2,8 @@
 
 #include <usr/type.h>
 #include <core_cm4.h>
+#include <fsl_clock.h>
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
