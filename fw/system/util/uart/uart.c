@@ -105,6 +105,8 @@ void uart_write(uart_t const uart, const u8 *buf, size_t len)
 
 void uart_read(uart_t const uart, u8 *buf, size_t len)
 {
+    //TODO :Look into UART_TransferGetReceiveCountEDMA to choose the transfer size intelligently
+
     uart_transfer_t xfer = {
             .data = buf,
             .dataSize = len

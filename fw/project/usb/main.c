@@ -30,14 +30,24 @@
 #include <fsl_sim.h>
 #include <virtual_com.h>
 #include <malloc.h>
-
+#include <util/uart.h>
 
 #define PFLAG_PORT PORTB
 #define PFLAG_GPIO GPIOB
 #define PFLAG_PIN  5
 
+#define UFLAG1_ON_PORT  PORTE
+#define UFLAG1_ON_GPIO  GPIOE
+#define UFLAG1_ON_PIN   3
+
+#define UFLAG1_PORT     PORTB
+#define UFLAG1_GPIO     GPIOB
+#define UFLAG1_PIN      4
 
 static void main_task(void *param);
+
+static void uart_relay_run(void);
+
 static void usb_recv(size_t size, u8 *data);
 
 //static SemaphoreHandle_t write_sem = NULL;
@@ -81,7 +91,6 @@ int main(void)
        CLOCK_GetFreq(kCLOCK_LpoClk)
     );
 
-    // setup the rx/tx flag input pin
     const port_pin_config_t port_pin_config = {
             kPORT_PullDown,
             kPORT_FastSlewRate,
@@ -92,15 +101,33 @@ int main(void)
             kPORT_LockRegister,
     };
 
+    const port_pin_config_t port_pin_config_out = {
+            kPORT_PullDisable,
+            kPORT_SlowSlewRate,
+            kPORT_PassiveFilterDisable,
+            kPORT_OpenDrainDisable,
+            kPORT_LowDriveStrength,
+            kPORT_MuxAsGpio,
+            kPORT_LockRegister,
+    };
+
     PORT_SetPinConfig(PFLAG_PORT, PFLAG_PIN, &port_pin_config);
+    PORT_SetPinConfig(UFLAG1_PORT, UFLAG1_PIN, &port_pin_config);
+    PORT_SetPinConfig(UFLAG1_ON_PORT, UFLAG1_ON_PIN, &port_pin_config_out);
 
     const gpio_pin_config_t gpio_pin_config = {
             .pinDirection = kGPIO_DigitalInput,
             .outputLogic = 0
     };
 
-    GPIO_PinInit(PFLAG_GPIO, PFLAG_PIN, &gpio_pin_config);
+    const gpio_pin_config_t gpio_pin_config_out = {
+            .pinDirection = kGPIO_DigitalOutput,
+            .outputLogic = 1
+    };
 
+    GPIO_PinInit(PFLAG_GPIO, PFLAG_PIN, &gpio_pin_config);
+    GPIO_PinInit(UFLAG1_GPIO, UFLAG1_PIN, &gpio_pin_config);
+    GPIO_PinInit(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, &gpio_pin_config_out);
 
     xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
 
@@ -119,6 +146,10 @@ static bool pflag_set(void)
     return GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
 }
 
+static bool uflag1_set(void)
+{
+    return GPIO_ReadPinInput(UFLAG1_GPIO, UFLAG1_PIN) != 0;
+}
 
 static pit_t xsec_timer_0;
 static pit_t xsec_timer;
@@ -175,9 +206,14 @@ static void main_task(void *param)
 
     addr =  (u16)0x4000 | (u16)(~0x4000 & ( ((u16)sim_uid.L) ^ ((u16)(sim_uid.L>>16)) ) );
 
-    printf("address: 0x%04X L=0x%08lX ML=0x%08lX MH=0x%08lX\r\n", addr, sim_uid.L, sim_uid.ML, sim_uid.MH);
+    printf("\r\naddress: 0x%04X L=0x%08lX ML=0x%08lX MH=0x%08lX\r\n\r\n", addr, sim_uid.L, sim_uid.ML, sim_uid.MH);
 
     if (nmac_init(addr, boss, handle_rx)) {
+
+        if (uflag1_set()) {
+            printf("uart: relay enabled\r\n");
+            uart_relay_run();
+        }
 
         /*while (1) {
             itm_puts(0, "<itm> usb: send periodic\n");
@@ -200,6 +236,37 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
 }
 
 
+typedef struct __packed {
+    u8 type; // == 0x2a
+    u8 data[];
+
+} uart_pkt_t;
+
+
+
+static uart_t uart = NULL;
+
+static void uart_relay_run(void)
+{
+    struct __packed {
+        uart_pkt_t pkt;
+        u8 input[1];
+
+    } message = {
+            .pkt.type = 0x2a
+    };
+
+    uart = uart_init(0, 115200);
+
+    while (1) {
+        uart_read(uart, (u8 *)message.input, 1);
+        itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
+        nmac_send(NMAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message);
+    }
+}
+
+
+
 /*static u32 start_time = 0;
 static u32 sum_lengths = 0;
 static u32 num_packets = 0;
@@ -214,6 +281,15 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
 {
     ++recv_count;
     recv_bytes += size;
+
+    if (uflag1_set() && size > sizeof(uart_pkt_t) && uart) {
+        uart_pkt_t *const uart_pkt = (uart_pkt_t *)data;
+
+        if (uart_pkt->type == 0x2a) {
+            uart_write(uart, uart_pkt->data, size - sizeof(uart_pkt_t));
+        }
+    }
+
 
     //itm_printf(0, "recv: total=%lu\r\n", recv_total);
 
@@ -282,6 +358,33 @@ typedef struct __packed {
 
 } code_send_t;
 
+/*
+typedef enum __packed {
+    CODE_RLAY_CONFIG,
+    CODE_RLAY_SEND,
+    CODE_RLAY_RECV
+
+} code_relay_type_t;
+
+typedef enum __packed {
+    CODE_RLAY_FLAG_NONE,
+    CODE_RLAY_FLAG_UART = 1 << 2,  // Include UART in this operation
+    CODE_RELAY_FLAG_DGRM = 1 << 4,
+    CODE_RELAY_FLAG_STRM = 1 << 5,
+    CODE_RLAY_FLAG_BCAST = 1 << 6, // Broadcast return data instead of sending to source
+
+} code_relay_flag_t;
+
+typedef struct __packed {
+    u8 type;
+    u8 flag;
+    u16 node;
+    u16 dest;
+    u16 size;
+    u8 data[];
+
+} code_relay_t;
+*/
 
 static void write_code_status(code_status_t *code_status)
 {
