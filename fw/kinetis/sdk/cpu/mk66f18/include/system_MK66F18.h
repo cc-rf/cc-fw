@@ -101,8 +101,16 @@ extern "C" {
 
 /* Define clock source values */
 
+// phillip: use board-dependent values!
+
+#if 0
 #define CPU_XTAL_CLK_HZ                16000000U           /* Value of the external crystal or oscillator clock frequency of the system oscillator (OSC) in Hz */
 #define CPU_XTAL32k_CLK_HZ             32768U              /* Value of the external 32k crystal or oscillator clock frequency of the RTC in Hz */
+#else
+#include <clock_config.h>
+#define CPU_XTAL_CLK_HZ                BOARD_XTAL0_CLK_HZ  /* Value of the external crystal or oscillator clock frequency of the system oscillator (OSC) in Hz */
+#define CPU_XTAL32k_CLK_HZ             BOARD_XTAL32K_CLK_HZ/* Value of the external 32k crystal or oscillator clock frequency of the RTC in Hz */
+#endif
 #define CPU_INT_SLOW_CLK_HZ            32768U              /* Value of the slow internal oscillator clock frequency in Hz */
 #define CPU_INT_FAST_CLK_HZ            4000000U            /* Value of the fast internal oscillator clock frequency in Hz */
 #define CPU_INT_IRC_CLK_HZ             48000000U           /* Value of the 48M internal oscillator clock frequency in Hz */

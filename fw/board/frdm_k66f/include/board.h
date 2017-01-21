@@ -27,10 +27,9 @@
 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+#pragma once
 
-#ifndef _BOARD_H_
-#define _BOARD_H_
-
+#include <fsl_common.h>
 #include "clock_config.h"
 #include "fsl_gpio.h"
 
@@ -189,9 +188,3 @@ extern "C" {
  ******************************************************************************/
 
 void BOARD_InitDebugConsole(void);
-
-#if defined(__cplusplus)
-}
-#endif /* __cplusplus */
-
-#endif /* _BOARD_H_ */

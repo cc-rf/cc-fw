@@ -59,24 +59,25 @@ bool dbgPendSVHookState = 0;
 int main(void)
 {
     BOARD_InitPins();
-    LED_A_ON();
+    BOARD_BootClockRUN();
 
-    BOARD_BootClockOCHSRUN();
-    LED_B_ON();
+    //LED_A_ON();
+    //BOARD_BootClockOCHSRUN();
+    //LED_B_ON();
 
     //write_sem = xSemaphoreCreateBinary();
     //xSemaphoreGive(write_sem);
 
     BOARD_InitDebugConsole();
     itm_init();
-    printf("<boot>\r\n");
+    itm_puts(0, "<boot>\r\n");
 
     /*printf("how about a fault.\r\n");
     *(int *)(0xfffefafe) = 42;
     while (1) {};*/
 
 
-    printf("\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",
+    itm_printf(0, "\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",
        CLOCK_GetFreq(kCLOCK_CoreSysClk),
        CLOCK_GetFreq(kCLOCK_BusClk),
        CLOCK_GetFreq(kCLOCK_FlexBusClk),
@@ -130,9 +131,10 @@ int main(void)
     GPIO_PinInit(UFLAG1_GPIO, UFLAG1_PIN, &gpio_pin_config);
     GPIO_PinInit(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, &gpio_pin_config_out);
 
+
     xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
 
-    LED_C_ON();
+    //LED_C_ON();
 
     // Theoretically this will make sure the sub-priority on all interrupt configs is zero.
     //   Not sure it's actually really needed or what it does in the long run.
@@ -175,7 +177,7 @@ static void main_task(void *param)
     //printf("<main task>\r\n");
 
     if (!vcom_init(usb_recv)) {
-        printf("vcom: init fail\r\n");
+        itm_puts(0, "vcom: init fail\r\n");
         goto _end;
     }
 
@@ -194,6 +196,13 @@ static void main_task(void *param)
 
     pit_start(xsec_timer);
     pit_start(xsec_timer_0);
+
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        printf("time: %lu\r\n", sync_timestamp());
+    }
+
+    #if 0
 
     amp_init(0);
     amp_ctrl(0, AMP_LNA, true);
@@ -226,6 +235,8 @@ static void main_task(void *param)
         //goto _end;
         while(1) vTaskDelay(portMAX_DELAY);
     }
+
+    #endif
 
     _end:
     vTaskDelete(NULL);
@@ -308,7 +319,7 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
 
     }*/
 
-    LED_D_TOGGLE();
+    //LED_D_TOGGLE();
 
     write_code_recv(node, peer, dest, size, data, rssi, lqi);
 }

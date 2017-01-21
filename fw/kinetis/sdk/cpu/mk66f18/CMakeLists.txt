@@ -26,6 +26,7 @@ target_include_directories(
 
 target_link_libraries(
         ${NAME}
+        PUBLIC fw_board # for clock_config.h
         PUBLIC kinetis_sdk_cmsis
         "-Wl,-T${CMAKE_CURRENT_LIST_DIR}/${LDFILE_PREFIX}_flash.ld"
 )
