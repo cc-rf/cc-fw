@@ -1499,7 +1499,9 @@ void USB_DeviceEhciIsrFunction(void *deviceHandle)
     if (status & USBHS_USBSTS_UEI_MASK)
     {
         /* Error interrupt */
-        USB_DeviceEhciInterruptError(ehciState);
+        // phillip: disable faulty copy paste crap
+#warning need to do something different here eventually
+        //USB_DeviceEhciInterruptError(ehciState);
     }
 #endif /* USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING */
 

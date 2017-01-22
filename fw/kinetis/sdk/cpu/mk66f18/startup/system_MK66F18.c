@@ -86,6 +86,8 @@
  */
 
 #include <stdint.h>
+#include <MK66F18.h>
+#include <fsl_sim.h>
 #include "fsl_device_registers.h"
 
 
@@ -122,6 +124,18 @@ void SystemInit (void) {
   /* https://sourceforge.net/p/gnuarmeclipse/se/ci/d67a27d285f8ac2de5190b889203caf4c7d02c77/ */
   /* Phillip: Enable usage fault handling? */
   //SCB->SHCSR |= SCB_SHCSR_USGFAULTENA_Msk;
+
+  // phillip: disable usb vreg inrush current limiter
+  // errata: Mask Set Errata for Mask 0N65N, Rev. 17Nov2015
+  #if FSL_FEATURE_SIM_OPT_HAS_USB_PHY
+    SIM->USBPHYCTL |= SIM_USBPHYCTL_USBDISILIM_MASK;
+  #endif
+
+  // phillip: disable usb vreg power to mcu (should pull from LDO instead?)
+  // doesn't work... leads to hang... wtf?
+  //#if FSL_FEATURE_SIM_OPT_HAS_USB_VOLTAGE_REGULATOR
+  //  SIM_SetUsbVoltRegulatorEnableMode(0);
+  //#endif
 }
 
 /* ----------------------------------------------------------------------------

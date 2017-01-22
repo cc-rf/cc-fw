@@ -92,10 +92,10 @@
 /* @} */
 
 /*! @brief Whether device is self power. 1U supported, 0U not supported */
-#define USB_DEVICE_CONFIG_SELF_POWER (/*1U*/0U)
+#define USB_DEVICE_CONFIG_SELF_POWER (1U)
 
 /*! @brief Whether device remote wakeup supported. 1U supported, 0U not supported */
-#define USB_DEVICE_CONFIG_REMOTE_WAKEUP (/*0U*/1U)
+#define USB_DEVICE_CONFIG_REMOTE_WAKEUP (0U)
 
 /*! @brief How many endpoints are supported in the stack. */
 #define USB_DEVICE_CONFIG_ENDPOINTS (4U)
@@ -118,7 +118,7 @@
 /*! @brief How many the DTD are supported. */
 #define USB_DEVICE_CONFIG_EHCI_MAX_DTD (16U)
 /*! @brief Whether handle the USB EHCI bus error. */
-#define USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING (/*0U*/1U)
+#define USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING (0U/*1U*/)
 /*! @brief Whether test mode enabled. */
 #define USB_DEVICE_CONFIG_EHCI_TEST_MODE (0U)
 /*! @brief Whether the EHCI ID pin detect feature enabled. */
@@ -126,7 +126,7 @@
 #endif
 
 /*! @brief Whether the keep alive feature enabled. */
-#define USB_DEVICE_CONFIG_KEEP_ALIVE_MODE (/*0U*/1U)
+#define USB_DEVICE_CONFIG_KEEP_ALIVE_MODE (0U/*1U*/)
 
 /*! @brief Whether the transfer buffer is cache-enabled or not. */
 #define USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE (0U)

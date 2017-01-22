@@ -16,6 +16,8 @@
 #include <usr/type.h>
 #include <itm.h>
 #include <uhdcd.h>
+#include <MK66F18.h>
+#include <fsl_sim.h>
 
 
 #include "usb_device_descriptor.h"
@@ -160,6 +162,9 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
     usb_device_endpoint_callback_message_struct_t *epCbParam;
     acmReqParam = (usb_device_cdc_acm_request_param_struct_t *)param;
     epCbParam = (usb_device_endpoint_callback_message_struct_t *)param;
+
+    //itm_printf(0, "<usb> cdc cb: event=%lu\r\n", event);
+
     switch (event)
     {
         case kUSB_DeviceCdcEventSendResponse:
@@ -458,6 +463,8 @@ usb_status_t USB_DeviceCallback(usb_device_handle handle, uint32_t event, void *
     uint16_t *temp16 = (uint16_t *)param;
     uint8_t *temp8 = (uint8_t *)param;
 
+    //itm_printf(0, "<usb> device cb: event=%lu\r\n", event);
+
     switch (event)
     {
         case kUSB_DeviceEventBusReset:
@@ -571,13 +578,25 @@ void USB_DeviceApplicationInit(void)
 
     // TODO: Test using PFD clock here for hub detection & enumeration
     //   This maps to "external PLL" in fsl_clock
-    //CLOCK_EnableUsbhs0PfdClock(0, kCLOCK_UsbPfdSrcExt);
+    //CLOCK_EnableUsbhs0PfdClock(24U, kCLOCK_UsbPfdSrcFracDivBy2);
 
     // NOTE: Perhaps do not enable manually
     //CLOCK_EnableUsbfs0Clock(USB_FS_CLK_SRC, USB_FS_CLK_FREQ); // added but probably not needed
 
+    //SIM_SetUsbVoltRegulatorEnableMode(0);
+    //SIM_SetUsbVoltRegulatorEnableMode(kSIM_UsbVoltRegEnableInAllModes);
+
     CLOCK_EnableUsbhs0PhyPllClock(USB_HS_PHY_CLK_SRC, USB_HS_PHY_CLK_FREQ);
     CLOCK_EnableUsbhs0Clock(USB_HS_CLK_SRC, USB_HS_CLK_FREQ);
+
+    // Disable pullup and wait?
+/*    itm_printf(0, "enable pullup [0]: val=%lu\n", USBHS->OTGSC & USBHS_OTGSC_DP_MASK);
+    USBHS->OTGSC |= USBHS_OTGSC_DP_MASK;
+    itm_printf(0, "enable pullup [1]: val=%lu\n", USBHS->OTGSC & USBHS_OTGSC_DP_MASK);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    itm_printf(0, "disable pullup [0]: val=%lu\n", USBHS->OTGSC & USBHS_OTGSC_DP_MASK);
+    USBHS->OTGSC &= ~USBHS_OTGSC_DP_MASK;
+    itm_printf(0, "disable pullup [1]: val=%lu\n", USBHS->OTGSC & USBHS_OTGSC_DP_MASK);*/
 
     USB_EhciPhyInit(CONTROLLER_ID, BOARD_XTAL0_CLK_HZ);
 
@@ -591,6 +610,7 @@ void USB_DeviceApplicationInit(void)
 #if (defined(FSL_FEATURE_SOC_MPU_COUNT) && (FSL_FEATURE_SOC_MPU_COUNT > 0U))
     MPU_Enable(MPU, 0);
 #endif /* FSL_FEATURE_SOC_MPU_COUNT */
+
 
     /**
      * phillip: DCD here?
