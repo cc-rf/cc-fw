@@ -57,8 +57,7 @@ uint32_t USB_EhciPhyInit(uint8_t controllerId, uint32_t freq)
     USBPHY->TX = ((USBPHY->TX & (~USBPHY_TX_D_CAL_MASK)) | USBPHY_TX_D_CAL(0xcU));
 #endif
 
-    // phillip: enable nonstandard resistive plug detection?
-    // USBPHY->CTRL |= USBPHY_CTRL_ENDEVPLUGINDET_MASK;
+    // phillip: enable nonstandard resistive plug detection?//USBPHY->CTRL |= USBPHY_CTRL_ENDEVPLUGINDET_MASK;
     return kStatus_USB_Success;
 }
 

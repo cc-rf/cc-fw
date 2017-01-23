@@ -267,7 +267,7 @@ def send_frames(serial):
     while 1:
         count += 1
         data = '\xAB' * 30
-        serf_send(serial, NMAC_SEND_DGRM, 0x0000, data)
+        serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
         # time.sleep(5)
 
 
@@ -281,7 +281,7 @@ def stats_thread():
     recv_count_prev = -1
 
     while 1:
-        time.sleep(5)
+        time.sleep(1)
 
         if not recv_count:
             continue
@@ -291,7 +291,7 @@ def stats_thread():
 
         diff = time.time() - recv_time
 
-        if diff >= 1:
+        if diff >= 5:
             recv_count_prev = recv_count
             d_rate = float(recv_size) / diff
             p_rate = float(recv_count) / diff

@@ -259,16 +259,16 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    nphy.txq = xQueueCreate(5/*3*//*2*//*24*//*8*//*8*/, sizeof(void *)); assert(nphy.txq);
-    nphy.rxq = xQueueCreate(5/*3*//*2*//*16*//*4*//*8*/, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
+    nphy.txq = xQueueCreate(5, sizeof(void *)); assert(nphy.txq);
+    nphy.rxq = xQueueCreate(7, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
     nphy.rx = rx;
 
-    if (!xTaskCreate(/*nphy_task*/rf_task, "nphy:main", TASK_STACK_SIZE_LARGE/*(TASK_STACK_SIZE_DEFAULT * 3) / 2*/, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
+    if (!xTaskCreate(/*nphy_task*/rf_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH, &nphy.task)) {
         cc_dbg("[%u] error: unable to create main task", dev);
         return false;
     }
 
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH-1, &nphy.disp)) {
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH+1, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
         return false;
     }
@@ -1094,13 +1094,13 @@ static void rf_task(void *param __unused)
                                 pkt = NULL;
                                 continue;
 
-                            } else if (chan_ticks <= 10) {
+                            } else if (chan_ticks < 20) {
 
-                                tx_next = ts + (10 - chan_ticks);
+                                tx_next = ts + (20 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining <= (20 + pkt_time)) {
+                            } else if (remaining < (20 + pkt_time)) {
 
                                 tx_next = ts + ((20 + pkt_time) - remaining);
                                 pkt = NULL;

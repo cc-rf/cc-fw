@@ -197,13 +197,6 @@ static void main_task(void *param)
     pit_start(xsec_timer);
     pit_start(xsec_timer_0);
 
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        printf("time: %lu\r\n", sync_timestamp());
-    }
-
-    #if 0
-
     amp_init(0);
     amp_ctrl(0, AMP_LNA, true);
     amp_ctrl(0, AMP_PA, true);
@@ -235,8 +228,6 @@ static void main_task(void *param)
         //goto _end;
         while(1) vTaskDelay(portMAX_DELAY);
     }
-
-    #endif
 
     _end:
     vTaskDelete(NULL);

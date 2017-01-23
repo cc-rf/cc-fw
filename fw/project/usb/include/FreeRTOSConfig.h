@@ -76,7 +76,7 @@
 
 /* Phillip: specific task priorities */
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
-#define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 16)
+#define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 9)
 #define TASK_STACK_SIZE_DEFAULT     (TASK_STACK_SIZE_SMALL * 2)
 
 #define TASK_PRIO_MAX               (configMAX_PRIORITIES - 1)
@@ -106,12 +106,12 @@
 #define configCPU_CLOCK_HZ (SystemCoreClock)
 #define configTICK_RATE_HZ ((TickType_t)1000U)
 #define configMAX_PRIORITIES (18U)
-#define configMINIMAL_STACK_SIZE ((unsigned short)/*90U*/120U)
+#define configMINIMAL_STACK_SIZE ((unsigned short)/*90U*//*120U*/192U)
 
 #if defined(USB_STACK_FREERTOS_HEAP_SIZE) && (USB_STACK_FREERTOS_HEAP_SIZE > 0)
 #define configTOTAL_HEAP_SIZE ((size_t)(USB_STACK_FREERTOS_HEAP_SIZE))
 #else
-#define configTOTAL_HEAP_SIZE ((size_t)(28U * 1024U))
+#define configTOTAL_HEAP_SIZE ((size_t)(32U * 1024U))
 #endif
 #define configMAX_TASK_NAME_LEN (10U)
 #define configUSE_TRACE_FACILITY 1U

@@ -19,6 +19,7 @@
 #include <cc/sys/kinetis/isrd.h>
 #include <fsl_port.h>
 #include <cc/type.h>
+#include <itm.h>
 
 
 #define NMAC_PEER_MAX       10
@@ -30,11 +31,13 @@
 #define NMAC_TXQ_SIZE       (NMAC_PEND_MAX * NMAC_TXQ_COUNT)
 
 
-//#include <itm.h>
-
 #define nmac_debug(format, ...) cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
 #define nmac_debug_pkt(format, ...) /*itm_printf(0, "<itm> " format "\r\n", ##__VA_ARGS__ )*/ /*cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )*/
 #define nmac_debug_v(format, ...)
+
+#undef assert
+#define _sfy(x) #x
+#define assert(x) if (!(x)) { itm_puts(0, "ASSERT FAIL: \" #x ""\" on line " _sfy( __LINE__ ) "\n"); asm("bkpt #0"); }
 
 typedef enum __packed {
     MAC_FLAG_PKT_IMM = 1 << 0,
@@ -90,17 +93,37 @@ static u8 mac_seqn = 0;
 
 
 s32 nmac_mem_count = 0;
+s32 nmac_mem_size = 0;
 
 static inline void *nmac_malloc(size_t size)
 {
-    void *ptr = malloc(size);
-    if (ptr) ++nmac_mem_count;
+    void *ptr = malloc(size + sizeof(size_t));
+
+    if (ptr) {
+        *((size_t *)ptr) = size;
+        ptr = (void *) &((size_t *)ptr)[1];
+        ++nmac_mem_count;
+        nmac_mem_size += size;
+    }
+
     return ptr;
 }
 
 static inline void nmac_free(void *ptr)
 {
-    if (ptr) --nmac_mem_count;
+    if (ptr) {
+        if ((nmac_mem_size - ((size_t *)ptr)[-1]) < 0) {
+            itm_puts(0, "mem size negative!\n");
+            while (1) {
+                asm("bkpt #0");
+            }
+        }
+
+        nmac_mem_size -= ((size_t *)ptr)[-1];
+        ptr = (void *) &((size_t *)ptr)[-1];
+        --nmac_mem_count;
+    }
+
     return free(ptr);
 }
 
@@ -138,7 +161,7 @@ bool nmac_init(u16 addr, bool sync_master, mac_recv_t rx)
 
     for (u8 i = 0; i < NMAC_PEND_MAX; ++i) {
         nmac.pend[i] = NULL;
-        xSemaphoreHandle sem =xSemaphoreCreateBinary(); assert(sem);
+        xSemaphoreHandle sem = xSemaphoreCreateBinary(); assert(sem);
 
         if (!xQueueSend(nmac.pendq, &sem, 0)) {
             nmac_debug("error: unable queue sem during setup");
@@ -146,7 +169,7 @@ bool nmac_init(u16 addr, bool sync_master, mac_recv_t rx)
         }
     }
 
-    if (!xTaskCreate(tx_task, "nmac:send", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH, NULL)) {
+    if (!xTaskCreate(tx_task, "nmac:send", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL)) {
         nmac_debug("error: unable to create send task");
         return false;
     }
@@ -181,6 +204,10 @@ bool nmac_send(nmac_send_t type, u16 dest, u16 size, u8 data[])
 
 static bool do_send(mac_txq_t *txqi)
 {
+    assert(txqi);
+    assert(txqi->pkt);
+    assert(txqi->pkt->size <= MAC_PKT_SIZE_MAX);
+
     nmac_pkt_t *const pkt = txqi->pkt;
     const u8 pkt_len = sizeof(nmac_pkt_t) + pkt->size;
     const bool needs_ack = pkt->flag & MAC_FLAG_ACK_REQ;
@@ -212,7 +239,7 @@ static bool do_send(mac_txq_t *txqi)
                 }
             }
 
-            // packet was queued. what to return here?
+            // packet was queued
             return true;
         }
 
@@ -303,6 +330,7 @@ static void tx_task(void *param __unused)
 
     while (1) {
         if (xQueueReceive(txq, &txqi, portMAX_DELAY)) {
+            assert(txqi.pkt && txqi.pkt->size <= MAC_PKT_SIZE_MAX);
             txqi.pkt->flag |= MAC_FLAG_PKT_BLK;
             do_send(&txqi);
         }

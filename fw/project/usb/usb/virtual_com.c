@@ -198,7 +198,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 #endif
                     }
 
-                    if (!sending && !uxQueueMessagesWaiting(usb_tx_q)) {
+                    if (uxSemaphoreGetCount(usb_tx_s) && !uxQueueMessagesWaiting(usb_tx_q)) {
                         // TODO: test this and determine if it is needed
                         //itm_puts(0, "<itm> usb: post-tx flush\r\n");
                         error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
@@ -249,7 +249,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                     }
 
 
-                    if (!sending && !uxQueueMessagesWaiting(usb_tx_q)) {
+                    if (uxSemaphoreGetCount(usb_tx_s) && !uxQueueMessagesWaiting(usb_tx_q)) {
                         // TODO: test this and determine if it is needed
                         //itm_puts(0, "<itm> usb: post-rx flush\r\n");
                         error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
@@ -709,7 +709,7 @@ void APPTask(void *handle)
     {
         if (xTaskCreate(USB_DeviceTask,                  /* pointer to the task                      */
                         (char const *)"usb:dev", /* task name for kernel awareness debugging */
-                        5000L / sizeof(portSTACK_TYPE),  /* task stack size                          */
+                        TASK_STACK_SIZE_LARGE,  /* task stack size                          */
                         s_cdcVcom.deviceHandle,          /* optional task startup argument           */
                         TASK_PRIO_HIGH-1,                /* initial priority                         */
                         &s_cdcVcom.deviceTaskHandle      /* optional task handle to create           */
@@ -725,9 +725,8 @@ void APPTask(void *handle)
 
     while (1) {
         if (!xQueueReceive(usb_tx_q, &io, portMAX_DELAY)) continue;
-
-        sending = true;
         xSemaphoreTake(usb_tx_s, portMAX_DELAY);
+        sending = true;
         //itm_printf(0, "<itm> usb: send io=0x%08X size=%lu receiving=%u\n", io, io->len, receiving);
 
         if ((error = USB_DeviceCdcAcmSend(s_cdcVcom.cdcAcmHandle, USB_CDC_VCOM_BULK_IN_ENDPOINT, io->buf, io->len))) {
@@ -753,7 +752,7 @@ bool vcom_init(usb_rx_cb_t rx_cb)
                     "usb:vcom",                       /* task name for kernel awareness debugging */
                     TASK_STACK_SIZE_DEFAULT,           /* task stack size                          */
                     &s_cdcVcom,                      /* optional task startup argument           */
-                    TASK_PRIO_HIGH,                  /* initial priority                         */
+                    TASK_PRIO_HIGH-2,                  /* initial priority                         */
                     &s_cdcVcom.applicationTaskHandle /* optional task handle to create           */
                     ) != pdPASS)
     {
