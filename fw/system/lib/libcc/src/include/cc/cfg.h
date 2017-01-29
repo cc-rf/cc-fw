@@ -266,6 +266,14 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
  * SYNC_CFG1: SmartRF changed this up to B when going GFSk->FSK, but going down to 5 seems to work okay too.
  * Testing smaller RX BW: CHAN_BW to 416, IQIC 0x4B->0xCB(enable). SYNC_CFG0:0x13(No more auto clear, but set limitation bit), IF_MIX_CFG:0x18->0x0C IFAMP:0x0D->0x05(then back)
  * Going back to bigger: CHAN_BW to 555, IQIC:0x4B, AGC_REF:0x2D->0x3D->2E->49->31->46->2E->33(somewhat unjustified) AGC_CFG2:0x00->0x20->00 SYNC_CFG0:0x03(no lim), IF_MIX_CFG:0x18(SmartRF sayx 0x1C) IFAMP:0x0D
+ * DEVIATION_M/DEV_E: 0x9A/0x04->0x9A/0x25. 4-FSK dev(outer) 125kHz. Great results but a little lossy. lqi's zero??
+ *      Next: 0x1F/0x26. dev-> 175kHz (250*.7).
+ *      Next: 0x0A/0x26. dev-> 162.5kHz (250*.65). <-- Winner! For when high-speed mode is "enabled."
+ * SYNC_CFG1: 0xA5->0xAC. Forgot higher meant more accepting
+ * DEVIATION_M/DEV_E: 0x9A/0x04->0x9A/0x05 (Back to 125 kHz). Seems to have fixed some issues with back&forth packets, but lqi has degraded (from 7 to 11 no matter rssi)
+ * FREQOFF_CFG:0x24->0x26 (ki factor -> 2, do foc during packet). Can't tell if it helps so restoring. Something up in the low rssi recv now...
+ * DEVIATION_M/DEV_E: 0x9A/0x05->0x33/0x05 (Back to 93.75 kHz). Trying to make sure I didn't mess up the low signal strength receive capability. Didn't seem to have an effect, restoring.
+ * DEVIATION_M/DEV_E: 0x9A/0x05->0x9A/0x0D (FSK->GFSK). This is good, keeping. Almost entirely fixes low rssi concern.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction.
  */
@@ -276,10 +284,10 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC1,             0xBE}, // Sync Word Configuration [15:8]
         {CC1200_SYNC0,             0x66}, // Sync Word Configuration [7:0]
 
-        {CC1200_SYNC_CFG1,         0xA5},
+        {CC1200_SYNC_CFG1,         0xAC},
         {CC1200_SYNC_CFG0,         0x03},
         {CC1200_DEVIATION_M,       0x9A},
-        {CC1200_MODCFG_DEV_E,      0x04}, // 0x80: coding gain
+        {CC1200_MODCFG_DEV_E,      0x0D}, // 0x80: coding gain
         {CC1200_DCFILT_CFG,        0x5D/**SmartRF lates. TODO: try making auto compensation instead of reg based? //*0x4B*/},
         {CC1200_PREAMBLE_CFG1,     0x18/*newnew: back to 4*/ /*0x13*//*new,2byte)*/ /*0x18*//*0x34*/}, // 0x34: 30-byte preamble (4 == 0x18)
         {CC1200_PREAMBLE_CFG0,     0x8A},
@@ -299,7 +307,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},
         {CC1200_PKT_CFG0,          0x20},
-        {CC1200_PA_CFG1,           /*0x43*/0x7f/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG1,           /*0x43*/0x70/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
         {CC1200_IF_MIX_CFG,        /*0x0C*/0x18/*divmul:6*//*0x1C*/}, // IF: highest freq

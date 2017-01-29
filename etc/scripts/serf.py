@@ -9,6 +9,7 @@ import time
 import cobs
 import threading
 import traceback
+import random
 
 CODE_ID_ECHO = 0
 CODE_ID_STATUS = 1
@@ -266,7 +267,7 @@ def send_frames(serial):
 
     while 1:
         count += 1
-        data = '\xAB' * 30
+        data = '\x3A' * 30  # ''.join([chr(random.randrange(0, 0xff)) for _ in range(random.randrange(8, 48))])
         serf_send(serial, NMAC_SEND_STRM, 0x0000, data)
         # time.sleep(5)
 
