@@ -15,9 +15,21 @@ void chan_grp_init(chan_grp_t *grp, chan_t hop_table[])
     const u32 step = grp->freq.bw;
     u32 freq = grp->freq.base + step / 2;
 
+    /**
+     * Degraded sensitivity in RX at multiples of XOSC/2 and in TX at multiples of XOSC.
+     */
+
+    #define IS_TOO_CLOSE(freq)  ((freq % (CC_XOSC_FREQ / 2)) < 1000000) || (((CC_XOSC_FREQ / 2) - (freq % (CC_XOSC_FREQ / 2))) < 1000000)
+
     for (chan_t c = 0; c < grp->size; ++c, freq += step) {
         grp->chan[c].id = c;
         grp->chan[c].cal.valid = false;
+
+        while (IS_TOO_CLOSE(freq)) {
+            //cc_dbg("chan: adjust freq %lu -> %lu", freq, freq + step);
+            freq += step;
+        }
+
         grp->chan[c].freq = cc_map_freq(grp->dev, freq, &grp->chan[c].cal.reg.freq);
         if (hop_table) hop_table[c] = c;
     }

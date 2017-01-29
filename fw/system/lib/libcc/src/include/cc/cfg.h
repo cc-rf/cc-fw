@@ -274,8 +274,14 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
  * FREQOFF_CFG:0x24->0x26 (ki factor -> 2, do foc during packet). Can't tell if it helps so restoring. Something up in the low rssi recv now...
  * DEVIATION_M/DEV_E: 0x9A/0x05->0x33/0x05 (Back to 93.75 kHz). Trying to make sure I didn't mess up the low signal strength receive capability. Didn't seem to have an effect, restoring.
  * DEVIATION_M/DEV_E: 0x9A/0x05->0x9A/0x0D (FSK->GFSK). This is good, keeping. Almost entirely fixes low rssi concern.
+ * SYNC_CFG1: 0xAC->0xA5. More strict sync word qual. Meant to improve PER above sensitivity limit. https://e2e.ti.com/support/wireless_connectivity/proprietary_sub_1_ghz_simpliciti/f/156/p/374447/1338299
+ * IF_MIX_CFG: 0x18->0x1C: f_IF only needs to be greater than HALF the RX filt BW when IQIC is not enabled (https://e2e.ti.com/support/wireless_connectivity/proprietary_sub_1_ghz_simpliciti/f/156/p/374447/1317974#1317974)
+ *              (Restored: does not help)
+ * IFAMP: 0x0D->0x04. Single side BW must be > f_IF + (RXBW/2) so 555.5. Restoring: seems to still not be useful.
+ *
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction.
+ * TODO: Revisit FB2PLL (FREQOFF_CFG)
  */
 
 static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
@@ -284,7 +290,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC1,             0xBE}, // Sync Word Configuration [15:8]
         {CC1200_SYNC0,             0x66}, // Sync Word Configuration [7:0]
 
-        {CC1200_SYNC_CFG1,         0xAC},
+        {CC1200_SYNC_CFG1,         0xA5},
         {CC1200_SYNC_CFG0,         0x03},
         {CC1200_DEVIATION_M,       0x9A},
         {CC1200_MODCFG_DEV_E,      0x0D}, // 0x80: coding gain
@@ -307,10 +313,10 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},
         {CC1200_PKT_CFG0,          0x20},
-        {CC1200_PA_CFG1,           /*0x43*/0x70/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG1,           /*0x43*/0x63/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
-        {CC1200_IF_MIX_CFG,        /*0x0C*/0x18/*divmul:6*//*0x1C*/}, // IF: highest freq
+        {CC1200_IF_MIX_CFG,        0x18}, // IF: highest freq
         {CC1200_FREQOFF_CFG,       0x24},
         {CC1200_TOC_CFG,           0x03},
         {CC1200_MDMCFG2,           0x02},
@@ -332,7 +338,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_REG_DIV_CML,    0x1C},
         {CC1200_FS_SPARE,          0xAC},
         {CC1200_FS_VCO0,           0xB5},
-        {CC1200_IFAMP,             /*0x05*/0x0D},
+        {CC1200_IFAMP,             /*0x04*/0x0D},
         {CC1200_XOSC5,             0x0E},
         {CC1200_XOSC1,             0x03},
 };
