@@ -97,7 +97,7 @@ bool isrd_state(const u8 port, const u8 pin)
     return !!GPIO_ReadPinInput(gpios[port], pin);
 }
 
-void isrd_configure(const u8 port, const u8 pin, const port_interrupt_t type, const isr_t isr)
+void isrd_configure(const u8 port, const u8 pin, const port_interrupt_t type, const isr_t isr, const u8 prio_decrease)
 {
     if (isr) isr_maps[port][pin] = isr;
     else isr_maps[port][pin] = isr_noop;
@@ -115,7 +115,7 @@ void isrd_configure(const u8 port, const u8 pin, const port_interrupt_t type, co
     PORT_SetPinConfig(ports[port], pin, &port_pin_config);
     PORT_SetPinInterruptConfig(ports[port], pin, type);
 
-    NVIC_SetPriority(irqns[port], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY+1/*+2*/);
+    NVIC_SetPriority(irqns[port], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY+1+prio_decrease);
 
     EnableIRQ(irqns[port]);
 

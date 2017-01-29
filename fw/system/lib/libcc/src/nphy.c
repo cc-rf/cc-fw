@@ -132,7 +132,7 @@ static struct {
 
 
 extern u32 sync_timestamp(void);
-s32 sync_time = 0;
+
 
 static void ensure_rx(void);
 
@@ -208,8 +208,10 @@ static inline bool chan_set(const u32 chan)
     return false;
 }
 
-static bool boss = false;
-
+static bool boss;
+static bool sync_needed;
+static u32 sync_last;
+static s32 sync_time;
 
 
 s32 nphy_mem_count = 0;
@@ -284,13 +286,13 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
 
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
-    isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake);
+    isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake, 0);
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(1), CC1200_IOCFG_GPIO_CFG_LNA_PD);
-    isrd_configure(2, 11, kPORT_InterruptEitherEdge, isr_ctl_lna);
+    isrd_configure(2, 11, kPORT_InterruptEitherEdge, isr_ctl_lna, 1);
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(2), CC1200_IOCFG_GPIO_CFG_PA_PD);
-    isrd_configure(2, 12, kPORT_InterruptEitherEdge, isr_ctl_pa);
+    isrd_configure(2, 12, kPORT_InterruptEitherEdge, isr_ctl_pa, 1);
 
     cc_strobe(dev, CC1200_SRX);
     return true;
@@ -373,8 +375,6 @@ static marc_2pin_status_t marc_2pin_status(void) {
     return (marc_2pin_status_t)marc_2pin_status_field;
 }*/
 
-static bool sync_needed = false;
-
 static void process_packet(rf_pkt_t *pkt, u8 rssi, u8 lqi)
 {
     phy_pkt_t *const ppkt = (phy_pkt_t *)pkt;
@@ -389,7 +389,9 @@ static void process_packet(rf_pkt_t *pkt, u8 rssi, u8 lqi)
         // TODO: make sure size is big enough before reading flag
 
         if (!boss) {
-            sync_time = sync_timestamp() - (spkt->ts + 1); /*NEW: include pkt_time + fudge*/
+            //itm_puts(0, ".");
+            sync_last = sync_timestamp();
+            sync_time = sync_last - spkt->ts;
 
             //static s32 last_sync = 0;
             //u32 now = sync_timestamp();
@@ -676,12 +678,16 @@ static void rf_task(void *param __unused)
     u8 ms = 0, st;
 
     u32 ts;
-    s32 ticks = 0;
+    s32 ticks;
+    u32 chan_ticks;
     u32 remaining = 0;
-    u32 chan_ticks = 0;
+    u32 tx_next = 0;
     u32 notify;
 
-    bool cca = false;
+    //bool cca = false;
+
+    rf_state_t rf_state = RF_STATE_NONE;
+    loop_state_t loop_state = LOOP_STATE_NONE;
 
     phy_sync_pkt_t pkt_sync = {
             .hdr = {
@@ -691,23 +697,18 @@ static void rf_task(void *param __unused)
             .ts = 0
     };
 
-    const s32 start_time = sync_timestamp();
+    sync_needed = false;
+    sync_last = 0;
+    sync_time = 0;
 
     if (boss) {
-        sync_time = start_time;
+        sync_needed = true;
+        loop_state = LOOP_STATE_TX;
     }
 
-    rf_state_t rf_state = RF_STATE_NONE;
-
-    u32 tx_next = 0;
-
-    loop_state_t loop_state = LOOP_STATE_NONE;
+    const s32 start_time = sync_timestamp();
 
     while (1) {
-        if (remaining > chan_time) {
-            cc_dbg("remaining=%lu > %lu !!", remaining, chan_time);
-        }
-
         if (xTaskNotifyWait(0, UINT32_MAX, &notify, pdMS_TO_TICKS(remaining))) {
 
             if (notify & NOTIFY_MASK_ISR) {
@@ -721,7 +722,7 @@ static void rf_task(void *param __unused)
                 switch (ms) {
                     case CC1200_MARC_STATUS1_RX_FINISHED:
                         nphy_rx(true);
-                        tx_next = 0;
+                        if (!pkt) tx_next = 0;
                         rf_state = RF_STATE_RX_END;
                         loop_state = LOOP_STATE_RX;
                         break;
@@ -797,11 +798,17 @@ static void rf_task(void *param __unused)
         if (sync_time) {
             ts = sync_timestamp();
             ticks = ts - sync_time;
-            remaining = chan_time - (ticks % chan_time);
 
-            if (remaining <= 1) {
-                remaining = 1;
-                continue;
+            if (!boss && (ts - sync_last) >= (CHAN_TIME*CHAN_COUNT)) {
+                sync_time = 0;
+                ticks = 0;
+                remaining = chan_time;
+            } else {
+                remaining = chan_time - (ticks % chan_time);
+
+                if (remaining <= 1) {
+                    continue;
+                }
             }
 
             if (chan_set((ticks / chan_time) % chan_count)) {
@@ -864,10 +871,12 @@ static void rf_task(void *param __unused)
             switch (loop_state) {
                 case LOOP_STATE_RX:
                     if (pkt) {
-                        cc_dbg("WARNING: rx during tx. t=%lu len=%u is_sync=%u tx_next=%lu",
-                               sync_timestamp(), pkt->len,
-                               ((phy_pkt_hdr_t *)pkt)->flag & PHY_PKT_FLAG_SYNC != 0, tx_next
-                        );
+                        // This seems to now happen from time to time when ACKs turn around really fast
+
+                        //cc_dbg("WARNING: rx during tx. t=%lu len=%u is_sync=%u tx_next=%lu",
+                        //       sync_timestamp(), pkt->len,
+                        //       ((phy_pkt_hdr_t *)pkt)->flag & PHY_PKT_FLAG_SYNC != 0, tx_next
+                        //);
 
                         loop_state_next = LOOP_STATE_TX;
                         continue;
@@ -944,11 +953,8 @@ static void rf_task(void *param __unused)
 
                     if (sync_needed) {
                         assert(!pkt);
+                        //assert(sync_time);
 
-                        ticks = sync_timestamp() - (sync_time ? sync_time : start_time);
-                        //remaining = chan_time - (ticks % chan_time);
-
-                        pkt_sync.ts = ticks; // TODO: update?
                         pkt = (rf_pkt_t *) &pkt_sync;
 
                         //cc_strobe(dev, CC1200_SIDLE); // not needed, but slows the tx a tiny bit to improve chance of receipt
@@ -964,10 +970,20 @@ static void rf_task(void *param __unused)
 
                         cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_RX);
 
+                        if (boss && !sync_time) {
+                            sync_time = sync_timestamp();
+                            ticks = 0;
+                        } else {
+                            ticks = sync_timestamp() - sync_time;
+                        }
+
+                        tx_next = cc_get_tx_time(dev, pkt->len);
+                        pkt_sync.ts = ticks + tx_next + 1;
+
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
 
-                        tx_next = sync_timestamp() + cc_get_tx_time(dev, pkt->len);
+                        tx_next += sync_timestamp();
 
                         //cc_dbg_v("sync: ch=%lu ts=%lu now=%lu next=%lu", chan_cur, pkt_sync.ts, sync_timestamp(), tx_next);
 
@@ -1050,7 +1066,7 @@ static void rf_task(void *param __unused)
 
                         xQueueReceive(nphy.txq, &pkt, 0);
 
-                        cca = false;//!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE);
+                        //cca = false;//!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE);
 
                         /*if (cca) {
                             retry = MAX_CCA_RETRY;

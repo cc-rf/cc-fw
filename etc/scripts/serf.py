@@ -268,7 +268,7 @@ def send_frames(serial):
     while 1:
         count += 1
         data = '\x3A' * 30  # ''.join([chr(random.randrange(0, 0xff)) for _ in range(random.randrange(8, 48))])
-        serf_send(serial, NMAC_SEND_DGRM, 0x0000, data)
+        serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
         # time.sleep(5)
 
 
@@ -302,7 +302,9 @@ def stats_thread():
             recv_size = 0
             rssi_sum = 0
             lqi_sum = 0
-            print("recv: {} Bps / {} pps \t rssi {}  lqi {}".format(int(round(d_rate)), int(round(p_rate)), rssi_avg, lqi_avg))
+            print("recv: {:5d} Bps / {:3d} pps \t rssi {:<4d}  lqi {:<2d}".format(
+                int(round(d_rate)), int(round(p_rate)), rssi_avg, lqi_avg)
+            )
             # TODO: Maybe also add totals to this output ^
 
 
