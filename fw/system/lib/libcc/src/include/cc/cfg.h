@@ -74,6 +74,7 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  *              (Restored: does not help)
  * IFAMP: 0x0D->0x04. Single side BW must be > f_IF + (RXBW/2) so 555.5. Restoring: seems to still not be useful.
  * IF_MIX_CFG: 0x18->0x1C: Again because showed (a bit) improvement at very low signals, although changing IFAMP still did not.
+ * DEVIATION_M/DEV_E: 0x9A/0x0D->0xFF/0x0D (156 kHz). Trying to improve lqi.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -87,7 +88,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC0,             0x66},
         {CC1200_SYNC_CFG1,         0xA5},
         {CC1200_SYNC_CFG0,         0x03},
-        {CC1200_DEVIATION_M,       0x9A},
+        {CC1200_DEVIATION_M,       0xFF},
         {CC1200_MODCFG_DEV_E,      0x0D},
         {CC1200_DCFILT_CFG,        0x5D},
         {CC1200_PREAMBLE_CFG1,     0x18},
@@ -100,7 +101,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYMBOL_RATE1,      0x99},
         {CC1200_SYMBOL_RATE0,      0x9A},
         {CC1200_AGC_REF,           0x33},
-        {CC1200_AGC_CS_THR,        (u8)-113},
+        {CC1200_AGC_CS_THR,        (u8)-117},
         {CC1200_AGC_CFG2,          0x00},
         {CC1200_AGC_CFG1,          0x51},
         {CC1200_AGC_CFG0,          0x87},
