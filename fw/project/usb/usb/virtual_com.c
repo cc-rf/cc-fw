@@ -711,7 +711,7 @@ void APPTask(void *handle)
                         (char const *)"usb:dev", /* task name for kernel awareness debugging */
                         TASK_STACK_SIZE_LARGE,  /* task stack size                          */
                         s_cdcVcom.deviceHandle,          /* optional task startup argument           */
-                        TASK_PRIO_HIGH-1,                /* initial priority                         */
+                        TASK_PRIO_DEFAULT+1,                /* initial priority                         */
                         &s_cdcVcom.deviceTaskHandle      /* optional task handle to create           */
                         ) != pdPASS)
         {
@@ -752,7 +752,7 @@ bool vcom_init(usb_rx_cb_t rx_cb)
                     "usb:vcom",                       /* task name for kernel awareness debugging */
                     TASK_STACK_SIZE_DEFAULT,           /* task stack size                          */
                     &s_cdcVcom,                      /* optional task startup argument           */
-                    TASK_PRIO_HIGH-2,                  /* initial priority                         */
+                    TASK_PRIO_DEFAULT,                  /* initial priority                         */
                     &s_cdcVcom.applicationTaskHandle /* optional task handle to create           */
                     ) != pdPASS)
     {

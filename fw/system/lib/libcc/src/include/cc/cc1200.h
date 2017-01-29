@@ -261,6 +261,8 @@
 #define CC1200_IOCFG_GPIO_CFG_CARRIER_SENSE_VALID   __CC1200_FLGDEF(0x10 /* CS valid */)
 #define CC1200_IOCFG_GPIO_CFG_CARRIER_SENSE         __CC1200_FLGDEF(0x11 /* CS asserted */)
 #define CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP            __CC1200_FLGDEF(0x14 /* MCU wake up signal */)
+#define CC1200_IOCFG_GPIO_CFG_LNA_PD                __CC1200_FLGDEF(0x18 /* LNA control (active low) */)
+#define CC1200_IOCFG_GPIO_CFG_PA_PD                 __CC1200_FLGDEF(0x19 /* PA control (active low) */)
 #define CC1200_IOCFG_GPIO_CFG_RX0TX1                __CC1200_FLGDEF(0x1A /* Indicates RX or TX (0 indicates IDLE) */)
 #define CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1     __CC1200_FLGDEF(0x25 /* Partial MARC state status */)
 #define CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS0     __CC1200_FLGDEF(0x26 /* Partial MARC state status */)

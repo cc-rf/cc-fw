@@ -582,12 +582,13 @@ bool CLOCK_EnableUsbhs0Clock(clock_usb_src_t src, uint32_t freq)
 
     // phillip: use VREG_IN0, also set USBDISILIM per errata: Mask Set Errata for Mask 0N65N, Rev. 17Nov2015
     // note: the vreg selection is just which one to pick when both powered.
+    // update: don't bother changing the vregsel.
     // Enable vreg output pulldown.
     SIM->USBPHYCTL = SIM_USBPHYCTL_USBDISILIM_MASK
                      | ((SIM->USBPHYCTL & ~(SIM_USBPHYCTL_USB3VOUTTRG_MASK))
                         | SIM_USBPHYCTL_USB3VOUTTRG(6U) /* 3.310V */
                         | SIM_USBPHYCTL_USBVREGPD_MASK
-                        /*| SIM_USBPHYCTL_USBVREGSEL_MASK*/); /* VREG_IN1 */
+                        | SIM_USBPHYCTL_USBVREGSEL_MASK); /* VREG_IN1 */
 
     USBPHY->PLL_SIC |= USBPHY_PLL_SIC_PLL_EN_USB_CLKS_MASK; /* Enable USB clock output from USB PHY PLL */
 

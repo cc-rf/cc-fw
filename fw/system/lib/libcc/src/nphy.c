@@ -61,8 +61,8 @@ typedef struct __packed {
 } phy_recv_queue_t;
 
 static void isr_mcu_wake(void);
-static void isr_marc_2pin_status_0(void);
-static void isr_marc_2pin_status_1(void);
+static void isr_ctl_lna(void);
+static void isr_ctl_pa(void);
 
 static void cca_setup(void);
 static void cca_run(void);
@@ -75,7 +75,7 @@ static void nphy_dispatch_task(void *param);
 
 static void rf_task(void *param);
 
-#define CC_RSSI_OFFSET      (s8)(-81 - 15 + 11)
+#define CC_RSSI_OFFSET      (s8)(-81 + 27/*- 15 *//*+ 11*/)
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -118,7 +118,6 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 
 
 static const cc_dev_t dev = 0;
-static xTaskHandle waiting_task = NULL;
 
 static struct {
     xTaskHandle task;
@@ -155,6 +154,7 @@ static const u32 chan_time      = CHAN_TIME;
 #include <itm.h>
 #include <stdatomic.h>
 #include <malloc.h>
+#include <cc/amp.h>
 
 
 static struct {
@@ -263,12 +263,12 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     nphy.rxq = xQueueCreate(7, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
     nphy.rx = rx;
 
-    if (!xTaskCreate(/*nphy_task*/rf_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH, &nphy.task)) {
+    if (!xTaskCreate(/*nphy_task*/rf_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
         cc_dbg("[%u] error: unable to create main task", dev);
         return false;
     }
 
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH+1, &nphy.disp)) {
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
         return false;
     }
@@ -277,14 +277,20 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     chan_grp_calibrate(&chnl.group);
     chan_set(0);
 
+    amp_init(dev);
+    amp_ctrl(dev, AMP_LNA, false);
+    amp_ctrl(dev, AMP_PA, false);
+    amp_ctrl(dev, AMP_HGM, true);
+
+
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
     isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake);
 
-    /*cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(1), CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS0);
-    isrd_configure(2, 11, kPORT_InterruptRisingEdge | kPORT_InterruptFallingEdge, isr_marc_2pin_status_0);
+    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(1), CC1200_IOCFG_GPIO_CFG_LNA_PD);
+    isrd_configure(2, 11, kPORT_InterruptEitherEdge, isr_ctl_lna);
 
-    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(2), CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1);
-    isrd_configure(2, 12, kPORT_InterruptRisingEdge | kPORT_DMAFallingEdge, isr_marc_2pin_status_1);*/
+    cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(2), CC1200_IOCFG_GPIO_CFG_PA_PD);
+    isrd_configure(2, 12, kPORT_InterruptEitherEdge, isr_ctl_pa);
 
     cc_strobe(dev, CC1200_SRX);
     return true;
@@ -326,8 +332,18 @@ static void isr_mcu_wake(void)
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 
+static void isr_ctl_lna(void)
+{
+    amp_ctrl(dev, AMP_LNA, !isrd_state(2, 11));
+}
 
-typedef enum __packed {
+static void isr_ctl_pa(void)
+{
+    amp_ctrl(dev, AMP_PA, !isrd_state(2, 12));
+}
+
+
+/*typedef enum __packed {
     MARC_2PIN_STATUS_SETTLING,
     MARC_2PIN_STATUS_TX,
     MARC_2PIN_STATUS_IDLE,
@@ -357,7 +373,7 @@ static void isr_marc_2pin_status_1(void)
 
 static marc_2pin_status_t marc_2pin_status(void) {
     return (marc_2pin_status_t)marc_2pin_status_field;
-}
+}*/
 
 static bool sync_needed = false;
 

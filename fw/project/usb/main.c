@@ -21,7 +21,6 @@
 #include <cc/sys/kinetis/pit.h>
 #include <cc/type.h>
 #include <timers.h>
-#include <cc/amp.h>
 #include <cc/cfg.h>
 #include <fsl_port.h>
 #include <semphr.h>
@@ -32,6 +31,7 @@
 #include <malloc.h>
 #include <util/uart.h>
 #include <uhdcd.h>
+#include <pca9685.h>
 
 #define PFLAG_PORT PORTB
 #define PFLAG_GPIO GPIOB
@@ -45,6 +45,7 @@
 #define UFLAG1_GPIO     GPIOB
 #define UFLAG1_PIN      4
 
+static void pin_flag_init(void);
 static void main_task(void *param);
 
 static void uart_relay_run(void);
@@ -59,11 +60,10 @@ bool dbgPendSVHookState = 0;
 int main(void)
 {
     BOARD_InitPins();
+    LED_A_ON();
     BOARD_BootClockRUN();
 
-    //LED_A_ON();
     //BOARD_BootClockOCHSRUN();
-    //LED_B_ON();
 
     //write_sem = xSemaphoreCreateBinary();
     //xSemaphoreGive(write_sem);
@@ -93,6 +93,28 @@ int main(void)
        CLOCK_GetFreq(kCLOCK_LpoClk)
     );
 
+    LED_B_ON();
+
+    pin_flag_init();
+
+    LED_C_ON();
+
+    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
+
+    //LED_C_ON();
+
+    // Theoretically this will make sure the sub-priority on all interrupt configs is zero.
+    //   Not sure it's actually really needed or what it does in the long run.
+    //   See comment in FreeRTOS port.c.
+    //NVIC_SetPriorityGrouping(0);
+
+    vTaskStartScheduler();
+}
+
+static bool __pflag_set, __uflag1_set;
+
+static void pin_flag_init(void)
+{
     const port_pin_config_t port_pin_config = {
             kPORT_PullDown,
             kPORT_FastSlewRate,
@@ -131,27 +153,18 @@ int main(void)
     GPIO_PinInit(UFLAG1_GPIO, UFLAG1_PIN, &gpio_pin_config);
     GPIO_PinInit(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, &gpio_pin_config_out);
 
-
-    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
-
-    //LED_C_ON();
-
-    // Theoretically this will make sure the sub-priority on all interrupt configs is zero.
-    //   Not sure it's actually really needed or what it does in the long run.
-    //   See comment in FreeRTOS port.c.
-    //NVIC_SetPriorityGrouping(0);
-
-    vTaskStartScheduler();
+    __pflag_set = GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
+    __uflag1_set = GPIO_ReadPinInput(UFLAG1_GPIO, UFLAG1_PIN) != 0;
 }
 
-static bool pflag_set(void)
+static inline bool pflag_set(void)
 {
-    return GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
+    return __pflag_set;
 }
 
-static bool uflag1_set(void)
+static inline bool uflag1_set(void)
 {
-    return GPIO_ReadPinInput(UFLAG1_GPIO, UFLAG1_PIN) != 0;
+    return __uflag1_set;
 }
 
 static pit_t xsec_timer_0;
@@ -174,6 +187,7 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
 static void main_task(void *param)
 {
     (void)param;
+    LED_D_ON();
     //printf("<main task>\r\n");
 
     if (!vcom_init(usb_recv)) {
@@ -182,6 +196,24 @@ static void main_task(void *param)
     }
 
     vTaskDelay(pdMS_TO_TICKS(500));
+
+    LED_ABCD_ALL_OFF();
+    LED_A_ON();
+    LED_C_ON();
+
+    /*pca9685_handle_t pca = pca9685_init(1);
+
+    if (pca) {
+        printf("<pca> initialized.\r\n");
+        pca9685_set(pca, PCA9685_CHAN_ALL, 0x7D0, 0x7D0);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        pca9685_set(pca, PCA9685_CHAN_ALL, 0, 0);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        pca9685_set(pca, 0, 1000, 500);
+
+    } else {
+        printf("<pca> error: not initialized.\r\n");
+    }*/
 
     //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
 
@@ -196,11 +228,6 @@ static void main_task(void *param)
 
     pit_start(xsec_timer);
     pit_start(xsec_timer_0);
-
-    amp_init(0);
-    amp_ctrl(0, AMP_LNA, true);
-    amp_ctrl(0, AMP_PA, true);
-    amp_ctrl(0, AMP_HGM, true);
 
     boss = pflag_set();
 
@@ -264,7 +291,10 @@ static void uart_relay_run(void)
     while (1) {
         uart_read(uart, (u8 *)message.input, 1);
         itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
-        nmac_send(NMAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message);
+        if (nmac_send(NMAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
+            LED_C_TOGGLE();
+            LED_D_TOGGLE();
+        }
     }
 }
 
@@ -285,10 +315,16 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
     ++recv_count;
     recv_bytes += size;
 
+    //LED_A_TOGGLE();
+    //LED_B_TOGGLE();
+
     if (uflag1_set() && size > sizeof(uart_pkt_t) && uart) {
         uart_pkt_t *const uart_pkt = (uart_pkt_t *)data;
 
         if (uart_pkt->type == 0x2a) {
+            LED_A_TOGGLE();
+            LED_B_TOGGLE();
+
             uart_write(uart, uart_pkt->data, size - sizeof(uart_pkt_t));
         }
     }
@@ -500,6 +536,9 @@ static void handle_code_send(size_t size, u8 *data)
         if (result) {
             ++send_count;
             send_bytes += code_send->size;
+
+            //LED_C_TOGGLE();
+            //LED_D_TOGGLE();
         }
     }
 

@@ -134,6 +134,6 @@ void BOARD_InitPins(void)
     PORT_SetPinConfig(PORTE, 0u, &port_pin_config);
     PORT_SetPinConfig(PORTE, 1u, &port_pin_config);*/
 
-    ((volatile port_pin_config_t *)(&PORTE->PCR[0]))->openDrainEnable = 1;
-    ((volatile port_pin_config_t *)(&PORTE->PCR[1]))->openDrainEnable = 1;
+    //((volatile port_pin_config_t *)(&PORTE->PCR[0]))->openDrainEnable = 1;
+    //((volatile port_pin_config_t *)(&PORTE->PCR[1]))->openDrainEnable = 1;
 }

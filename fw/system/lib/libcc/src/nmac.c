@@ -169,7 +169,7 @@ bool nmac_init(u16 addr, bool sync_master, mac_recv_t rx)
         }
     }
 
-    if (!xTaskCreate(tx_task, "nmac:send", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL)) {
+    if (!xTaskCreate(tx_task, "nmac:send", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT+2, NULL)) {
         nmac_debug("error: unable to create send task");
         return false;
     }

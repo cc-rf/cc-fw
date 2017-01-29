@@ -82,9 +82,9 @@
 #define TASK_PRIO_MAX               (configMAX_PRIORITIES - 1)
 #define TASK_PRIO_MIN               0
 #define TASK_PRIO_HIGHEST           (TASK_PRIO_MAX - 1)
-#define TASK_PRIO_HIGH              (TASK_PRIO_DEFAULT + 1)
+#define TASK_PRIO_HIGH              ((TASK_PRIO_DEFAULT + TASK_PRIO_HIGHEST) / 2)
 #define TASK_PRIO_DEFAULT           ((TASK_PRIO_MAX - TASK_PRIO_MIN)/2)
-#define TASK_PRIO_LOW               (TASK_PRIO_DEFAULT - 1)
+#define TASK_PRIO_LOW               ((TASK_PRIO_DEFAULT + TASK_PRIO_LOWEST) / 2)
 #define TASK_PRIO_LOWEST            (TASK_PRIO_MIN + 1)
 
 /*-----------------------------------------------------------
