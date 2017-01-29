@@ -75,7 +75,7 @@ static void nphy_dispatch_task(void *param);
 
 static void rf_task(void *param);
 
-#define CC_RSSI_OFFSET      (s8)(-81 /*- 15 *//*+ 11*/)
+#define CC_RSSI_OFFSET      (s8)(-81 - 15 /*+ 11*/)
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},

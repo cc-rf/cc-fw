@@ -278,7 +278,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
  * IF_MIX_CFG: 0x18->0x1C: f_IF only needs to be greater than HALF the RX filt BW when IQIC is not enabled (https://e2e.ti.com/support/wireless_connectivity/proprietary_sub_1_ghz_simpliciti/f/156/p/374447/1317974#1317974)
  *              (Restored: does not help)
  * IFAMP: 0x0D->0x04. Single side BW must be > f_IF + (RXBW/2) so 555.5. Restoring: seems to still not be useful.
- *
+ * IF_MIX_CFG: 0x18->0x1C: Again because showed (a bit) improvement at very low signals, although changing IFAMP still did not.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -305,7 +305,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYMBOL_RATE1,      0x99},
         {CC1200_SYMBOL_RATE0,      0x9A},
         {CC1200_AGC_REF,           0x33},
-        {CC1200_AGC_CS_THR,        (u8)-117},
+        {CC1200_AGC_CS_THR,        (u8)-113},
         {CC1200_AGC_CFG2,          0x00}, //  Calibrated setting: 0x40. Default: 0x20 (Normal mode, max gain 39dB). 0x4:Performance/max=27dB |=0x80:start-from-last-gain
         {CC1200_AGC_CFG1,          0x51/*latest SmartRF value.*//*0x16*/},
         {CC1200_AGC_CFG0,          0x87},
@@ -313,10 +313,10 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},
         {CC1200_PKT_CFG0,          0x20},
-        {CC1200_PA_CFG1,           /*0x43*/0x63/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG1,           /*0x43*/0x7f/*0x63*//*0x55*/}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
-        {CC1200_IF_MIX_CFG,        0x18}, // IF: highest freq
+        {CC1200_IF_MIX_CFG,        0x1C}, // IF: highest freq
         {CC1200_FREQOFF_CFG,       0x24},
         {CC1200_TOC_CFG,           0x03},
         {CC1200_MDMCFG2,           0x02},
@@ -338,7 +338,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_REG_DIV_CML,    0x1C},
         {CC1200_FS_SPARE,          0xAC},
         {CC1200_FS_VCO0,           0xB5},
-        {CC1200_IFAMP,             /*0x04*/0x0D},
+        {CC1200_IFAMP,             0x0D},
         {CC1200_XOSC5,             0x0E},
         {CC1200_XOSC1,             0x03},
 };
