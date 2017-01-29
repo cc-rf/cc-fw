@@ -140,7 +140,7 @@ static void ensure_rx(void);
 #define FREQ_BASE       905000000
 #define FREQ_BW         800000
 #define CHAN_COUNT      25
-#define CHAN_TIME       200//100//200//60//400/*100*///200  //30
+#define CHAN_TIME       200
 #define MAX_CCA_RETRY   3//4//3//2//3
 #define MAX_CCA_TIME    11 //NOTE: When using LBT, backoff time minimum is 5
 
@@ -307,8 +307,6 @@ void nphy_tx(u8 flag, u8 *buf, u8 len)
     qpkt->hdr.flag = flag & (u8)PHY_PKT_FLAG_IMMEDIATE;
 
     if (qpkt->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
-        // TEMPORARY!!!
-        //qpkt->hdr.flag &= ~PHY_PKT_FLAG_IMMEDIATE;
 
         if (xQueueSendToFront(nphy.txq, &qpkt, pdMS_TO_TICKS(500))) {
             xTaskNotify(nphy.task, NOTIFY_MASK_TX, eSetBits);
@@ -431,13 +429,11 @@ static void process_packet(rf_pkt_t *pkt, u8 rssi, u8 lqi)
         if (!xQueueSendToFront(nphy.rxq, &recv, pdMS_TO_TICKS(100))) {
             cc_dbg("rx pkt queue immediate fail");
             nphy_free(recv);
-            // TODO: anything else?
         }
     } else {
         if (!xQueueSend(nphy.rxq, &recv, pdMS_TO_TICKS(100))) {
             cc_dbg("rx pkt queue fail");
             nphy_free(recv);
-            // TODO: anything else?
         }
     }
 }
@@ -522,12 +518,6 @@ bool nphy_recv(u8 **buf, u8 *len, u32 timeout)
     }
 
     return false;
-}
-
-void nphy_free_buf(u8 *buf)
-{
-    phy_pkt_t *pkt = buf - offsetof(phy_pkt_t, data);
-    nphy_free(pkt);
 }
 
 static void ensure_rx(void)
@@ -683,12 +673,11 @@ const static char *const loop_state_str[3] = {
 static void rf_task(void *param __unused)
 {
     rf_pkt_t *pkt = NULL;
-    u8 ms = 0, st, retry = 0;
+    u8 ms = 0, st;
 
     u32 ts;
     s32 ticks = 0;
     u32 remaining = 0;
-    u32 tx_time = 0;
     u32 chan_ticks = 0;
     u32 notify;
 
@@ -709,15 +698,12 @@ static void rf_task(void *param __unused)
     }
 
     rf_state_t rf_state = RF_STATE_NONE;
-    rf_state_t rf_state_prev;
 
     u32 tx_next = 0;
 
     loop_state_t loop_state = LOOP_STATE_NONE;
 
     while (1) {
-        rf_state_prev = rf_state;
-
         if (remaining > chan_time) {
             cc_dbg("remaining=%lu > %lu !!", remaining, chan_time);
         }
@@ -735,18 +721,9 @@ static void rf_task(void *param __unused)
                 switch (ms) {
                     case CC1200_MARC_STATUS1_RX_FINISHED:
                         nphy_rx(true);
+                        tx_next = 0;
                         rf_state = RF_STATE_RX_END;
-                        // NEW: Block any new tx for 1 ms
-                        //tx_time = sync_timestamp();
-                        //tx_next = tx_time + 1;
-                        // NEW: Maybe the opposite
-                        tx_time = 0;
-                        tx_next = sync_timestamp();
-                        //tx_time = sync_timestamp();
-                        //tx_next = tx_time + 5;
-
-                        /*if (sync_needed) loop_state = LOOP_STATE_TX;
-                        else */loop_state = LOOP_STATE_RX;
+                        loop_state = LOOP_STATE_RX;
                         break;
 
                     case CC1200_MARC_STATUS1_TX_FINISHED:
@@ -773,8 +750,6 @@ static void rf_task(void *param __unused)
 
                     default:
                     case CC1200_MARC_STATUS1_NO_FAILURE:
-                        //rf_state = rf_state_prev; // may not be true....
-                        rf_state = RF_STATE_NONE;
                         goto _loop_end;
                 }
             } else if (notify & NOTIFY_MASK_TX) {
@@ -814,14 +789,10 @@ static void rf_task(void *param __unused)
                     break;
 
                 default:
-                    //cc_dbg("WEIRD STATE");
-                    rf_state = rf_state_prev;
-                    // don't know, maybe settling?
                     goto _loop_end;
             }
 
         }
-
 
         if (sync_time) {
             ts = sync_timestamp();
@@ -842,7 +813,7 @@ static void rf_task(void *param __unused)
                     cc_dbg("chan: unexpectected rf_state=%u", rf_state);
                 }*/
 
-                const bool first = loop_state == LOOP_STATE_NONE;
+                //const bool first = loop_state == LOOP_STATE_NONE;
 
                 loop_state = LOOP_STATE_RX;
 
@@ -852,13 +823,9 @@ static void rf_task(void *param __unused)
                     if (tx_bytes) cc_strobe(dev, CC1200_SFTX);
 
                     cc_dbg(
-                            "chan: switched during TX! TXBYTES=%u plen=%u is_sync=%u elapsed=%lu tx_time=%lu time=%lu next=%lu rem=%lu",
-                            tx_bytes, pkt->len, (void *) pkt == &pkt_sync, sync_timestamp() - tx_time, tx_time, sync_timestamp(), tx_next, remaining
+                            "chan: switched during TX! TXBYTES=%u plen=%u is_sync=%u time=%lu next=%lu rem=%lu",
+                            tx_bytes, pkt->len, (void *) pkt == &pkt_sync, sync_timestamp(), tx_next, remaining
                     );
-
-                    // NEW: don't bother with these
-                    //tx_time = 0;
-                    //tx_next = 0;
 
                     if ((void *) pkt != &pkt_sync) nphy_free(pkt);
                     pkt = NULL;
@@ -888,7 +855,6 @@ static void rf_task(void *param __unused)
         }
 
         loop_state_t loop_state_next = loop_state;
-        //itm_puts(0,"LOOP RUN\r\n");
 
         do {
             //cc_dbg_v("loop: state=%s next=%s t=%lu", loop_state_str[loop_state], loop_state_str[loop_state_next], sync_timestamp());
@@ -897,56 +863,32 @@ static void rf_task(void *param __unused)
 
             switch (loop_state) {
                 case LOOP_STATE_RX:
-                    //assert(!pkt);
                     if (pkt) {
-                        cc_dbg("WARNING: rx during tx. t=%lu len=%u is_sync=%u tx_time=%lu tx_next=%lu",
+                        cc_dbg("WARNING: rx during tx. t=%lu len=%u is_sync=%u tx_next=%lu",
                                sync_timestamp(), pkt->len,
-                               ((phy_pkt_hdr_t *)pkt)->flag & PHY_PKT_FLAG_SYNC != 0,
-                               tx_time, tx_next
+                               ((phy_pkt_hdr_t *)pkt)->flag & PHY_PKT_FLAG_SYNC != 0, tx_next
                         );
 
                         loop_state_next = LOOP_STATE_TX;
                         continue;
                     }
 
-                    if (!pkt) {
-                        if (tx_next && sync_timestamp() >= tx_next) {
-                            loop_state_next = LOOP_STATE_TX;
-                            continue;
-                        }
-                    }
-
                     switch (rf_state) {
-                        case RF_STATE_RX_RUN:
-                            //cc_dbg_v("rx-run: st=0x%02X", cc_strobe(dev, CC1200_SNOP));
-                            break;
-
                         case RF_STATE_RX_ERR:
-                            //if (ms == CC1200_MARC_STATUS1_CRC) ++nphy_fail_crc;
-                            //++nphy_fail_all;
                             //cc_dbg("rx fail: ms=0x%02X t=%lu e_t=%lu", ms, sync_timestamp(), sync_timestamp() - sync_time);
-                            // ^ this happens a lot
-                            // NEW: go straight back to RX
-                            rf_state = RF_STATE_RX_RUN;
-                            loop_state_next = LOOP_STATE_RX;
-                            continue;
+                        case RF_STATE_RX_RUN:
+                            break;
 
                         default:
-                            // TODO: Strobe here when below is not true
-                            //cc_strobe(dev, CC1200_SRX);
-
                         case RF_STATE_RX_END:
-                            // TODO: Strobe here when RX OFF mode is not RX
-                            //cc_dbg_v("SRX");
-                            //itm_puts(0, "^");
-                            //cc_strobe(dev, CC1200_SRX);
-
-                            // NEW: maybe time to tx now
                             rf_state = RF_STATE_RX_RUN;
                             loop_state_next = LOOP_STATE_TX;
                             continue;
+                    }
 
-                            break;
+                    if (sync_needed || (tx_next && sync_timestamp() >= tx_next)) {
+                        loop_state_next = LOOP_STATE_TX;
+                        continue;
                     }
 
                     ensure_rx();
@@ -967,17 +909,12 @@ static void rf_task(void *param __unused)
 
                         case RF_STATE_TX_END:
                             if (pkt) {
-                                //tx_next = 0;
-
                                 if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
                                     if ((void*)pkt == &pkt_sync) {
-                                        //tx_time = 0;
-                                        //tx_next = 0;
                                         //cc_dbg_v("tx: <sync>sent t=%lu", sync_timestamp());
                                     } else {
                                         //cc_dbg_v("tx: <immd>sent t=%lu", sync_timestamp());
                                         nphy_free(pkt);
-                                        //tx_time = 0; // hmm
                                         //tx_next = 0; // allow after any immediate
                                     }
                                 } else {
@@ -1009,7 +946,7 @@ static void rf_task(void *param __unused)
                         assert(!pkt);
 
                         ticks = sync_timestamp() - (sync_time ? sync_time : start_time);
-                        remaining = chan_time - (ticks % chan_time);
+                        //remaining = chan_time - (ticks % chan_time);
 
                         pkt_sync.ts = ticks; // TODO: update?
                         pkt = (rf_pkt_t *) &pkt_sync;
@@ -1030,22 +967,14 @@ static void rf_task(void *param __unused)
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
 
-                        // TODO: WHAT to do here?
-                        //tx_time = 0;//sync_timestamp(); // maybe different for this? -- no; will affect ability to time out
-                        //tx_next = 0;//to stay in line with imm send behav below -- //tx_time + 2;
+                        tx_next = sync_timestamp() + cc_get_tx_time(dev, pkt->len);
 
-                        // NEW: treat this and imm packets kinda like normal
-                        tx_time = sync_timestamp();
-                        tx_next = tx_time + cc_get_tx_time(dev, pkt->len);
-
-                        //cc_dbg_v("sync: ch=%lu ts=%lu t=%lu", chan_cur, pkt_sync.ts, sync_timestamp());
-                        //cc_dbg_v("sync: t=%lu n=%lu", tx_time, tx_next);
+                        //cc_dbg_v("sync: ch=%lu ts=%lu now=%lu next=%lu", chan_cur, pkt_sync.ts, sync_timestamp(), tx_next);
 
                         sync_needed = false;
 
                     } else if (!pkt && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
-                        //ticks = sync_timestamp() - tx_time;
-                        u32 pkt_time = cc_get_tx_time(dev, pkt->len) /*+ 1*/; // NOTE: things work because this rounds up, and is never zero.
+                        u32 pkt_time = cc_get_tx_time(dev, pkt->len); // NOTE: things work because this rounds up, and is never zero.
 
                         if (sync_time && ((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
 
@@ -1056,23 +985,19 @@ static void rf_task(void *param __unused)
                                 continue;
                             }*/
 
-                            ticks = ts - /*(sync_time ? */sync_time/* : start_time)*/;
+                            ticks = ts - sync_time;
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            /*if ((ts - tx_time) < (pkt_time * 1)) {
-
-                                tx_next = ts + ((pkt_time * 1) - (ts - tx_time));
-                                pkt = NULL;
-                                continue;
-
-                            } else*/ if (chan_ticks < 20) {
+                            if (chan_ticks < 20) {
 
                                 tx_next = ts + (20 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining < (20 + pkt_time)) {
+                            }
+
+                            if (remaining < (20 + pkt_time)) {
 
                                 tx_next = ts + ((20 + pkt_time) - remaining);
                                 pkt = NULL;
@@ -1104,19 +1029,15 @@ static void rf_task(void *param __unused)
 
                             // LBT minimum is 5ms
 
-                            if ((ts - tx_time) < (pkt_time * 3)) {
-
-                                tx_next = ts + ((pkt_time * 3) - (ts - tx_time));
-                                pkt = NULL;
-                                continue;
-
-                            } else if (chan_ticks < 20) {
+                            if (chan_ticks < 20) {
 
                                 tx_next = ts + (20 - chan_ticks);
                                 pkt = NULL;
                                 continue;
 
-                            } else if (remaining < (20 + pkt_time)) {
+                            }
+
+                            if (remaining < (20 + pkt_time)) {
 
                                 tx_next = ts + ((20 + pkt_time) - remaining);
                                 pkt = NULL;
@@ -1146,25 +1067,27 @@ static void rf_task(void *param __unused)
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
-                        tx_time = sync_timestamp();
-                        if (tx_next) tx_next = tx_time + tx_next;
-                        //cc_dbg_v("tx: sent t=%lu n=%lu", tx_time, tx_next);
+                        if (tx_next) tx_next = sync_timestamp() + tx_next;
+                        //cc_dbg_v("tx: sent now=%lu next=%lu", sync_timestamp(), tx_next);
 
                     } else if (!pkt) {
+
                         if (tx_next) {
                             tx_next = 0;
                         }
 
                         loop_state_next = LOOP_STATE_RX;
+                        continue;
+
                     } else if (pkt) {
-                        // NEW: timeout
+
                         if (!tx_next) {
-                            cc_dbg("WARNING: packet timeout cannot check due to zero tx_next");
+                            cc_dbg("WARNING: cannot check for frame timeout due to zero tx_next");
                         } else {
                             ts = sync_timestamp();
 
                             if (ts >= (tx_next+7)) {
-                                cc_dbg("tx: timed out: t=%lu tx_time=%lu tx_next=%lu", ts, tx_time, tx_next);
+                                cc_dbg("tx: timed out: now=%lu tx_next=%lu", ts, tx_next);
                                 if ((void *)pkt != &pkt_sync) nphy_free(pkt);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
@@ -1200,7 +1123,7 @@ static void rf_task(void *param __unused)
 
             if ((ts + remaining) > tx_next) {
                 remaining = tx_next - ts;
-                //cc_dbg_v("rf: wait=%lu  ts=%lu tx_time=%lu tx_next=%lu ticks=%li chan_ticks=%lu", remaining, ts, tx_time, tx_next, ticks, chan_ticks);
+                //cc_dbg_v("rf: wait=%lu now=%lu tx_next=%lu ticks=%li chan_ticks=%lu", remaining, ts, tx_next, ticks, chan_ticks);
             }
         }
     }
