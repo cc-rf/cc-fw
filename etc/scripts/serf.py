@@ -172,32 +172,96 @@ def serf_send(serial, typ, dest, data):
 def serf_echo(serial, data):
     serial.write(encode_code_echo(data))
 
+# -
 
-recv_time = 0
-recv_count = 0
-recv_size = 0
 
-rssi_sum = 0
-lqi_sum = 0
+class Stats:
+    recv_count = 0
+    recv_time = 0
+    recv_size = 0
+    rssi_sum = 0
+    lqi_sum = 0
+
+    _start_time = 0
+    _recv_count_prev = 0
+
+    def __init__(self):
+        pass
+
+    def start(self):
+        self._recv_count_prev = -1
+        self._start_time = time.time()
+        self.run()
+
+    def run(self):
+        thr = threading.Timer(5, self._run)
+        thr.setDaemon(True)
+        thr.start()
+
+        now = time.time()
+
+        recv_count = self.recv_count
+
+        if not recv_count or recv_count == self._recv_count_prev:
+            return
+
+        recv_time = self.recv_time
+        recv_size = self.recv_size
+        rssi_sum = self.rssi_sum
+        lqi_sum = self.lqi_sum
+
+        self.recv_count = 0
+        self.recv_size = 0
+        self.rssi_sum = 0
+        self.lqi_sum = 0
+
+        self._recv_count_prev = recv_count
+
+        diff = now - recv_time
+        d_rate = int(round(float(recv_size) / diff))
+        p_rate = int(round(float(recv_count) / diff))
+
+        rssi_avg = rssi_sum / recv_count
+        lqi_avg = lqi_sum / recv_count
+
+        elapsed = int(round(now - self._start_time))
+        elapsed_hour = elapsed / 3600
+        elapsed_min = (elapsed / 60) % 60
+        elapsed_sec = elapsed % 60
+
+        print(
+            "{:02d}:{:02d}:{:02d}  {:5d} Bps / {:3d} pps \t rssi {:<4d}  lqi {:<2d}".format(
+                elapsed_hour, elapsed_min, elapsed_sec, d_rate, p_rate, rssi_avg, lqi_avg
+            )
+        )
+
+        # TODO: Maybe also add totals to this output ^
+
+    def _run(self):
+        try:
+            self.run()
+        except KeyboardInterrupt:
+            sys.exit(0)
+
+        except:
+            traceback.print_exc()
+            sys.exit(1)
+
+stats = Stats()
 
 
 def handle_recv(node, peer, dest, rssi, lqi, data):
     # print("recv: @{:04X}:{:04X}->{:04X} #{:02X} \t {}".format(
     #     node, peer, dest, len(data), ' '.join('{:02X}'.format(ord(ch)) for ch in data)
     # ))
-    global recv_count
-    global recv_time
-    global recv_size
-    global rssi_sum
-    global lqi_sum
 
-    if not recv_count:
-        recv_time = time.time()
+    if not stats.recv_count:
+        stats.recv_time = time.time()
 
-    recv_size += len(data)
-    recv_count += 1
-    rssi_sum += rssi
-    lqi_sum += lqi
+    stats.recv_size += len(data)
+    stats.recv_count += 1
+    stats.rssi_sum += rssi
+    stats.lqi_sum += lqi
 
 
 def handle_status(version, serial, uptime, node, recv_count, recv_bytes, send_count, send_bytes):
@@ -235,7 +299,7 @@ def main(args):
         tx = True
 
     try:
-        stats_start()
+        stats.start()
 
         thr, serial = device_init(tty, baud)
 
@@ -267,52 +331,10 @@ def send_frames(serial):
 
     while 1:
         count += 1
-        data = '\x3A' * 30  # ''.join([chr(random.randrange(0, 0xff)) for _ in range(random.randrange(8, 48))])
-        serf_send(serial, NMAC_SEND_STRM, 0x0000, data)
+        # data = '\x3A' * 110
+        data = ''.join([chr(random.randrange(0, 0xff)) for _ in range(random.randrange(4, 110))])
+        serf_send(serial, NMAC_SEND_DGRM, 0x0000, data)
         # time.sleep(5)
-
-
-def stats_thread():
-    global recv_count
-    global recv_time
-    global recv_size
-    global rssi_sum
-    global lqi_sum
-
-    recv_count_prev = -1
-
-    while 1:
-        time.sleep(1)
-
-        if not recv_count:
-            continue
-
-        if recv_count == recv_count_prev:
-            continue
-
-        diff = time.time() - recv_time
-
-        if diff >= 5:
-            recv_count_prev = recv_count
-            d_rate = float(recv_size) / diff
-            p_rate = float(recv_count) / diff
-            rssi_avg = rssi_sum / recv_count
-            lqi_avg = lqi_sum / recv_count
-            recv_count = 0
-            recv_size = 0
-            rssi_sum = 0
-            lqi_sum = 0
-            print("recv: {:5d} Bps / {:3d} pps \t rssi {:<4d}  lqi {:<2d}".format(
-                int(round(d_rate)), int(round(p_rate)), rssi_avg, lqi_avg)
-            )
-            # TODO: Maybe also add totals to this output ^
-
-
-def stats_start():
-    thr = threading.Thread(target=stats_thread, args=())
-    thr.setDaemon(True)
-    thr.start()
-    return thr
 
 
 def input_thread(serial):

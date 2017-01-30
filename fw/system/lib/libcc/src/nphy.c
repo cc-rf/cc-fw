@@ -70,10 +70,8 @@ static void cca_end(void);
 
 static void nphy_rx(bool flush);
 
-static void nphy_task(void *param);
 static void nphy_dispatch_task(void *param);
-
-static void rf_task(void *param);
+static void nphy_task(void *param);
 
 #define CC_RSSI_OFFSET      (s8)(-81 - 15 /*+ 11*/)
 
@@ -265,7 +263,7 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     nphy.rxq = xQueueCreate(7, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
     nphy.rx = rx;
 
-    if (!xTaskCreate(/*nphy_task*/rf_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH+1, &nphy.task)) {
+    if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 1, &nphy.task)) {
         cc_dbg("[%u] error: unable to create main task", dev);
         return false;
     }
@@ -672,7 +670,7 @@ const static char *const loop_state_str[3] = {
 };
 
 
-static void rf_task(void *param __unused)
+static void nphy_task(void *param __unused)
 {
     rf_pkt_t *pkt = NULL;
     u8 ms = 0, st;
@@ -996,7 +994,7 @@ static void rf_task(void *param __unused)
 
                             ts = sync_timestamp();
 
-                            /*if (tx_next && tx_next > ts) {
+                            /*if (tx_next > ts) {
                                 pkt = NULL;
                                 continue;
                             }*/
@@ -1005,17 +1003,16 @@ static void rf_task(void *param __unused)
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if (chan_ticks < 20) {
+                            if (chan_ticks < 10) {
 
-                                tx_next = ts + (20 - chan_ticks);
+                                tx_next = ts + (10 - chan_ticks);
                                 pkt = NULL;
                                 continue;
-
                             }
 
-                            if (remaining < (20 + pkt_time)) {
+                            if (remaining < (10 + pkt_time)) {
 
-                                tx_next = ts + ((20 + pkt_time) - remaining);
+                                tx_next = ts + ((10 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
@@ -1026,7 +1023,7 @@ static void rf_task(void *param __unused)
                         } else {
                             ts = sync_timestamp();
 
-                            if (tx_next && tx_next > ts) {
+                            if (tx_next > ts) {
                                 pkt = NULL;
                                 continue;
                             }
