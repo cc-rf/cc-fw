@@ -75,6 +75,8 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  * IFAMP: 0x0D->0x04. Single side BW must be > f_IF + (RXBW/2) so 555.5. Restoring: seems to still not be useful.
  * IF_MIX_CFG: 0x18->0x1C: Again because showed (a bit) improvement at very low signals, although changing IFAMP still did not.
  * DEVIATION_M/DEV_E: 0x9A/0x0D->0xFF/0x0D (156 kHz). Trying to improve lqi.
+ * FS_DIG0:0xAF->0xA0(FS Loop BW in RX/TX from 500kHz to 200kHz). Latest potential SmartRF value. Barely makes a difference but does appear to be good.
+ * TOC_CFG: Leaving as default, SmartRF maybe doesn't use.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -114,7 +116,6 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_PKT_LEN,           0xFF},
         {CC1200_IF_MIX_CFG,        0x1C},
         {CC1200_FREQOFF_CFG,       0x24},
-        {CC1200_TOC_CFG,           0x03},
         {CC1200_MDMCFG2,           0x02},
         {CC1200_FREQ2,             0x5C},
         {CC1200_FREQ1,             0x0F},
@@ -122,7 +123,78 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_IF_ADC1,           0xEE},
         {CC1200_IF_ADC0,           0x10},
         {CC1200_FS_DIG1,           0x07},
-        {CC1200_FS_DIG0,           0xAF},
+        {CC1200_FS_DIG0,           0xA0},
+        {CC1200_FS_CAL3,           0x40},
+        {CC1200_FS_CAL1,           0x40},
+        {CC1200_FS_CAL0,           0x0E},
+        {CC1200_FS_DIVTWO,         0x03},
+        {CC1200_FS_DSM0,           0x33},
+        {CC1200_FS_DVC0,           0x17},
+        {CC1200_FS_PFD,            0x00},
+        {CC1200_FS_PRE,            0x6E},
+        {CC1200_FS_REG_DIV_CML,    0x1C},
+        {CC1200_FS_SPARE,          0xAC},
+        {CC1200_FS_VCO0,           0xB5},
+        {CC1200_IFAMP,             0x0D},
+        {CC1200_XOSC5,             0x0E},
+        {CC1200_XOSC1,             0x03},
+};
+
+
+
+/**
+ * Max rate configuration.
+ *
+ * Deviation        1666.6 kHz
+ * Modulation       4-GFSK
+ * Symbol Rate      500 ksps
+ *
+ * Notes:
+ *
+ *
+ *
+ */
+static const struct cc_cfg_reg CC_CFG_DEFAULT_MAXRATE[] = {
+        {CC1200_SYNC3,             0x5A},
+        {CC1200_SYNC2,             0x0F},
+        {CC1200_SYNC1,             0xBE},
+        {CC1200_SYNC0,             0x66},
+        {CC1200_SYNC_CFG1,         0xA5},
+        {CC1200_SYNC_CFG0,         0x03},
+        {CC1200_DEVIATION_M,       0x47},
+        {CC1200_MODCFG_DEV_E,      0x2F},
+        {CC1200_DCFILT_CFG,        0x1E},
+        {CC1200_PREAMBLE_CFG1,     0x18},
+        {CC1200_PREAMBLE_CFG0,     0x8A},
+        {CC1200_IQIC,              0x00},
+        {CC1200_CHAN_BW,           0x01},
+        {CC1200_MDMCFG1,           0x42},
+        {CC1200_MDMCFG0,           0x05},
+        {CC1200_SYMBOL_RATE2,      0xC9},
+        {CC1200_SYMBOL_RATE1,      0x99},
+        {CC1200_SYMBOL_RATE0,      0x9A},
+        {CC1200_AGC_REF,           0x33}, // SRF says 0x2F
+        {CC1200_AGC_CS_THR,        (u8)-117},
+        {CC1200_AGC_CFG2,          0x60},
+        {CC1200_AGC_CFG1,          0x12},
+        {CC1200_AGC_CFG0,          0x84},
+        {CC1200_FIFO_CFG,          0x00},
+        {CC1200_FS_CFG,            0x12},
+        {CC1200_PKT_CFG2,          0x00},
+        {CC1200_PKT_CFG0,          0x20},
+        {CC1200_PA_CFG1,           0x7F}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG0,           0x50},
+        {CC1200_PKT_LEN,           0xFF},
+        //{CC1200_IF_MIX_CFG,        0x1C},
+        {CC1200_FREQOFF_CFG,       0x24}, // SRF says 0x23
+        {CC1200_MDMCFG2,           0x00},
+        {CC1200_FREQ2,             0x5C},
+        {CC1200_FREQ1,             0x0F},
+        {CC1200_FREQ0,             0x5C},
+        {CC1200_IF_ADC1,           0xEE},
+        {CC1200_IF_ADC0,           0x10},
+        {CC1200_FS_DIG1,           0x07},
+        {CC1200_FS_DIG0,           0xA0},
         {CC1200_FS_CAL3,           0x40},
         {CC1200_FS_CAL1,           0x40},
         {CC1200_FS_CAL0,           0x0E},
