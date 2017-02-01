@@ -296,6 +296,14 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     return true;
 }
 
+static nphy_hook_t hook_sync = NULL;
+
+void nphy_hook_sync(nphy_hook_t hook)
+{
+    hook_sync = hook;
+}
+
+
 #define NOTIFY_MASK_ISR    2
 #define NOTIFY_MASK_TX     4
 
@@ -373,7 +381,7 @@ static marc_2pin_status_t marc_2pin_status(void) {
     return (marc_2pin_status_t)marc_2pin_status_field;
 }*/
 
-static void process_packet(rf_pkt_t *pkt, u8 rssi, u8 lqi)
+static void process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
 {
     phy_pkt_t *const ppkt = (phy_pkt_t *)pkt;
 
@@ -390,6 +398,7 @@ static void process_packet(rf_pkt_t *pkt, u8 rssi, u8 lqi)
             //itm_puts(0, ".");
             sync_last = sync_timestamp();
             sync_time = sync_last - spkt->ts;
+            if (hook_sync) hook_sync();
 
             //static s32 last_sync = 0;
             //u32 now = sync_timestamp();
@@ -986,6 +995,7 @@ static void nphy_task(void *param __unused)
                         //cc_dbg_v("sync: ch=%lu ts=%lu now=%lu next=%lu", chan_cur, pkt_sync.ts, sync_timestamp(), tx_next);
 
                         sync_needed = false;
+                        if (hook_sync) hook_sync();
 
                     } else if (!pkt && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
                         u32 pkt_time = cc_get_tx_time(dev, pkt->len); // NOTE: things work because this rounds up, and is never zero.

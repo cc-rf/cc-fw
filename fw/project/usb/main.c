@@ -45,6 +45,14 @@
 #define UFLAG1_GPIO     GPIOB
 #define UFLAG1_PIN      4
 
+#define UFLAG2_ON_PORT  PORTE
+#define UFLAG2_ON_GPIO  GPIOE
+#define UFLAG2_ON_PIN   2
+
+#define UFLAG2_PORT     PORTE
+#define UFLAG2_GPIO     GPIOE
+#define UFLAG2_PIN      4
+
 static void pin_flag_init(void);
 static void main_task(void *param);
 
@@ -111,7 +119,7 @@ int main(void)
     vTaskStartScheduler();
 }
 
-static bool __pflag_set, __uflag1_set;
+static bool __pflag_set, __uflag1_set, __uflag2_set;
 
 static void pin_flag_init(void)
 {
@@ -138,6 +146,8 @@ static void pin_flag_init(void)
     PORT_SetPinConfig(PFLAG_PORT, PFLAG_PIN, &port_pin_config);
     PORT_SetPinConfig(UFLAG1_PORT, UFLAG1_PIN, &port_pin_config);
     PORT_SetPinConfig(UFLAG1_ON_PORT, UFLAG1_ON_PIN, &port_pin_config_out);
+    PORT_SetPinConfig(UFLAG2_PORT, UFLAG2_PIN, &port_pin_config);
+    PORT_SetPinConfig(UFLAG2_ON_PORT, UFLAG2_ON_PIN, &port_pin_config_out);
 
     const gpio_pin_config_t gpio_pin_config = {
             .pinDirection = kGPIO_DigitalInput,
@@ -152,9 +162,15 @@ static void pin_flag_init(void)
     GPIO_PinInit(PFLAG_GPIO, PFLAG_PIN, &gpio_pin_config);
     GPIO_PinInit(UFLAG1_GPIO, UFLAG1_PIN, &gpio_pin_config);
     GPIO_PinInit(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, &gpio_pin_config_out);
+    GPIO_PinInit(UFLAG2_GPIO, UFLAG2_PIN, &gpio_pin_config);
+    GPIO_PinInit(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, &gpio_pin_config_out);
 
     __pflag_set = GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
     __uflag1_set = GPIO_ReadPinInput(UFLAG1_GPIO, UFLAG1_PIN) != 0;
+    __uflag2_set = GPIO_ReadPinInput(UFLAG2_GPIO, UFLAG2_PIN) != 0;
+
+    GPIO_ClearPinsOutput(UFLAG1_ON_GPIO, UFLAG1_ON_PIN);
+    GPIO_ClearPinsOutput(UFLAG2_ON_GPIO, UFLAG2_ON_PIN);
 }
 
 static inline bool pflag_set(void)
@@ -165,6 +181,11 @@ static inline bool pflag_set(void)
 static inline bool uflag1_set(void)
 {
     return __uflag1_set;
+}
+
+static inline bool uflag2_set(void)
+{
+    return __uflag2_set;
 }
 
 static pit_t xsec_timer_0;
@@ -180,6 +201,8 @@ static u16 addr = 0;
 
 static u32 recv_count = 0, recv_bytes = 0;
 static u32 send_count = 0, send_bytes = 0;
+
+static void sync_hook(void);
 
 static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi);
 
@@ -198,8 +221,13 @@ static void main_task(void *param)
     vTaskDelay(pdMS_TO_TICKS(500));
 
     LED_ABCD_ALL_OFF();
-    LED_A_ON();
-    LED_C_ON();
+
+    if (!uflag2_set()) {
+        LED_A_TOGGLE();
+        LED_C_TOGGLE();
+    } else {
+        nphy_hook_sync(sync_hook);
+    }
 
     /*pca9685_handle_t pca = pca9685_init(1);
 
@@ -245,6 +273,16 @@ static void main_task(void *param)
             uart_relay_run();
         }
 
+        if (uflag2_set() && boss) {
+            printf("meter: auto-tx enabled\r\n");
+            #define TXLEN 30
+
+            while (1) {
+                const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
+                nmac_send(NMAC_SEND_DGRM, 0x0000, TXLEN, (u8 *)to_send);
+            }
+        }
+
         /*while (1) {
             itm_puts(0, "<itm> usb: send periodic\n");
             const char to_send[] = "Hello Peer\r\n";
@@ -286,18 +324,26 @@ static void uart_relay_run(void)
             .pkt.type = 0x2a
     };
 
-    uart = uart_init(0, 115200);
+    uart = uart_init(0, 119200);
 
     while (1) {
         uart_read(uart, (u8 *)message.input, 1);
         itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
         if (nmac_send(NMAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
-            LED_C_TOGGLE();
-            LED_D_TOGGLE();
+            if (!uflag2_set()) {
+                LED_C_TOGGLE();
+                LED_D_TOGGLE();
+            }
         }
     }
 }
 
+
+static void sync_hook(void)
+{
+    // (Only called when uflag2 is set)
+    LED_D_TOGGLE();
+}
 
 
 /*static u32 start_time = 0;
@@ -322,13 +368,42 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
         uart_pkt_t *const uart_pkt = (uart_pkt_t *)data;
 
         if (uart_pkt->type == 0x2a) {
-            LED_A_TOGGLE();
-            LED_B_TOGGLE();
+            if (!uflag2_set()) {
+                LED_A_TOGGLE();
+                LED_B_TOGGLE();
+            }
 
             uart_write(uart, uart_pkt->data, size - sizeof(uart_pkt_t));
         }
     }
 
+    if (uflag2_set()) {
+        if (rssi >= -47) {
+            LED_A_ON();
+            LED_B_ON();
+            LED_C_ON();
+        } else if (rssi >= -71) {
+            LED_A_ON();
+            LED_B_ON();
+            LED_C_OFF();
+        } else if (rssi >= -93) {
+            LED_A_ON();
+            LED_B_OFF();
+            LED_C_OFF();
+        } else if (rssi >= -107) {
+            LED_A_OFF();
+            LED_B_OFF();
+            LED_C_ON();
+        } else {
+            LED_A_OFF();
+            LED_B_OFF();
+            LED_C_OFF();
+        }
+
+        if (!boss) {
+            nmac_send(NMAC_SEND_STRM, 0x0000, size, data);
+        }
+    }
 
     //itm_printf(0, "recv: total=%lu\r\n", recv_total);
 
