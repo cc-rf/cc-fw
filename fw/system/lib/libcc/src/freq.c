@@ -563,15 +563,10 @@ u32 cc_get_tx_time(cc_dev_t dev, u32 len)
 {
     // TODO: Make this smarter and base it off of preamble, sync word, crc and others.
     //       The current assumption is: preamble/4, sync/4, len/1, data/len, crc/2,
-    //         symbol rate divider = 1 (/4 for DSSS, 4-ary+DSSS not possible)
-    //         symbol rate = 250ksps * modmul/2 (=1 for 2-ary)
+    //         symbol rate = 250ksps * modmul/1 (=1 for 2-ary, 0.25 for DSSS, 2 for 4-ary)
     const static u32 overhead = 4/*preamble*/ + 4/*sync*/ + 1/*len*/ + 2/*crc*/;
-    const static u32 divider = 1;
     const static u32 symbol_rate = 250000 * 1/*modmul*/;
 
 
-    const u32 div = (symbol_rate + (4 * divider)) / (8 * divider);
-
-    // round up to next nearest millisecond
-    return (1000*(len + overhead) + div) / div;
+    return (1000000 * 8 * (len + overhead) + (symbol_rate >> 1)) / symbol_rate;
 }

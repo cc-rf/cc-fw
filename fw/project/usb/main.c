@@ -248,7 +248,7 @@ static void main_task(void *param)
 
 
     xsec_timer_0 = pit_alloc(&(pit_cfg_t){
-            .period = pit_nsec_tick(1000000)
+            .period = pit_nsec_tick(1000)
     });
 
     xsec_timer = pit_chain(xsec_timer_0, &(pit_cfg_t){
@@ -565,7 +565,7 @@ static void handle_code_status(size_t size, u8 *data)
     code_status_t code_status = {
             .version = 1,
             .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32),
-            .uptime = sync_timestamp(),
+            .uptime = sync_timestamp() / 1000u,
             .node = nmac_get_addr(),
             .recv_count = recv_count,
             .recv_bytes = recv_bytes,

@@ -3,6 +3,7 @@
 """
 
 import os
+import random
 import sys
 import struct
 import time
@@ -349,7 +350,7 @@ def send_frames(serial):
         count += 1
         data = '\x3A' * 30
         # data = ''.join([chr(random.randrange(0, 0xff)) for _ in range(random.randrange(4, 110))])
-        serf_send(serial, NMAC_SEND_DGRM, 0x0000, data)
+        serf_send(serial, NMAC_SEND_STRM, 0x0000, data)
         # time.sleep(5)
 
 
