@@ -1031,11 +1031,11 @@ static void nphy_task(void *param __unused)
 
                             ts = sync_timestamp();
 
-                            if (tx_next > ts) {
-                                pkt = NULL;
-                                if (rf_state == RF_STATE_TX_END) loop_state_next = LOOP_STATE_RX;
-                                continue;
-                            }
+                            //if (tx_next > ts) {
+                            //    pkt = NULL;
+                            //    if (rf_state == RF_STATE_TX_END) loop_state_next = LOOP_STATE_RX;
+                            //    continue;
+                            //}
 
                             ticks = ts - sync_time;
                             chan_ticks = (ticks % chan_time);
@@ -1057,7 +1057,7 @@ static void nphy_task(void *param __unused)
                                 continue;
                             }
 
-                            tx_next = (3 * pkt_time) / 2;
+                            tx_next = pkt_time; //(3 * pkt_time) / 2;
                             //cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
 
                         } else {
@@ -1121,8 +1121,7 @@ static void nphy_task(void *param __unused)
                             //cc_strobe(dev, CC1200_SIDLE); // is this needed? always?
                         }
 
-                        //cc_strobe(dev, CC1200_SIDLE); // This is not required but an RXTX_SWITCH seems to be too fast for our receiver logic
-
+                        cc_strobe(dev, CC1200_SIDLE);
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
                         if (tx_next) tx_next = sync_timestamp() + tx_next;
