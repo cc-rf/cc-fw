@@ -276,10 +276,10 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake, 0);
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(1), CC1200_IOCFG_GPIO_CFG_LNA_PD);
-    isrd_configure(2, 11, kPORT_InterruptEitherEdge, isr_ctl_lna, 1);
+    isrd_configure(2, 11, kPORT_InterruptEitherEdge, isr_ctl_lna, 0);
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(2), CC1200_IOCFG_GPIO_CFG_PA_PD);
-    isrd_configure(2, 12, kPORT_InterruptEitherEdge, isr_ctl_pa, 1);
+    isrd_configure(2, 12, kPORT_InterruptEitherEdge, isr_ctl_pa, 0);
 
 
     if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 1, &nphy.task)) {
@@ -694,6 +694,7 @@ static void nphy_task(void *param __unused)
     u32 tx_next = 0;
     u32 notify;
 
+    //bool tx_off_idle = false;
     //bool cca = false;
 
     rf_state_t rf_state = RF_STATE_NONE;
@@ -737,6 +738,7 @@ static void nphy_task(void *param __unused)
                 switch (ms) {
                     case CC1200_MARC_STATUS1_RX_FINISHED:
                         nphy_rx(true);
+                        if (!pkt) tx_next = 0;
 
                         //if (!nphy_rx(true)) {
                         //    if (!pkt) tx_next = 0;
@@ -821,8 +823,8 @@ static void nphy_task(void *param __unused)
             ticks = ts - sync_time;
             const u32 chan_time_cur = chan_time * (sync_slow ? 2 : 1);
 
-            if (!boss && ((ts - sync_last) >= (CHAN_TIME * CHAN_COUNT)) && sync_last) {
-                cc_dbg("sync dropped: last=%lu now=%lu", sync_last, ts);
+            if (!boss && ((ts - sync_last) >= 3*(CHAN_TIME * CHAN_COUNT)) && sync_last) {
+                cc_dbg_v("sync dropped: last=%lu now=%lu", sync_last, ts);
                 sync_time = 0;
                 ticks = 0;
                 remaining = chan_time;
@@ -1002,7 +1004,10 @@ static void nphy_task(void *param __unused)
 
                         } while (st != CC1200_STATE_IDLE);
 
-                        //cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_RX);
+                        /*if (tx_off_idle) {
+                            tx_off_idle = false;
+                            cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_RX);
+                        }*/
 
                         if (boss && !sync_time) {
                             chan_set(0);
@@ -1031,41 +1036,46 @@ static void nphy_task(void *param __unused)
 
                             ts = sync_timestamp();
 
-                            //if (tx_next > ts) {
-                            //    pkt = NULL;
-                            //    if (rf_state == RF_STATE_TX_END) loop_state_next = LOOP_STATE_RX;
-                            //    continue;
-                            //}
+                            if (tx_next > ts) {
+                                pkt = NULL;
+                                //loop_state_next = LOOP_STATE_RX;
+                                continue;
+                            }
 
                             ticks = ts - sync_time;
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if (chan_ticks < 20000) {
+                            if (chan_ticks < 5000) {
 
-                                tx_next = ts + (20000 - chan_ticks);
+                                tx_next = ts + (5000 - chan_ticks);
                                 pkt = NULL;
-                                loop_state_next = LOOP_STATE_RX;
+                                //loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            if (remaining < (20000 + pkt_time)) {
+                            if (remaining < (10000 + pkt_time)) {
 
-                                tx_next = ts + ((20000 + pkt_time) - remaining);
+                                tx_next = ts + ((10000 + pkt_time) - remaining);
                                 pkt = NULL;
-                                loop_state_next = LOOP_STATE_RX;
+                                //loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            tx_next = pkt_time; //(3 * pkt_time) / 2;
-                            //cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
+                            tx_next = (5 * pkt_time) / 4;
+                            //cc_strobe(dev, CC1200_SIDLE);
+
+                            /*if (!tx_off_idle) {
+                                tx_off_idle = true;
+                                cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_IDLE);
+                            }*/
 
                         } else {
                             ts = sync_timestamp();
 
                             if (tx_next > ts) {
                                 pkt = NULL;
-                                loop_state_next = LOOP_STATE_RX;
+                                //loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
@@ -1083,11 +1093,11 @@ static void nphy_task(void *param __unused)
 
                             // LBT minimum is 5ms
 
-                            if (chan_ticks < 20000) {
+                            if (chan_ticks < 10000) {
 
-                                tx_next = ts + (20000 - chan_ticks);
+                                tx_next = ts + (10000 - chan_ticks);
                                 pkt = NULL;
-                                loop_state_next = LOOP_STATE_RX;
+                                //loop_state_next = LOOP_STATE_RX;
                                 continue;
 
                             }
@@ -1096,12 +1106,16 @@ static void nphy_task(void *param __unused)
 
                                 tx_next = ts + ((20000 + pkt_time) - remaining);
                                 pkt = NULL;
-                                loop_state_next = LOOP_STATE_RX;
+                                //loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
                             tx_next = 3 * pkt_time;
-                            //cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_RX);
+
+                            /*if (tx_off_idle) {
+                                tx_off_idle = false;
+                                cc_update(dev, CC1200_RFEND_CFG0, CC1200_RFEND_CFG0_TXOFF_MODE_M, CC1200_RFEND_CFG0_TXOFF_MODE_RX);
+                            }*/
                         }
 
                         xQueueReceive(nphy.txq, &pkt, 0);
