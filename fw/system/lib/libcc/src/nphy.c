@@ -193,8 +193,8 @@ static inline bool chan_set(u32 chan)
 
         } while (st != CC1200_STATE_IDLE);
 
-        chan_select(&chnl.group, (chan_t)chan);
-        //cc_dbg_v("#%u\t@%lu", chan, sync_timestamp());
+        chan_select(&chnl.group, chnl.hop_table[chan]);
+        //cc_dbg_v("#%u\t%lu", chan, chnl.hop_table[chan]);
 
         return true;
     }
@@ -256,28 +256,20 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
+
     nphy.txq = xQueueCreate(5, sizeof(void *)); assert(nphy.txq);
     nphy.rxq = xQueueCreate(7, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
     nphy.rx = rx;
 
-    if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 1, &nphy.task)) {
-        cc_dbg("[%u] error: unable to create main task", dev);
-        return false;
-    }
-
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH, &nphy.disp)) {
-        cc_dbg("[%u] error: unable to create dispatch task", dev);
-        return false;
-    }
-
-    chan_grp_init(&chnl.group, NULL);
-    chan_grp_calibrate(&chnl.group);
-    chan_set(0);
 
     amp_init(dev);
-    amp_ctrl(dev, AMP_LNA, false);
-    amp_ctrl(dev, AMP_PA, false);
     amp_ctrl(dev, AMP_HGM, true);
+
+    amp_ctrl(dev, AMP_LNA, true);
+    chan_grp_init(&chnl.group, chnl.hop_table);
+    chan_grp_calibrate(&chnl.group);
+    chan_set(0);
+    amp_ctrl(dev, AMP_LNA, false);
 
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
@@ -289,7 +281,20 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(2), CC1200_IOCFG_GPIO_CFG_PA_PD);
     isrd_configure(2, 12, kPORT_InterruptEitherEdge, isr_ctl_pa, 1);
 
-    cc_strobe(dev, CC1200_SRX);
+
+    if (!xTaskCreate(nphy_task, "nphy:main", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 1, &nphy.task)) {
+        cc_dbg("[%u] error: unable to create main task", dev);
+        return false;
+    }
+
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH, &nphy.disp)) {
+        cc_dbg("[%u] error: unable to create dispatch task", dev);
+        return false;
+    }
+
+    // ensure the tasks run even if their priority is lower
+    vTaskDelay(pdMS_TO_TICKS(chan_time/4));
+
     return true;
 }
 

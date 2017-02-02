@@ -9,7 +9,6 @@ import time
 import cobs
 import threading
 import traceback
-import random
 
 CODE_ID_ECHO = 0
 CODE_ID_STATUS = 1
@@ -183,28 +182,32 @@ class Stats:
     lqi_sum = 0
 
     _start_time = 0
-    _recv_count_prev = 0
+    _lock = None
 
     def __init__(self):
-        pass
+        self._lock = threading.Lock()
 
     def start(self):
-        self._recv_count_prev = -1
         self._start_time = time.time()
         self.run()
+
+    def lock(self):
+        self._lock.acquire()
+
+    def unlock(self):
+        self._lock.release()
 
     def run(self):
         thr = threading.Timer(5, self._run)
         thr.setDaemon(True)
         thr.start()
 
-        now = time.time()
-
-        recv_count = self.recv_count
-
-        if not recv_count or recv_count == self._recv_count_prev:
+        if not self.recv_count:
             return
 
+        self.lock()
+
+        recv_count = self.recv_count
         recv_time = self.recv_time
         recv_size = self.recv_size
         rssi_sum = self.rssi_sum
@@ -215,14 +218,25 @@ class Stats:
         self.rssi_sum = 0
         self.lqi_sum = 0
 
-        self._recv_count_prev = recv_count
+        self.unlock()
+
+        now = time.time()
 
         diff = now - recv_time
-        d_rate = int(round(float(recv_size) / diff))
-        p_rate = int(round(float(recv_count) / diff))
 
-        rssi_avg = rssi_sum / recv_count
-        lqi_avg = lqi_sum / recv_count
+        if diff:
+            d_rate = int(round(float(recv_size) / diff))
+            p_rate = int(round(float(recv_count) / diff))
+        else:
+            d_rate = 0
+            p_rate = 0
+
+        if recv_count:
+            rssi_avg = rssi_sum / recv_count
+            lqi_avg = lqi_sum / recv_count
+        else:
+            rssi_avg = 0
+            lqi_avg = 0
 
         elapsed = int(round(now - self._start_time))
         elapsed_hour = elapsed / 3600
@@ -255,6 +269,7 @@ def handle_recv(node, peer, dest, rssi, lqi, data):
     #     node, peer, dest, len(data), ' '.join('{:02X}'.format(ord(ch)) for ch in data)
     # ))
 
+    stats.lock()
     if not stats.recv_count:
         stats.recv_time = time.time()
 
@@ -262,6 +277,7 @@ def handle_recv(node, peer, dest, rssi, lqi, data):
     stats.recv_count += 1
     stats.rssi_sum += rssi
     stats.lqi_sum += lqi
+    stats.unlock()
 
 
 def handle_status(version, serial, uptime, node, recv_count, recv_bytes, send_count, send_bytes):
