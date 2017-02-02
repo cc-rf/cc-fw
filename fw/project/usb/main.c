@@ -202,7 +202,7 @@ static u16 addr = 0;
 static u32 recv_count = 0, recv_bytes = 0;
 static u32 send_count = 0, send_bytes = 0;
 
-static void sync_hook(void);
+static void sync_hook(u32 chan);
 
 static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi);
 
@@ -222,10 +222,11 @@ static void main_task(void *param)
 
     LED_ABCD_ALL_OFF();
 
-    if (!uflag2_set()) {
+    if (uflag1_set()) {
         LED_A_TOGGLE();
         LED_C_TOGGLE();
-    } else {
+
+    } else if (true /*(temp) uflag2_set()*/) {
         nphy_hook_sync(sync_hook);
     }
 
@@ -339,10 +340,10 @@ static void uart_relay_run(void)
 }
 
 
-static void sync_hook(void)
+static void sync_hook(u32 chan)
 {
-    // (Only called when uflag2 is set)
-    LED_D_TOGGLE();
+    if (chan == 11 || chan == 13) LED_D_ON();
+    else LED_D_OFF();
 }
 
 

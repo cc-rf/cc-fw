@@ -138,9 +138,9 @@ static void ensure_rx(void);
 #define FREQ_BASE       905000000
 #define FREQ_BW         800000
 #define CHAN_COUNT      25
-#define CHAN_TIME       200
-#define MAX_CCA_RETRY   3//4//3//2//3
-#define MAX_CCA_TIME    11 //NOTE: When using LBT, backoff time minimum is 5
+#define CHAN_TIME       100
+#define MAX_CCA_RETRY   3
+#define MAX_CCA_TIME    13 //NOTE: When using LBT, backoff time minimum is 5
 
 static const u32 freq_base      = FREQ_BASE;
 static const u32 freq_side_bw   = FREQ_BW / 2;
@@ -173,15 +173,17 @@ static struct {
 
 volatile u32 chan_cur = UINT32_MAX;
 
-static inline bool chan_set(const u32 chan)
+static inline bool chan_set(u32 chan)
 {
+    if (chan >= chan_count) {
+        assert(chan < (2 * chan_count));
+        chan = (2 * chan_count) - chan - 1;
+    }
+
     if (chan != chan_cur) {
-        //cc_dbg_v("@%u->%u\r\n", chan_cur, chan);
         chan_cur = chan;
 
-        u8 st;
-
-        st = cc_strobe(dev, CC1200_SIDLE | CC1200_ACCESS_READ);
+        u8 st = cc_strobe(dev, CC1200_SIDLE | CC1200_ACCESS_READ);
 
         // chance of switching during rx -- TODO: maybe try to extract valid packets?
         if (st & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFRX);
@@ -191,14 +193,8 @@ static inline bool chan_set(const u32 chan)
 
         } while (st != CC1200_STATE_IDLE);
 
-        //NOTE: for debug purposes, only use 2 channels
-        //chan_select(&chnl.group, (chan_t) (4 + chan%2));
-
-        // NEW: start closer to 915MHz
-        chan_select(&chnl.group, (chan_t)((chan + 10) % chan_count));
-
-        // NEW: don't do this because we'll always be sending a sync packet!!
-        //ensure_rx(); // this kills the in-progress tx
+        chan_select(&chnl.group, (chan_t)chan);
+        //cc_dbg_v("#%u\t@%lu", chan, sync_timestamp());
 
         return true;
     }
@@ -208,6 +204,7 @@ static inline bool chan_set(const u32 chan)
 
 static bool boss;
 static bool sync_needed;
+static bool sync_slow;
 static u32 sync_last;
 static s32 sync_time;
 
@@ -391,26 +388,21 @@ static void process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
     }
 
     if (ppkt->hdr.flag & PHY_PKT_FLAG_SYNC) {
-        const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *)pkt;
-        // TODO: make sure size is big enough before reading flag
+        const u32 ts = sync_timestamp();
+        const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *) pkt;
 
         if (!boss) {
             //itm_puts(0, ".");
-            sync_last = sync_timestamp();
-            sync_time = sync_last - spkt->ts;
-            if (hook_sync) hook_sync();
+            const bool ppkt_sync_slow = (ppkt->hdr.flag & PHY_PKT_FLAG_NOSYNC) != 0;
 
-            //static s32 last_sync = 0;
-            //u32 now = sync_timestamp();
-            //sync_time = now - spkt->ts;
-            //cc_dbg_v(
-            //        "sync: now=%lu time=%i ts=%u last=%i diff=%i",
-            //        now, sync_time, spkt->ts, last_sync, spkt->hdr.len, spkt->hdr.flag, last_sync
-            //);
-            //last_sync = sync_time;
+            if (!ppkt_sync_slow || sync_slow || ((ts - sync_last) >= (CHAN_TIME*CHAN_COUNT))) {
+                sync_slow = ppkt_sync_slow;
+                sync_last = sync_timestamp();
+                sync_time = sync_last - spkt->ts;
+                if (hook_sync) hook_sync(chan_cur);
+            }
         }
 
-        // TODO: maybe work out some sort of intelligent synchronization
         return;
 
     }
@@ -699,11 +691,12 @@ static void nphy_task(void *param __unused)
     phy_sync_pkt_t pkt_sync = {
             .hdr = {
                     .len = sizeof(phy_sync_pkt_t) - 1,
-                    .flag = PHY_PKT_FLAG_SYNC | PHY_PKT_FLAG_IMMEDIATE
+                    .flag = (u8)(PHY_PKT_FLAG_IMMEDIATE | PHY_PKT_FLAG_SYNC | (!boss ? PHY_PKT_FLAG_NOSYNC : 0))
             },
             .ts = 0
     };
 
+    sync_slow = !boss;
     sync_needed = false;
     sync_last = 0;
     sync_time = 0;
@@ -805,20 +798,21 @@ static void nphy_task(void *param __unused)
         if (sync_time) {
             ts = sync_timestamp();
             ticks = ts - sync_time;
+            const u32 chan_time_cur = chan_time * (sync_slow ? 2 : 1);
 
             if (!boss && (ts - sync_last) >= (CHAN_TIME*CHAN_COUNT)) {
                 sync_time = 0;
                 ticks = 0;
                 remaining = chan_time;
             } else {
-                remaining = chan_time - (ticks % chan_time);
+                remaining = chan_time_cur - (ticks % chan_time_cur);
 
                 if (remaining <= 1) {
                     continue;
                 }
             }
 
-            if (chan_set((ticks / chan_time) % chan_count)) {
+            if (chan_set((ticks / chan_time_cur) % (chan_count * 2))) {
                 //cc_dbg_v("switch! chan=%lu time=%lu ticks=%li", chan_cur, ts, ticks);
                 //cc_dbg_v("switch! time=%lu", sync_timestamp());
                 //printf("#%lu\r\n", ts);
@@ -866,6 +860,20 @@ static void nphy_task(void *param __unused)
                     ///remaining = chan_time - (ticks % chan_time);
                 }
             }
+        } else {
+            ts = sync_timestamp();
+            ticks = ts - start_time;
+            remaining = (2 * chan_time) - (ticks % (2 * chan_time));
+
+            if (remaining <= 1) {
+                continue;
+            }
+
+            if (chan_set((ticks / (2 * chan_time)) % (chan_count * 2))) {
+                sync_needed = true;
+                loop_state = LOOP_STATE_TX;
+            }
+
         }
 
         loop_state_t loop_state_next = loop_state;
@@ -995,7 +1003,7 @@ static void nphy_task(void *param __unused)
                         //cc_dbg_v("sync: ch=%lu ts=%lu now=%lu next=%lu", chan_cur, pkt_sync.ts, sync_timestamp(), tx_next);
 
                         sync_needed = false;
-                        if (hook_sync) hook_sync();
+                        if (hook_sync) hook_sync(chan_cur);
 
                     } else if (!pkt && xQueuePeek(nphy.txq, &pkt, 0) && pkt/*for the ide...*/) {
                         u32 pkt_time = cc_get_tx_time(dev, pkt->len); // NOTE: things work because this rounds up, and is never zero.
