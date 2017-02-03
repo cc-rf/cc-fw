@@ -648,7 +648,7 @@ void USB_DeviceApplicationInit(void)
     }
     else
     {
-        usb_echo("usb: initialized\r\n");
+        //usb_echo("usb: initialized\r\n");
         s_cdcVcom.cdcAcmHandle = s_cdcAcmConfigList.config->classHandle;
     }
 

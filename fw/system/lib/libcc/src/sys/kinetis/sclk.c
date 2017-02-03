@@ -10,5 +10,5 @@ void sclk_init(void)
 
 sclk_t sclk_time(void)
 {
-    return (sclk_t)(pit_ltt_current() / 1000u);
+    return pit_ltt_current() / 1000u;
 }

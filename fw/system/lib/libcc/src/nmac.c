@@ -297,6 +297,11 @@ static bool do_send(mac_txq_t *txqi)
     if (needs_ack) {
         xSemaphoreGive(pend.mtx);
 
+        /**
+         * TODO: Dynamic timeout, current value is ridiculously long and wastes time.
+         *       Should probably be something more like pkt_time*6 + <channel-block>.
+         */
+
         if (!xSemaphoreTake(pend.sem, pdMS_TO_TICKS(NMAC_PEND_TIME))) {
             if (!xSemaphoreTake(pend.mtx, pdMS_TO_TICKS(1000))) {
                 nmac_debug("(critical) unable to aquire mutex for pend (1)");

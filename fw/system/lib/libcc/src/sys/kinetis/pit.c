@@ -181,7 +181,7 @@ void pit_stop(pit_t pit)
 }
 
 
-static volatile pit_nsec_t pit_ltt_nsec_div = 1;
+static u32 pit_ltt_nsec_div = 1;
 
 void pit_ltt_init(void)
 {
@@ -202,7 +202,9 @@ void pit_ltt_init(void)
 
 pit_nsec_t pit_ltt_current(void)
 {
-    return (NSEC_SEC * (UINT64_MAX - PIT_GetLifetimeTimerCount(PIT))) / pit_ltt_nsec_div;
+    const u64 ltt = ((u64)pit_get_current(&pits[1]) << 32U) | pit_get_current(&pits[0]);
+
+    return (NSEC_SEC * (UINT64_MAX - ltt/*PIT_GetLifetimeTimerCount(PIT)*/)) / pit_ltt_nsec_div;
 }
 
 
