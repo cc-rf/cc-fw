@@ -49,7 +49,7 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  * Recommended AGC_REF is really high. 0x35
  * AGC_CFG2: changed back to normal mode from optimized linearity mode, and then back again because it may be good
  * recently changed agc offset level in nphy.
- * AGC_CFG1 uupdate. Note that it changes the AGC RSSI step from 3/10 dB to 6/16 dB.
+ * AGC_CFG1 update. Note that it changes the AGC RSSI step from 3/10 dB to 6/16 dB.
  * SYNC_CFG0: removing unnecessary limitation bit (because s.rate <= 2*rx filter bw) improved things hugely, although avg lqi dropped.
  * AGC_REF appears ideal at 0x34 which should account for inability to configure HGM in SmartRF.
  * IQIC: trying SmartRF-suggested disable. Appears to be the appropriate choice.
@@ -77,6 +77,13 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  * DEVIATION_M/DEV_E: 0x9A/0x0D->0xFF/0x0D (156 kHz). Trying to improve lqi.
  * FS_DIG0:0xAF->0xA0(FS Loop BW in RX/TX from 500kHz to 200kHz). Latest potential SmartRF value. Barely makes a difference but does appear to be good.
  * TOC_CFG: Leaving as default, SmartRF maybe doesn't use.
+ * AGC_CFG1: 0x51->0x00. Minimum windows sizes. Benefit of this and next two are unclear so far.
+ * AGC_CFG0: 0x87->0x40. RSSI_VALID_CNT from 2 to 1 sample. Hysteresis level 2(or was it 7?)->4dB. ASK_DECAY: don't care.
+ * SYNC_CFG1: 0xA5->0xA9. Make SYNC_THR slightly more tolerant.
+ * PREAMBLE_CFG0: 0x8A->0x8F. Make maximally tolerant of low-quality preambles.
+ * PREAMBLE_CFG1: 0x18->0x20. Preamble size 4->6 bytes. Needed to support large packets, but more especially highly variable packet sizes.
+ * SYNC_CFG1: 0xA9->0xAA. Tuning this more won't change much it seems.
+ * PREAMBLE_CFG1: 0x20->0x28->0x2C. Preamble size 6->8->12 bytes. Was still seeing loss when packet size varies, but this takes care of it (does not seem to be costly despite the big overhead increase)
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -88,13 +95,13 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC2,             0x0F},
         {CC1200_SYNC1,             0xBE},
         {CC1200_SYNC0,             0x66},
-        {CC1200_SYNC_CFG1,         0xA5},
+        {CC1200_SYNC_CFG1,         0xAA},
         {CC1200_SYNC_CFG0,         0x03},
         {CC1200_DEVIATION_M,       0xFF},
         {CC1200_MODCFG_DEV_E,      0x0D},
         {CC1200_DCFILT_CFG,        0x5D},
-        {CC1200_PREAMBLE_CFG1,     0x18},
-        {CC1200_PREAMBLE_CFG0,     0x8A},
+        {CC1200_PREAMBLE_CFG1,     0x2C},
+        {CC1200_PREAMBLE_CFG0,     0x8F},
         {CC1200_IQIC,              0x4B},
         {CC1200_CHAN_BW,           0x03},
         {CC1200_MDMCFG1,           0x42},
@@ -105,8 +112,8 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_AGC_REF,           0x33},
         {CC1200_AGC_CS_THR,        (u8)-117},
         {CC1200_AGC_CFG2,          0x00},
-        {CC1200_AGC_CFG1,          0x51},
-        {CC1200_AGC_CFG0,          0x87},
+        {CC1200_AGC_CFG1,          /*0x00*/0x51},
+        {CC1200_AGC_CFG0,          /*0x40*/0x87},
         {CC1200_FIFO_CFG,          0x00},
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},

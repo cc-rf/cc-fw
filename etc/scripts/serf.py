@@ -290,35 +290,42 @@ def handle_status(version, serial, uptime, node, recv_count, recv_bytes, send_co
     status_sem.release()
 
 
-def device_init(tty, baud):
-    serial = get_serial(tty, baud)
-    thr = input_start(serial)
-    return thr, serial
-
-
 def reset_device(serial, tty, baud):
     serial.timeout = .25
     serial.write(encode_code_reset())
     time.sleep(.5)
     serial.reset_input_buffer()
     serial.close()
-    time.sleep(3)
-    return device_init(tty, baud)
+    time.sleep(1.5)
+    return get_serial(tty, baud)
 
 
 def main(args):
     tty = args[0]
     baud = 115200
 
+    reset = False
     tx = False
 
-    if len(args) > 1 and args[1] == 'tx':
-        tx = True
+    if len(args) > 1:
+        if args[1] == 'tx':
+            tx = True
+        elif args[1] == 'reset':
+            reset = True
 
     try:
-        stats.start()
+        if not reset:
+            stats.start()
 
-        thr, serial = device_init(tty, baud)
+        serial = get_serial(tty, baud)
+
+        if reset:
+            print >>sys.stderr, "resetting...",
+            reset_device(serial, tty, baud)
+            print >>sys.stderr, "done."
+            sys.exit(0)
+
+        thr = input_start(serial)
 
         serf_status(serial)
         status_sem.acquire()
@@ -336,6 +343,9 @@ def main(args):
     except KeyboardInterrupt:
         sys.exit(0)
 
+    except SystemExit:
+        raise
+
     except:
         traceback.print_exc()
         sys.exit(1)
@@ -348,9 +358,10 @@ def send_frames(serial):
 
     while 1:
         count += 1
-        data = '\x3A' * 48
-        # data = ''.join([chr(random.randrange(0, 0xff)) for _ in range(random.randrange(4, 110))])
-        serf_send(serial, NMAC_SEND_STRM, 0x0000, data)
+        # data = '\x3A' * 48
+        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(4, 110))])
+        serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
+        # serf_send(serial, random.choice((0, 1, 3)), 0x0000, data)
         # time.sleep(5)
 
 

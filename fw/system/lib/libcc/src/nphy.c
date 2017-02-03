@@ -113,6 +113,11 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 #undef cc_dbg_v
 #define cc_dbg_v(format, ...) cc_dbg(format, ##__VA_ARGS__ ) //cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
 
+#undef assert
+#define _sfy(x) #x
+#define assert(x) if (!(x)) { itm_puts(0, "ASSERT FAIL: \" #x ""\" on line " _sfy( __LINE__ ) "\n"); asm("bkpt #0"); while (1) { asm("nop"); } }
+
+
 
 
 static const cc_dev_t dev = 0;
@@ -258,7 +263,7 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
     }
 
 
-    nphy.txq = xQueueCreate(5, sizeof(void *)); assert(nphy.txq);
+    nphy.txq = xQueueCreate(7, sizeof(void *)); assert(nphy.txq);
     nphy.rxq = xQueueCreate(7, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
     nphy.rx = rx;
 
@@ -287,7 +292,7 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH, &nphy.disp)) {
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 2, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
         return false;
     }
@@ -445,6 +450,9 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
 
         return false;
     }
+
+    // TODO: Evaluate and remove this if not needed!
+    vTaskDelay(0); // yield to allow packet to be processed in case more packets are queued as a result
 }
 
 static bool nphy_rx(bool flush)
@@ -713,7 +721,7 @@ static void nphy_task(void *param __unused)
     sync_last = 0;
     sync_time = 0;
 
-    const s32 start_time = sync_timestamp();
+    s32 start_time = sync_timestamp();
 
     if (boss) {
         sync_needed = true;
@@ -826,8 +834,8 @@ static void nphy_task(void *param __unused)
             if (!boss && ((ts - sync_last) >= 3*(CHAN_TIME * CHAN_COUNT)) && sync_last) {
                 cc_dbg_v("sync dropped: last=%lu now=%lu", sync_last, ts);
                 sync_time = 0;
-                ticks = 0;
-                remaining = chan_time;
+                start_time = sync_timestamp(); // NEW: advance start time. TODO: Check this!
+                goto _unsynced_check;
             } else {
                 remaining = chan_time_cur - (ticks % chan_time_cur);
 
@@ -861,6 +869,8 @@ static void nphy_task(void *param __unused)
                 }
             }
         } else if (!boss) {
+            _unsynced_check:
+
             ts = sync_timestamp();
             ticks = ts - start_time;
             remaining = (2 * chan_time) - (ticks % (2 * chan_time));
@@ -951,6 +961,8 @@ static void nphy_task(void *param __unused)
 
                         case RF_STATE_TX_ERR:
                             cc_dbg("tx fail: ms=0x%02X", ms);
+                            /* TODO: ROOT CAUSE HARD FAULT STARTING FROM HERE
+                             * */
 
                         case RF_STATE_TX_END:
                             if (pkt) {
@@ -969,6 +981,7 @@ static void nphy_task(void *param __unused)
 
                                     //if (!sync_needed) {
                                         // NOTE: ^ This should actually always happen!
+                                    // TODO: VERIFY
 
                                         loop_state_next = LOOP_STATE_RX;
                                         pkt = NULL;
@@ -1015,10 +1028,16 @@ static void nphy_task(void *param __unused)
                             ticks = 0;
                         } else {
                             ticks = sync_timestamp() - sync_time;
+
+                            if (boss && !chan_cur && ticks >= (CHAN_TIME*CHAN_COUNT)) {
+                                // TODO: Need to also realign the sync window for non-boss nodes sending provisional sync packets
+                                sync_time = sync_timestamp();
+                                ticks = 0;
+                            }
                         }
 
-                        tx_next = cc_get_tx_time(dev, pkt->len);
-                        pkt_sync.ts = ticks + tx_next + 1000;
+                        tx_next = cc_get_tx_time(dev, pkt->len) * 5;
+                        pkt_sync.ts = ticks + tx_next;
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
@@ -1036,33 +1055,33 @@ static void nphy_task(void *param __unused)
 
                             ts = sync_timestamp();
 
-                            if (tx_next > ts) {
+                            /*if (tx_next > ts) {
                                 pkt = NULL;
-                                //loop_state_next = LOOP_STATE_RX;
+                                loop_state_next = LOOP_STATE_RX;
                                 continue;
-                            }
+                            }*/
 
                             ticks = ts - sync_time;
                             chan_ticks = (ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if (chan_ticks < 5000) {
+                            if (chan_ticks < 2500) {
 
-                                tx_next = ts + (5000 - chan_ticks);
+                                tx_next = ts + (2500 - chan_ticks);
                                 pkt = NULL;
-                                //loop_state_next = LOOP_STATE_RX;
+                                loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            if (remaining < (10000 + pkt_time)) {
+                            if (remaining < (2500 + pkt_time)) {
 
-                                tx_next = ts + ((10000 + pkt_time) - remaining);
+                                tx_next = ts + ((2500 + pkt_time) - remaining);
                                 pkt = NULL;
-                                //loop_state_next = LOOP_STATE_RX;
+                                loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            tx_next = (5 * pkt_time) / 4;
+                            tx_next = pkt_time; //(5 * pkt_time) / 4;
                             //cc_strobe(dev, CC1200_SIDLE);
 
                             /*if (!tx_off_idle) {
@@ -1075,7 +1094,7 @@ static void nphy_task(void *param __unused)
 
                             if (tx_next > ts) {
                                 pkt = NULL;
-                                //loop_state_next = LOOP_STATE_RX;
+                                loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
@@ -1093,20 +1112,20 @@ static void nphy_task(void *param __unused)
 
                             // LBT minimum is 5ms
 
-                            if (chan_ticks < 10000) {
+                            if (chan_ticks < 5000) {
 
-                                tx_next = ts + (10000 - chan_ticks);
+                                tx_next = ts + (5000 - chan_ticks);
                                 pkt = NULL;
-                                //loop_state_next = LOOP_STATE_RX;
+                                loop_state_next = LOOP_STATE_RX;
                                 continue;
 
                             }
 
-                            if (remaining < (20000 + pkt_time)) {
+                            if (remaining < (5000 + pkt_time)) {
 
-                                tx_next = ts + ((20000 + pkt_time) - remaining);
+                                tx_next = ts + ((5000 + pkt_time) - remaining);
                                 pkt = NULL;
-                                //loop_state_next = LOOP_STATE_RX;
+                                loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
