@@ -36,3 +36,6 @@ bool pit_started(pit_t pit);
 
 void pit_start(pit_t pit);
 void pit_stop(pit_t pit);
+
+void pit_ltt_init(void);
+pit_nsec_t pit_ltt_current(void);

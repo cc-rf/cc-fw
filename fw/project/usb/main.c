@@ -188,13 +188,13 @@ static inline bool uflag2_set(void)
     return __uflag2_set;
 }
 
-static pit_t xsec_timer_0;
-static pit_t xsec_timer;
+typedef u64 sclk_t;
 
-u32 sync_timestamp(void)
+sclk_t sclk_time(void)
 {
-    return pit_get_elapsed(xsec_timer);
+    return pit_ltt_current() / 1000;
 }
+
 
 static bool boss = false;
 static u16 addr = 0;
@@ -211,7 +211,6 @@ static void main_task(void *param)
 {
     (void)param;
     LED_D_ON();
-    //printf("<main task>\r\n");
 
     if (!vcom_init(usb_recv)) {
         itm_puts(0, "vcom: init fail\r\n");
@@ -246,17 +245,7 @@ static void main_task(void *param)
 
     //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
 
-
-    xsec_timer_0 = pit_alloc(&(pit_cfg_t){
-            .period = pit_nsec_tick(1000)
-    });
-
-    xsec_timer = pit_chain(xsec_timer_0, &(pit_cfg_t){
-            .period = UINT32_MAX
-    });
-
-    pit_start(xsec_timer);
-    pit_start(xsec_timer_0);
+    pit_ltt_init();
 
     boss = pflag_set();
 
@@ -347,13 +336,6 @@ static void sync_hook(u32 chan)
 }
 
 
-/*static u32 start_time = 0;
-static u32 sum_lengths = 0;
-static u32 num_packets = 0;
-static u32 time_diff;*/
-
-
-
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi);
 
 
@@ -405,24 +387,6 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
             nmac_send(NMAC_SEND_STRM, 0x0000, size, data);
         }
     }
-
-    //itm_printf(0, "recv: total=%lu\r\n", recv_total);
-
-
-    /*sum_lengths += size;
-    num_packets++;
-    if (!start_time) start_time = sync_timestamp();
-    time_diff = sync_timestamp() - start_time;
-
-    if (time_diff >= 1000) {
-        printf("rx: rate = %lu bps \t\t pkts = %lu\r\n", (1000 * (sum_lengths * 8)) / time_diff, num_packets);
-        num_packets = 0;
-        sum_lengths = 0;
-        start_time = 0;
-
-    }*/
-
-    //LED_D_TOGGLE();
 
     write_code_recv(node, peer, dest, size, data, rssi, lqi);
 }
@@ -564,8 +528,8 @@ static void handle_code_status(size_t size, u8 *data)
 
     code_status_t code_status = {
             .version = 1,
-            .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32),
-            .uptime = sync_timestamp() / 1000u,
+            .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32), // TODO: Check higher serial bytes on MCUs with same L and ML (happened once already)
+            .uptime = (u32)(sclk_time() / 1000u),
             .node = nmac_get_addr(),
             .recv_count = recv_count,
             .recv_bytes = recv_bytes,

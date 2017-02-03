@@ -181,6 +181,31 @@ void pit_stop(pit_t pit)
 }
 
 
+static pit_nsec_t pit_ltt_nsec_div = 1;
+
+void pit_ltt_init(void)
+{
+    assert(!pits[0].used && !pits[1].used);
+    pit_ltt_nsec_div = CLOCK_GetBusClkFreq();
+
+    pit_t pit_0 = pit_alloc(&(pit_cfg_t){
+            .period = UINT32_MAX
+    });
+
+    pit_t pit_1 = pit_chain(pit_0, &(pit_cfg_t){
+            .period = UINT32_MAX
+    });
+
+    pit_start(pit_1);
+    pit_start(pit_0);
+}
+
+pit_nsec_t pit_ltt_current(void)
+{
+    return (NSEC_SEC * (UINT64_MAX - PIT_GetLifetimeTimerCount(PIT))) / pit_ltt_nsec_div;
+}
+
+
 #define PIT_CHNL_USED(CHNL)          ((CHNL) >= PIT_CHNL_BASE) && ((CHNL) < (PIT_CHNL_BASE+PIT_COUNT))
 
 // TODO: Debug check of hander only?
