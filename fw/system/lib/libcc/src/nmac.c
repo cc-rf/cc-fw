@@ -20,15 +20,12 @@
 #include <fsl_port.h>
 #include <cc/type.h>
 #include <itm.h>
-
-typedef u64 sclk_t;
-
-sclk_t sclk_time(void);
+#include <sclk.h>
 
 #define NMAC_PEER_MAX       10
 
 #define NMAC_PEND_MAX       1
-#define NMAC_PEND_TIME      31 // LBT min = 5ms. Channel blocking <= 25ms.
+#define NMAC_PEND_TIME      47 // LBT min = 5ms. Channel blocking <= 25ms.
 
 #define NMAC_TXQ_COUNT      1 // NMAC_PEND_MAX? When this is implemented it should be user-facing
 #define NMAC_TXQ_SIZE       (NMAC_PEND_MAX * NMAC_TXQ_COUNT)
@@ -231,10 +228,10 @@ static bool do_send(mac_txq_t *txqi)
     nmac_pend_t **pend_array_entry = NULL;
     u8 nphy_flag = 0;
 
-    nmac_debug_pkt(
-            "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05llu \t TX-BEGIN",
-            pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, sclk_time()
-    );
+    //nmac_debug_pkt(
+    //        "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t TX-BEGIN",
+    //        pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, SCLK_MSEC(sclk_time())
+    //);
 
     if (pkt->flag & MAC_FLAG_PKT_IMM) {
         nphy_flag |= PHY_PKT_FLAG_IMMEDIATE;
@@ -289,8 +286,8 @@ static bool do_send(mac_txq_t *txqi)
     _retry_tx:
     nphy_tx(nphy_flag, (u8 *)pkt, pkt_len);
     nmac_debug_pkt(
-            "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05llu \t %s",
-            pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, sclk_time(),
+            "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t %s",
+            pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, SCLK_MSEC(sclk_time()),
             pkt->flag & MAC_FLAG_ACK_REQ ? "TX-ACK-REQ" : (pkt->flag & MAC_FLAG_ACK_RSP ? "TX-ACK-RSP" : "TX")
     );
 
@@ -313,7 +310,7 @@ static bool do_send(mac_txq_t *txqi)
                     pkt->flag |= MAC_FLAG_ACK_RQR;
                 }
 
-                nmac_debug("retry: start=%lu now=%lu seq=%u", start, sclk_time(), pkt->seqn);
+                nmac_debug("retry: start=%lu now=%lu seq=%u", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
                 goto _retry_tx;
             }
 
@@ -394,8 +391,8 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 
     } else {
         nmac_debug_pkt(
-                "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05llu \t %s",
-                pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, sclk_time(),
+                "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t %s",
+                pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, SCLK_MSEC(sclk_time()),
                 pkt->flag & MAC_FLAG_ACK_REQ ? "RX-ACK-REQ" : (pkt->flag & MAC_FLAG_ACK_RSP ? "RX-ACK-RSP" : "RX")
         );
 
@@ -428,14 +425,14 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                                     pend->flag |= MAC_FLAG_ACK_RSP;
 
                                     if ((pend->flag & MAC_FLAG_ACK_RQR)) {
-                                        nmac_debug("acked rqr: now=%lu seq=%u", sclk_time(), seqn);
+                                        nmac_debug("acked rqr: now=%lu seq=%u", SCLK_MSEC(sclk_time()), (u32)seqn);
                                     }
 
                                     //nmac_debug("ack: now=%lu seq=%u", sync_timestamp(), seqn);
                                     xSemaphoreGive(nmac.pend[i]->mtx);
                                     xSemaphoreGive(nmac.pend[i]->sem);
                                 } else {
-                                    nmac_debug("(warning) ack already received: now=%lu seq=%u", sclk_time(), seqn);
+                                    nmac_debug("(warning) ack already received: now=%lu seq=%u", SCLK_MSEC(sclk_time()), (u32)seqn);
                                     xSemaphoreGive(nmac.pend[i]->mtx);
                                 }
 
@@ -447,13 +444,7 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                     }
 
                     if (i == NMAC_PEND_MAX) {
-                        nmac_debug("(warning) ack too late: now=%lu seq=%u", sclk_time(), seqn);
-
-                        /*nmac_debug(
-                                "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05u \t %s",
-                                pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, sync_timestamp(),
-                                pkt->flag & MAC_FLAG_ACK_REQ ? "RX-ACK-REQ" : (pkt->flag & MAC_FLAG_ACK_RSP ? "RX-ACK-RSP" : "RX")
-                        );*/
+                        nmac_debug("(warning) ack too late: now=%lu seq=%u", SCLK_MSEC(sclk_time()), (u32)seqn);
                     }
                 } else {
                     nmac.rx(mac_addr, pkt->addr, pkt->dest, pkt->size, pkt->data, rssi, lqi);

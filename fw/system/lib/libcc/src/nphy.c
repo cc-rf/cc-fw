@@ -14,15 +14,10 @@
 #include <malloc.h>
 #include <cc/freq.h>
 
-
 #include <cc/sys/kinetis/isrd.h>
 #include <fsl_port.h>
 #include <cc/type.h>
-
-
-typedef u64 sclk_t;
-sclk_t sclk_time(void);
-
+#include <sclk.h>
 
 /**
  * TODO: At the PHY level, we're really dealing with FRAMES rather than PACKETS.
@@ -231,6 +226,8 @@ static inline void nphy_free(void *ptr)
 
 bool nphy_init(nphy_rx_t rx, bool sync_master)
 {
+    sclk_init();
+
     boss = sync_master;
 
     cc_spi_init(dev);
@@ -735,7 +732,7 @@ static void nphy_task(void *param __unused)
                 ms = cc_get(dev, CC1200_MARC_STATUS1);
 
                 if (ms) {
-                    //cc_dbg_v("isr: ms1=0x%02X st=0x%02X t=%lu 2Ps=%u", ms, cc_strobe(dev, CC1200_SNOP), sync_timestamp(), marc_2pin_status());
+                    //cc_dbg_v("isr: ms1=0x%02X st=0x%02X t=%lu 2Ps=%u", ms, cc_strobe(dev, CC1200_SNOP), SCLK_MSEC(sclk_time()), marc_2pin_status());
                 }
 
                 switch (ms) {
@@ -827,7 +824,7 @@ static void nphy_task(void *param __unused)
             const u32 chan_time_cur = chan_time * (sync_slow ? 2 : 1);
 
             if (!boss && ((ts - sync_last) >= 3*(CHAN_TIME * CHAN_COUNT)) && sync_last) {
-                cc_dbg_v("sync dropped: last=%lu now=%lu", sync_last, ts);
+                cc_dbg_v("sync dropped: last=%lu now=%lu", SCLK_MSEC(sync_last), SCLK_MSEC(ts));
                 sync_time = 0;
                 start_time = sclk_time(); // NEW: advance start time. TODO: Check this!
                 goto _unsynced_check;
@@ -847,7 +844,7 @@ static void nphy_task(void *param __unused)
 
                     cc_dbg(
                             "chan: switched during TX! TXBYTES=%u plen=%u is_sync=%u time=%lu next=%lu rem=%lu",
-                            tx_bytes, pkt->len, (void *) pkt == &pkt_sync, sclk_time(), tx_next, remaining
+                            tx_bytes, pkt->len, (void *) pkt == &pkt_sync, SCLK_MSEC(sclk_time()), SCLK_MSEC(tx_next), remaining
                     );
 
                     if ((void *) pkt != &pkt_sync) nphy_free(pkt);
@@ -882,10 +879,8 @@ static void nphy_task(void *param __unused)
 
                     cc_dbg(
                             "chan: switched during TX! TXBYTES=%u plen=%u is_sync=%u time=%lu next=%lu rem=%lu <NOSYNC>",
-                            tx_bytes, pkt->len, (void *) pkt == &pkt_sync, sclk_time(), tx_next, remaining
+                            tx_bytes, pkt->len, (void *) pkt == &pkt_sync, SCLK_MSEC(sclk_time()), SCLK_MSEC(tx_next), remaining
                     );
-
-                    printf("%lu", sclk_time());
 
                     if ((void *) pkt != &pkt_sync) nphy_free(pkt);
                     pkt = NULL;
@@ -1033,8 +1028,8 @@ static void nphy_task(void *param __unused)
                             }
                         }
 
-                        tx_next = cc_get_tx_time(dev, pkt->len) * 5;
-                        pkt_sync.ts = (u32)(ticks + tx_next);
+                        tx_next = cc_get_tx_time(dev, pkt->len);
+                        pkt_sync.ts = (u32)(ticks + tx_next*2 + 1000);
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
@@ -1062,17 +1057,17 @@ static void nphy_task(void *param __unused)
                             chan_ticks = (u32)(ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if (chan_ticks < 2500) {
+                            if (chan_ticks < 5000) {
 
-                                tx_next = ts + (2500 - chan_ticks);
+                                tx_next = ts + (5000 - chan_ticks);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            if (remaining < (2500 + pkt_time)) {
+                            if (remaining < (5000 + pkt_time)) {
 
-                                tx_next = ts + ((2500 + pkt_time) - remaining);
+                                tx_next = ts + ((5000 + pkt_time) - remaining);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
@@ -1109,18 +1104,18 @@ static void nphy_task(void *param __unused)
 
                             // LBT minimum is 5ms
 
-                            if (chan_ticks < 5000) {
+                            if (chan_ticks < 10000) {
 
-                                tx_next = ts + (5000 - chan_ticks);
+                                tx_next = ts + (10000 - chan_ticks);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
 
                             }
 
-                            if (remaining < (5000 + pkt_time)) {
+                            if (remaining < (10000 + pkt_time)) {
 
-                                tx_next = ts + ((5000 + pkt_time) - remaining);
+                                tx_next = ts + ((10000 + pkt_time) - remaining);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
@@ -1155,7 +1150,7 @@ static void nphy_task(void *param __unused)
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
                         if (tx_next) tx_next = sclk_time() + tx_next;
-                        //cc_dbg_v("tx: sent now=%lu next=%lu", sclk_time(), tx_next);
+                        //cc_dbg_v("tx: sent now=%lu next=%lu", SCLK_MSEC(sclk_time()), SCLK_MSEC(tx_next));
 
                     } else if (!pkt) {
 
@@ -1174,7 +1169,7 @@ static void nphy_task(void *param __unused)
                             ts = sclk_time();
 
                             if (ts >= (tx_next+7000)) {
-                                cc_dbg("tx: timed out: now=%lu tx_next=%lu", ts, tx_next);
+                                cc_dbg("tx: timed out: now=%lu tx_next=%lu", SCLK_MSEC(ts), SCLK_MSEC(tx_next));
                                 if ((void *)pkt != &pkt_sync) nphy_free(pkt);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
@@ -1202,7 +1197,7 @@ static void nphy_task(void *param __unused)
 
         if (tx_next) {
             if (ts >= tx_next) {
-                //cc_dbg("ts=%lu >= tx_next=%lu", ts, tx_next);
+                //cc_dbg("ts=%lu >= tx_next=%lu", SCLK_MSEC(ts), SCLK_MSEC(tx_next));
                 remaining = 0;
                 //tx_next = 0;
                 continue;
@@ -1210,7 +1205,7 @@ static void nphy_task(void *param __unused)
 
             if ((ts + remaining) > tx_next) {
                 remaining = (u32)(tx_next - ts);
-                //cc_dbg_v("rf: wait=%lu now=%lu tx_next=%lu ticks=%li chan_ticks=%lu", remaining, ts, tx_next, ticks, chan_ticks);
+                //cc_dbg_v("rf: wait=%lu now=%lu tx_next=%lu ticks=%li chan_ticks=%lu", remaining, SCLK_MSEC(ts), SCLK_MSEC(tx_next), SCLK_MSEC(ticks), SCLK_MSEC(chan_ticks));
                 continue;
             }
         }

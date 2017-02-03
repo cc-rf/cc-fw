@@ -6,6 +6,7 @@ add_library(
         isrd.c
         kinetis.c
         pit.c
+        sclk.c
         spi.c
 )
 

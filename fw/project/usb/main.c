@@ -32,6 +32,7 @@
 #include <util/uart.h>
 #include <uhdcd.h>
 #include <pca9685.h>
+#include <sclk.h>
 
 #define PFLAG_PORT PORTB
 #define PFLAG_GPIO GPIOB
@@ -188,13 +189,6 @@ static inline bool uflag2_set(void)
     return __uflag2_set;
 }
 
-typedef u64 sclk_t;
-
-sclk_t sclk_time(void)
-{
-    return pit_ltt_current() / 1000;
-}
-
 
 static bool boss = false;
 static u16 addr = 0;
@@ -244,8 +238,6 @@ static void main_task(void *param)
     }*/
 
     //xTimerHandle timer = xTimerCreate(NULL, pdMS_TO_TICKS(100), pdTRUE, NULL, timer_task);
-
-    pit_ltt_init();
 
     boss = pflag_set();
 
@@ -529,7 +521,7 @@ static void handle_code_status(size_t size, u8 *data)
     code_status_t code_status = {
             .version = 1,
             .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32), // TODO: Check higher serial bytes on MCUs with same L and ML (happened once already)
-            .uptime = (u32)(sclk_time() / 1000u),
+            .uptime = SCLK_MSEC(sclk_time()),
             .node = nmac_get_addr(),
             .recv_count = recv_count,
             .recv_bytes = recv_bytes,

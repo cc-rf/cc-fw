@@ -181,7 +181,7 @@ void pit_stop(pit_t pit)
 }
 
 
-static pit_nsec_t pit_ltt_nsec_div = 1;
+static volatile pit_nsec_t pit_ltt_nsec_div = 1;
 
 void pit_ltt_init(void)
 {
