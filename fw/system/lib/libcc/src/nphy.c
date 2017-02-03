@@ -112,8 +112,7 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 #define cc_dbg_v(format, ...) cc_dbg(format, ##__VA_ARGS__ ) //cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
 
 #undef assert
-#define _sfy(x) #x
-#define assert(x) if (!(x)) { itm_puts(0, "ASSERT FAIL: \" #x ""\" on line " _sfy( __LINE__ ) "\n"); asm("bkpt #0"); while (1) { asm("nop"); } }
+#define assert(x) if (!(x)) { itm_printf(0, "ASSERT FAIL: ( " #x " ) on line %u of %s\r\n", __LINE__, __FILE__); asm("bkpt #0"); while (1) { asm("nop"); } }
 
 
 
@@ -390,7 +389,6 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
     }
 
     if (ppkt->hdr.flag & PHY_PKT_FLAG_SYNC) {
-        const sclk_t ts = sclk_time();
         const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *) pkt;
 
         if (!boss) {

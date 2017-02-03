@@ -200,9 +200,17 @@ void pit_ltt_init(void)
     pit_start(pit_0);
 }
 
+static u64 ltt_prev = UINT64_MAX;
+
 pit_nsec_t pit_ltt_current(void)
 {
-    const u64 ltt = ((u64)pit_get_current(&pits[1]) << 32U) | pit_get_current(&pits[0]);
+    const u64 ltt = ((u64)pit_get_current(&pits[1]) << 32U) | (u64)pit_get_current(&pits[0]);
+
+    if (ltt > ltt_prev) {
+        asm("bkpt #0");
+    }
+
+    ltt_prev = ltt;
 
     return (NSEC_SEC * (UINT64_MAX - ltt/*PIT_GetLifetimeTimerCount(PIT)*/)) / pit_ltt_nsec_div;
 }

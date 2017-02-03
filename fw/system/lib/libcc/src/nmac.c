@@ -37,8 +37,7 @@
 #define nmac_debug_v(format, ...)
 
 #undef assert
-#define _sfy(x) #x
-#define assert(x) if (!(x)) { itm_puts(0, "ASSERT FAIL: \" #x ""\" on line " _sfy( __LINE__ ) "\n"); asm("bkpt #0"); while (1) { asm("nop"); } }
+#define assert(x) if (!(x)) { itm_printf(0, "ASSERT FAIL: ( " #x " ) on line %u of %s\r\n", __LINE__, __FILE__); asm("bkpt #0"); while (1) { asm("nop"); } }
 
 typedef enum __packed {
     MAC_FLAG_PKT_IMM = 1 << 0,
