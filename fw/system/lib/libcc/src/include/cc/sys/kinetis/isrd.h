@@ -4,7 +4,7 @@
 #include <fsl_port.h>
 
 #define ISRD_PORTC
-#define ISRD_PORTC_MAX_PIN      10
+#define ISRD_PORTC_MAX_PIN      12
 //#define ISRD_PORTD
 //#define ISRD_PORTD_MAX_PIN      7
 
