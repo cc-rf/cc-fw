@@ -821,13 +821,25 @@ static void nphy_task(void *param __unused)
         if (sync_time) {
             ts = sclk_time();
             ticks = ts - sync_time;
-            const u32 chan_time_cur = chan_time * (sync_slow ? 2 : 1);
+            u32 chan_time_cur = chan_time * (sync_slow ? 2 : 1);
+            assert(ts > sync_last);
 
             if (!boss && ((ts - sync_last) >= 3*(CHAN_TIME * CHAN_COUNT)) && sync_last) {
-                cc_dbg_v("sync dropped: last=%lu now=%lu", SCLK_MSEC(sync_last), SCLK_MSEC(ts));
-                sync_time = 0;
-                start_time = sclk_time(); // NEW: advance start time. TODO: Check this!
-                goto _unsynced_check;
+                if (!sync_slow) {
+                    sync_slow = true;
+                    chan_time_cur *= 2;
+                    cc_dbg_v("sync lost: last=%lu now=%lu", SCLK_MSEC(sync_last), SCLK_MSEC(ts));
+                } else {
+
+                    if (((ts - sync_last) >= 5*(CHAN_TIME * CHAN_COUNT))) {
+                        cc_dbg_v("sync dropped: last=%lu now=%lu", SCLK_MSEC(sync_last), SCLK_MSEC(ts));
+                        sync_time = 0;
+                        //start_time = sclk_time(); // NEW: advance start time. TODO: Check this!
+                        // ^ doesn't seem promising so far
+
+                        goto _unsynced_check;
+                    }
+                }
             } else {
                 remaining = chan_time_cur - (u32)(ticks % chan_time_cur);
 
@@ -852,6 +864,8 @@ static void nphy_task(void *param __unused)
                     cc_strobe(dev, CC1200_SIDLE); // may cause redundancies but probably safer...
                     ///cca_disable();
                 }
+
+                tx_next = 0;
 
                 if (boss) {
                     sync_needed = true;
@@ -887,6 +901,8 @@ static void nphy_task(void *param __unused)
                     cc_strobe(dev, CC1200_SIDLE); // may cause redundancies but probably safer...
                     ///cca_disable();
                 }
+
+                tx_next = 0;
 
                 sync_needed = true;
                 loop_state = LOOP_STATE_TX;
