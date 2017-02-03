@@ -198,11 +198,11 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 #endif
                     }
 
-                    if (uxSemaphoreGetCount(usb_tx_s) && !uxQueueMessagesWaiting(usb_tx_q)) {
-                        // TODO: test this and determine if it is needed
-                        //itm_puts(0, "<itm> usb: post-tx flush\r\n");
-                        error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
-                    }
+                    //if (uxSemaphoreGetCount(usb_tx_s) && !uxQueueMessagesWaiting(usb_tx_q)) {
+                    //    // TODO: test this and determine if it is needed
+                    //    //itm_puts(0, "<itm> usb: post-tx flush\r\n");
+                    //    error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
+                    //}
 
                     if (sending) {
                         sending = false;
@@ -249,11 +249,11 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                     }
 
 
-                    if (uxSemaphoreGetCount(usb_tx_s) && !uxQueueMessagesWaiting(usb_tx_q)) {
-                        // TODO: test this and determine if it is needed
-                        //itm_puts(0, "<itm> usb: post-rx flush\r\n");
-                        error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
-                    }
+                    //if (uxSemaphoreGetCount(usb_tx_s) && !uxQueueMessagesWaiting(usb_tx_q)) {
+                    //    // TODO: test this and determine if it is needed
+                    //    //itm_puts(0, "<itm> usb: post-rx flush\r\n");
+                    //    error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
+                    //}
                 }
 
                 if (!receiving) {
