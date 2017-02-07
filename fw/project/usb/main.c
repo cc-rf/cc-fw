@@ -31,7 +31,6 @@
 #include <malloc.h>
 #include <util/uart.h>
 #include <uhdcd.h>
-#include <pca9685.h>
 #include <sclk.h>
 
 #define PFLAG_PORT PORTB
@@ -108,7 +107,7 @@ int main(void)
 
     LED_C_ON();
 
-    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGHEST, NULL);
+    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL);
 
     //LED_C_ON();
 
@@ -261,7 +260,8 @@ static void main_task(void *param)
 
             while (1) {
                 const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
-                nmac_send(NMAC_SEND_DGRM, 0x0000, TXLEN, (u8 *)to_send);
+                nmac_send(NMAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send);
+                vTaskDelay(pdMS_TO_TICKS(5));
             }
         }
 

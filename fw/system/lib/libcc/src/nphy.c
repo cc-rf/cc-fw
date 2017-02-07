@@ -62,9 +62,7 @@ static void isr_mcu_wake(void);
 static void isr_ctl_lna(void);
 static void isr_ctl_pa(void);
 
-static void cca_setup(void);
 static void cca_run(void);
-static void cca_end(void);
 
 static bool nphy_rx(bool flush);
 
@@ -92,7 +90,7 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 
         //{CC1200_PREAMBLE_CFG1, /*0xD*/0x4 << 2},
         //{CC1200_SYNC_CFG1,  0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16/* changed from 11 */},
-        {CC1200_PKT_CFG2,   CC1200_PKT_CFG2_CCA_MODE_ALWAYS},
+        {CC1200_PKT_CFG2,   CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_NOT_RX/*CC1200_PKT_CFG2_CCA_MODE_ALWAYS*//*CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT*/},
         {CC1200_PKT_CFG1,   CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F | CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF | CC1200_PKT_CFG1_APPEND_STATUS | CC1200_PKT_CFG1_WHITE_DATA},
         {CC1200_PKT_CFG0,   CC1200_PKT_CFG0_LENGTH_CONFIG_VARIABLE},
         {CC1200_PKT_LEN,    255},
@@ -283,7 +281,7 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 2, &nphy.disp)) {
+    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 1, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
         return false;
     }
@@ -320,6 +318,8 @@ void nphy_tx(u8 flag, u8 *buf, u8 len)
             cc_dbg("tx pkt queue immediate fail");
             nphy_free(qpkt);
         }
+
+        taskYIELD();
 
     } else if (xQueueSend(nphy.txq, &qpkt, portMAX_DELAY/*pdMS_TO_TICKS(500)*/)) {
         xTaskNotify(nphy.task, NOTIFY_MASK_TX, eSetBits);
@@ -431,6 +431,8 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
             nphy_free(recv);
         }
 
+        taskYIELD();
+
         return true;
     } else {
         if (!xQueueSend(nphy.rxq, &recv, pdMS_TO_TICKS(100))) {
@@ -438,11 +440,10 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
             nphy_free(recv);
         }
 
+        taskYIELD();
+
         return false;
     }
-
-    // TODO: Evaluate and remove this if not needed!
-    vTaskDelay(0); // yield to allow packet to be processed in case more packets are queued as a result
 }
 
 static bool nphy_rx(bool flush)
@@ -474,12 +475,12 @@ static bool nphy_rx(bool flush)
 
         if (spkt->len > PHY_FRAME_SIZE_MAX) {
             // NOTE: _v added newly, but this is a useful error to see when timing is off. same applies for below
-            cc_dbg_v("[%u] c=%u malformed: len[header]=%u > len[max]=%u  (len[fifo]=%u)", dev, pkt_count+1, spkt->len, PHY_FRAME_SIZE_MAX, len);
+            //cc_dbg_v("[%u] c=%u malformed: len[header]=%u > len[max]=%u  (len[fifo]=%u)", dev, pkt_count+1, spkt->len, PHY_FRAME_SIZE_MAX, len);
             break;
         }
 
         if (spkt->len > (len - PKT_OVERHEAD)) {
-            cc_dbg_v("[%u] c=%u underflow: len[header]=%u > len[fifo]=%u", dev, pkt_count+1, spkt->len, len);
+            //cc_dbg_v("[%u] c=%u underflow: len[header]=%u > len[fifo]=%u", dev, pkt_count+1, spkt->len, len);
             break;
         }
 
@@ -497,12 +498,12 @@ static bool nphy_rx(bool flush)
             if (crc_ok) {
                 got_imm |= process_packet(spkt, rssi, lqi);
             } else {
-                cc_dbg_v("[%u] c=%u bad crc", dev, pkt_count);
+                //cc_dbg_v("[%u] c=%u bad crc", dev, pkt_count);
                 // NEW: don't trust anything else in the buffer
                 break;
             }
         } else {
-            cc_dbg_v("[%u] c=%u empty", dev, pkt_count);
+            //cc_dbg_v("[%u] c=%u empty", dev, pkt_count);
             // NEW: this is weird, should def stop
             break;
         }
@@ -602,9 +603,9 @@ void cca_enable(void)
         }*/
 
         //cc_update(dev, CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_M, CC1200_RFEND_CFG1_RXOFF_MODE_TX);
-        cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT);
+        //cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT);
         //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_CARRIER_SENSE);
-        cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0);
+        //cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0);
     }
 }
 
@@ -623,9 +624,9 @@ void cca_disable(void)
 {
     if (cca_enabled) {
         cca_enabled = false;
-        cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_ALWAYS);
+        //cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_ALWAYS);
         //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_NORMAL);
-        cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 7); // NOTE: cheating here and using known value
+        //cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0xA); // NOTE: cheating here and using known value
     }
 }
 
@@ -723,7 +724,7 @@ static void nphy_task(void *param __unused)
 
 
     while (1) {
-        if (xTaskNotifyWait(0, UINT32_MAX, &notify, pdMS_TO_TICKS((remaining+1000)/1000))) {
+        if (xTaskNotifyWait(0, UINT32_MAX, &notify, pdMS_TO_TICKS(((remaining/2)+1001)/1000))) {
 
             if (notify & NOTIFY_MASK_ISR) {
 
@@ -966,9 +967,18 @@ static void nphy_task(void *param __unused)
                             continue;
 
                         case RF_STATE_TX_ERR:
-                            cc_dbg("tx fail: ms=0x%02X", ms);
-                            /* TODO: ROOT CAUSE HARD FAULT STARTING FROM HERE
-                             * */
+                            if (ms == CC1200_MARC_STATUS1_TX_ON_CCA_FAILED) {
+                                assert(pkt);
+                                cc_strobe(dev, CC1200_SFTX);
+                                //cc_dbg_v("cca fail: now=%lu st=0x%02X", SCLK_MSEC(sclk_time()), (u32)cc_strobe(dev, CC1200_SNOP));
+                                //puts("cca fail\n");
+
+                            } else {
+
+                                cc_dbg("tx fail: ms=0x%02X", ms);
+                            }
+
+                            cc_strobe(dev, CC1200_SIDLE);
 
                         case RF_STATE_TX_END:
                             if (pkt) {
@@ -991,6 +1001,7 @@ static void nphy_task(void *param __unused)
 
                                         loop_state_next = LOOP_STATE_RX;
                                         pkt = NULL;
+                                        cca_disable();
                                         continue;
                                     //}
                                 }
@@ -998,6 +1009,7 @@ static void nphy_task(void *param __unused)
                                 pkt = NULL;
                             } else {
                                 cc_dbg("WARNING: tx completion indicated without a packet pending");
+                                cca_disable();
                                 //?? (includes tx error condition continuation)
                                 //loop_state_next = LOOP_STATE_RX;
                                 //continue;
@@ -1043,7 +1055,7 @@ static void nphy_task(void *param __unused)
                         }
 
                         tx_next = cc_get_tx_time(dev, pkt->len);
-                        pkt_sync.ts = (u32)(ticks + tx_next*2 + 1000);
+                        pkt_sync.ts = (u32)(ticks + tx_next + 750);
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
@@ -1071,19 +1083,19 @@ static void nphy_task(void *param __unused)
                             chan_ticks = (u32)(ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if (chan_ticks < 5000) {
+                            if (chan_ticks < 1500) {
 
-                                tx_next = ts + (5000 - chan_ticks);
+                                tx_next = ts + (1500 - chan_ticks);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            if (remaining < (5000 + pkt_time)) {
+                            if (remaining < (1500 + pkt_time)) {
 
-                                tx_next = ts + ((5000 + pkt_time) - remaining);
+                                tx_next = ts + ((1500 + pkt_time) - remaining);
                                 pkt = NULL;
-                                loop_state_next = LOOP_STATE_RX;
+                                //loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
@@ -1116,22 +1128,20 @@ static void nphy_task(void *param __unused)
                             chan_ticks = (u32)(ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            // LBT minimum is 5ms
+                            if (chan_ticks < 2500) {
 
-                            if (chan_ticks < 10000) {
-
-                                tx_next = ts + (10000 - chan_ticks);
+                                tx_next = ts + (2500 - chan_ticks);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
 
                             }
 
-                            if (remaining < (10000 + pkt_time)) {
+                            if (remaining < (2500 + pkt_time)) {
 
-                                tx_next = ts + ((10000 + pkt_time) - remaining);
+                                tx_next = ts + ((2500 + pkt_time) - remaining);
                                 pkt = NULL;
-                                loop_state_next = LOOP_STATE_RX;
+                                //loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
@@ -1145,23 +1155,16 @@ static void nphy_task(void *param __unused)
 
                         xQueueReceive(nphy.txq, &pkt, 0);
 
-                        //cca = false;//!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE);
+                        cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
 
-                        /*if (cca) {
-                            retry = MAX_CCA_RETRY;
-                            //if (!cca_enabled) {
-                            //    cc_strobe(dev, CC1200_SIDLE);
-                            //}
+                        if (!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)) {
                             cca_enable();
                             cca_run();
-                        } else*/ {
-                            //cca_disable();
-                            // ARGH WTF DO I DO HERE
-                            //cc_strobe(dev, CC1200_SIDLE); // is this needed? always?
+                        } else {
+                            if ((cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M) != CC1200_STATE_IDLE)
+                                cc_strobe(dev, CC1200_SIDLE);
                         }
 
-                        cc_strobe(dev, CC1200_SIDLE);
-                        cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
                         if (tx_next) tx_next = sclk_time() + tx_next;
                         //cc_dbg_v("tx: sent now=%lu next=%lu", SCLK_MSEC(sclk_time()), SCLK_MSEC(tx_next));
@@ -1186,6 +1189,8 @@ static void nphy_task(void *param __unused)
                                 cc_dbg("tx: timed out: now=%lu tx_next=%lu", SCLK_MSEC(ts), SCLK_MSEC(tx_next));
                                 if ((void *)pkt != &pkt_sync) nphy_free(pkt);
                                 pkt = NULL;
+                                if (cc_strobe(dev, CC1200_SIDLE) & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFTX);
+                                cca_disable();
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }

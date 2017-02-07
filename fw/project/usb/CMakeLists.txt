@@ -30,7 +30,6 @@ target_link_libraries(
         PUBLIC fw_system_framework_trace
         PUBLIC util_uart
         PUBLIC libcc
-        PUBLIC pca9685
         "-Xlinker -defsym=__heap_size__=0x28000"
         "-Xlinker -defsym=__stack_size__=0x2000"
 )

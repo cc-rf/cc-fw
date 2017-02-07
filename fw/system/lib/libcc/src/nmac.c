@@ -25,7 +25,7 @@
 #define NMAC_PEER_MAX       10
 
 #define NMAC_PEND_MAX       1
-#define NMAC_PEND_TIME      47 // LBT min = 5ms. Channel blocking <= 25ms.
+#define NMAC_PEND_TIME      57
 #define NMAC_PEND_RETRY     3
 
 #define NMAC_TXQ_COUNT      1 // NMAC_PEND_MAX? When this is implemented it should be user-facing
@@ -76,6 +76,7 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
 
 typedef struct __packed {
     u16 addr;
+    //u8 seqn;
 
 } nmac_peer_t;
 
@@ -140,7 +141,7 @@ static nmac_peer_t *peer_get_or_add(u16 addr)
     for (u8 i = 0; i < NMAC_PEER_MAX; ++i) {
         if (nmac.peer[i].addr == addr) {
             return &nmac.peer[i];
-        } else if (!pp && !nmac.peer[i].addr) {
+        } else if (!pp && !nmac.peer[i].addr) { // TODO: Change this logic to support peer removal/expiry
             pp = &nmac.peer[i];
         }
     }
@@ -182,7 +183,7 @@ bool nmac_init(u16 addr, bool sync_master, mac_recv_t rx)
         }
     }
 
-    if (!xTaskCreate(tx_task, "nmac:send", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH, NULL)) {
+    if (!xTaskCreate(tx_task, "nmac:send", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_HIGH - 1, NULL)) {
         nmac_debug("error: unable to create send task");
         return false;
     }
@@ -317,7 +318,7 @@ static bool do_send(mac_txq_t *txqi)
                         pkt->flag |= MAC_FLAG_ACK_RQR;
                     }
 
-                    nmac_debug("retry: start=%lu now=%lu seq=%lu", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
+                    //nmac_debug("retry: start=%lu now=%lu seq=%lu", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
                     goto _retry_tx;
                 } else {
                     nmac_debug("retry: start=%lu now=%lu seq=%lu <fail>", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
@@ -412,7 +413,9 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
         } else {
             nmac_peer_t *const peer = peer_get_or_add(pkt->addr);
 
-            if (peer) {
+            if (peer /*&& ((pkt->seqn > peer->seqn) || (peer->seqn != pkt->seqn))*/) {
+                //peer->seqn = pkt->seqn;
+
                 if (pkt->flag & MAC_FLAG_ACK_REQ) {
                     send(pkt->addr, MAC_FLAG_PKT_BLK | MAC_FLAG_PKT_IMM | MAC_FLAG_ACK_RSP, sizeof(pkt->seqn), &pkt->seqn);
                 }
@@ -434,9 +437,9 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                                 if (!(pend->flag & MAC_FLAG_ACK_RSP)) {
                                     pend->flag |= MAC_FLAG_ACK_RSP;
 
-                                    if ((pend->flag & MAC_FLAG_ACK_RQR)) {
-                                        nmac_debug("acked rqr: now=%lu seq=%lu", SCLK_MSEC(sclk_time()), (u32)seqn);
-                                    }
+                                    //if ((pend->flag & MAC_FLAG_ACK_RQR)) {
+                                    //    nmac_debug("acked rqr: now=%lu seq=%lu", SCLK_MSEC(sclk_time()), (u32)seqn);
+                                    //}
 
                                     //nmac_debug("ack: now=%lu seq=%u", sync_timestamp(), seqn);
                                     xSemaphoreGive(nmac.pend[i]->mtx);

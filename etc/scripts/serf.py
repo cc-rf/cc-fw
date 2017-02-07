@@ -359,10 +359,10 @@ def send_frames(serial):
     while 1:
         count += 1
         # data = '\x3A' * 48
-        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(4, 110))])
+        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(32, 110))])
         serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
-        # serf_send(serial, random.choice((0, 3)), 0x0000, data)
-        # time.sleep(5)
+        # serf_send(serial, random.choice((1, 3)), 0x0000, data)
+        # time.sleep(.1)
 
 
 def input_thread(serial):

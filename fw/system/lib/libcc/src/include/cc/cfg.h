@@ -110,7 +110,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYMBOL_RATE1,      0x99},
         {CC1200_SYMBOL_RATE0,      0x9A},
         {CC1200_AGC_REF,           0x33},
-        {CC1200_AGC_CS_THR,        (u8)-117},
+        {CC1200_AGC_CS_THR,        (u8)-103/*(96 - 93)*/},
         {CC1200_AGC_CFG2,          0x00},
         {CC1200_AGC_CFG1,          /*0x00*/0x51},
         {CC1200_AGC_CFG0,          /*0x40*/0x87},
