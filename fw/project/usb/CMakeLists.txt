@@ -8,7 +8,6 @@ add_library(
         usb/usb_device_class.c
         usb/usb_device_descriptor.c
         usb/virtual_com.c
-        usb/uhdcd.c
 )
 
 #set_source_files_properties(main.c PROPERTIES COMPILE_FLAGS "-Wa,-a,-ad")
