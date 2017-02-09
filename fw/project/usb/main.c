@@ -243,9 +243,14 @@ static void main_task(void *param)
     sim_uid_t sim_uid;
     SIM_GetUniqueId(&sim_uid);
 
-    addr =  (u16)0x4000 | (u16)(~0x4000 & ( ((u16)sim_uid.L) ^ ((u16)(sim_uid.L>>16)) ) );
+    sim_uid.L ^= sim_uid.H;
+    sim_uid.ML ^= ~sim_uid.MH;
 
-    printf("\r\naddress: 0x%04X L=0x%08lX ML=0x%08lX MH=0x%08lX\r\n\r\n", addr, sim_uid.L, sim_uid.ML, sim_uid.MH);
+    u32 addr_quad = sim_uid.L ^ sim_uid.ML;
+
+    addr = ((u16)addr_quad) ^ ((u16)(addr_quad>>16)); // (u16)0x4000 | (u16)(~0x4000 & ( ((u16)addr_quad) ^ ((u16)(addr_quad>>16)) ) );
+
+    printf("\r\nCloud Chaser %08lX%08lX@%04X\r\n\r\n", sim_uid.ML, sim_uid.L, addr);
 
     if (nmac_init(addr, boss, handle_rx)) {
 
@@ -601,7 +606,7 @@ static void frame_recv(size_t size, u8 *data)
     serf_t *const frame = (serf_t *)data;
 
     if ((frame->code & SERF_CODE_PROTO_M) != SERF_CODE_PROTO_VAL) {
-        printf("(frame) SIZE=%u CODE=0x%02x -- BAD PROTO BITS\r\n", size, frame->code);
+        printf("(frame) invalid proto bits: size=%u code=0x%02x\r\n", size, frame->code);
         return;
     }
 
@@ -609,7 +614,6 @@ static void frame_recv(size_t size, u8 *data)
     frame->code &= SERF_CODE_M;
 
     switch (frame->code) {
-        default:
         case CODE_ID_ECHO:
             return handle_code_echo(size, frame->data);
 
@@ -621,6 +625,10 @@ static void frame_recv(size_t size, u8 *data)
 
         case CODE_ID_RESET:
             return handle_code_reset(size, frame->data);
+
+        default:
+            printf("(frame) unknown code: size=%u code=0x%02x\r\n", size, frame->code);
+            break;
     }
 }
 

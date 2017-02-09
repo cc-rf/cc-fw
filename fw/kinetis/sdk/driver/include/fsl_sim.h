@@ -61,9 +61,7 @@ enum _sim_usb_volt_reg_enable_mode
 /*!@brief Unique ID. */
 typedef struct _sim_uid
 {
-#if defined(SIM_UIDH)
     uint32_t H; /*!< UIDH.  */
-#endif
     uint32_t MH; /*!< UIDMH. */
     uint32_t ML; /*!< UIDML. */
     uint32_t L;  /*!< UIDL.  */

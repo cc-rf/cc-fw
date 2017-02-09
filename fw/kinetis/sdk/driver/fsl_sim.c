@@ -44,9 +44,7 @@ void SIM_SetUsbVoltRegulatorEnableMode(uint32_t mask)
 
 void SIM_GetUniqueId(sim_uid_t *uid)
 {
-#if defined(SIM_UIDH)
     uid->H = SIM->UIDH;
-#endif
     uid->MH = SIM->UIDMH;
     uid->ML = SIM->UIDML;
     uid->L = SIM->UIDL;
