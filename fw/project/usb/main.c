@@ -523,6 +523,9 @@ static void handle_code_status(size_t size, u8 *data)
     sim_uid_t sim_uid;
     SIM_GetUniqueId(&sim_uid);
 
+    sim_uid.L ^= sim_uid.H;
+    sim_uid.ML ^= ~sim_uid.MH;
+
     code_status_t code_status = {
             .version = 1,
             .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32), // TODO: Check higher serial bytes on MCUs with same L and ML (happened once already)

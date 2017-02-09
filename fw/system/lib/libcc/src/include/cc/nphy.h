@@ -13,6 +13,3 @@ bool nphy_init(nphy_rx_t rx, bool sync_master);
 void nphy_hook_sync(nphy_hook_t hook);
 
 void nphy_tx(u8 flag, u8 *buf, u8 len);
-
-
-bool nphy_recv(u8 **buf, u8 *len, u32 timeout);
