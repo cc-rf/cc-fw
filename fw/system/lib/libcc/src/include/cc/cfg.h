@@ -85,6 +85,7 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  * SYNC_CFG1: 0xA9->0xAA. Tuning this more won't change much it seems.
  * PREAMBLE_CFG1: 0x20->0x28->0x2C. Preamble size 6->8->12 bytes. Was still seeing loss when packet size varies, but this takes care of it (does not seem to be costly despite the big overhead increase)
  * PA_CFG1: 0x7F->0x77: Latter was the highest recommended by TI, and output power can decrease if the PA's input level is too high.
+ * FREQOFF_CFG:0x24->0x26 (ki factor -> 2, do foc during packet). Trying again because it has been noticed that longer packets are more often dropped.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -111,7 +112,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYMBOL_RATE1,      0x99},
         {CC1200_SYMBOL_RATE0,      0x9A},
         {CC1200_AGC_REF,           0x33},
-        {CC1200_AGC_CS_THR,        (u8)-103/*(96 - 93)*/},
+        {CC1200_AGC_CS_THR,        (u8)((s8)96 - (s8)79)},
         {CC1200_AGC_CFG2,          0x00},
         {CC1200_AGC_CFG1,          /*0x00*/0x51},
         {CC1200_AGC_CFG0,          /*0x40*/0x87},
@@ -123,7 +124,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
         {CC1200_IF_MIX_CFG,        0x1C},
-        {CC1200_FREQOFF_CFG,       0x24},
+        {CC1200_FREQOFF_CFG,       0x26},
         {CC1200_MDMCFG2,           0x02},
         {CC1200_FREQ2,             0x5C},
         {CC1200_FREQ1,             0x0F},
