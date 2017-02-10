@@ -280,6 +280,9 @@ def handle_recv(node, peer, dest, rssi, lqi, data):
     stats.lqi_sum += lqi
     stats.unlock()
 
+    # if not tx:
+    #     serf_send(serial_current, NMAC_SEND_STRM, peer, 'extra stuff!')
+
 
 def handle_status(version, serial, uptime, node, recv_count, recv_bytes, send_count, send_bytes):
     print("Cloud Chaser {:016X}@{:04X} up={}s rx={}/{} tx={}/{}".format(
@@ -300,12 +303,15 @@ def reset_device(serial, tty, baud):
     return get_serial(tty, baud)
 
 
+tx = False
+
+
 def main(args):
     tty = args[0]
     baud = 115200
 
     reset = False
-    tx = False
+    global tx
 
     if len(args) > 1:
         if args[1] == 'tx':
@@ -359,10 +365,10 @@ def send_frames(serial):
     while 1:
         count += 1
         # data = '\x3A' * 48
-        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(32, 110))])
+        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
         serf_send(serial, NMAC_SEND_MESG, 0x0000, data)
-        # serf_send(serial, random.choice((1, 3)), 0x0000, data)
-        # time.sleep(.1)
+        # serf_send(serial, random.choice((0, 1)), 0x0000, data)
+        # time.sleep(.020)
 
 
 def input_thread(serial):
@@ -403,14 +409,17 @@ def input_start(serial):
     thr.start()
     return thr
 
+serial_current = None
 
 def get_serial(tty, baud):
+    global serial_current
     import serial
     ser = serial.Serial()
     ser.port = tty
     ser.baudrate = baud
     # ser.timeout = .25
     ser.open()
+    serial_current = ser
     return ser
 
 

@@ -189,8 +189,9 @@ static inline bool uflag2_set(void)
 }
 
 
-static bool boss = false;
-static u16 addr = 0;
+static bool boss;
+static u8 cell;
+static u16 addr;
 
 static u32 recv_count = 0, recv_bytes = 0;
 static u32 send_count = 0, send_bytes = 0;
@@ -240,6 +241,10 @@ static void main_task(void *param)
 
     boss = pflag_set();
 
+    if (uflag1_set())       cell = 0x2B;
+    else if (uflag2_set())  cell = 0x2C;
+    else                    cell = 0x2A;
+
     sim_uid_t sim_uid;
     SIM_GetUniqueId(&sim_uid);
 
@@ -250,9 +255,9 @@ static void main_task(void *param)
 
     addr = ((u16)addr_quad) ^ ((u16)(addr_quad>>16)); // (u16)0x4000 | (u16)(~0x4000 & ( ((u16)addr_quad) ^ ((u16)(addr_quad>>16)) ) );
 
-    printf("\r\nCloud Chaser %08lX%08lX@%04X\r\n\r\n", sim_uid.ML, sim_uid.L, addr);
+    printf("\r\nCloud Chaser %08lX%08lX@%02X.%04X\r\n\r\n", sim_uid.ML, sim_uid.L, cell, addr);
 
-    if (nmac_init(addr, boss, handle_rx)) {
+    if (nmac_init(cell, addr, boss, handle_rx)) {
 
         if (uflag1_set()) {
             printf("uart: relay enabled\r\n");
@@ -266,7 +271,7 @@ static void main_task(void *param)
             while (1) {
                 const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
                 nmac_send(NMAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send);
-                vTaskDelay(pdMS_TO_TICKS(5));
+                vTaskDelay(pdMS_TO_TICKS(1));
             }
         }
 

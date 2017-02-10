@@ -41,9 +41,9 @@
  ******************************************************************************/
 
 /*! @brief Define big endian */
-#define BIG_ENDIAN (0U)
+//#define BIG_ENDIAN (0U)
 /*! @brief Define little endian */
-#define LITTLE_ENDIAN (1U)
+//#define LITTLE_ENDIAN (1U)
 
 /*! @brief Define current endian */
 #define ENDIANNESS LITTLE_ENDIAN

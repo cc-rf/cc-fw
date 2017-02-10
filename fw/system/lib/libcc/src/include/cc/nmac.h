@@ -16,6 +16,6 @@ typedef enum __packed {
 
 } nmac_send_t;
 
-bool nmac_init(u16 addr, bool sync_master, mac_recv_t rx);
+bool nmac_init(u8 cell, u16 addr, bool sync_master, mac_recv_t rx);
 u16 nmac_get_addr(void);
 bool nmac_send(nmac_send_t type, u16 dest, u16 size, u8 data[]);

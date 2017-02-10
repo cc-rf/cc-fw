@@ -96,7 +96,7 @@ static u8 mac_seqn = 0;
 
 
 
-s32 nmac_mem_count = 0;
+/*s32 nmac_mem_count = 0;
 s32 nmac_mem_size = 0;
 
 static inline void *nmac_malloc(size_t size)
@@ -129,8 +129,10 @@ static inline void nmac_free(void *ptr)
     }
 
     return free(ptr);
-}
+}*/
 
+#define nmac_malloc     malloc
+#define nmac_free       free
 
 static nmac_peer_t *peer_get_or_add(u16 addr)
 {
@@ -155,7 +157,7 @@ static nmac_peer_t *peer_get_or_add(u16 addr)
     return NULL;
 }
 
-bool nmac_init(u16 addr, bool sync_master, mac_recv_t rx)
+bool nmac_init(u8 cell, u16 addr, bool sync_master, mac_recv_t rx)
 {
     mac_addr = addr;
     nmac.rx = rx;
@@ -188,7 +190,7 @@ bool nmac_init(u16 addr, bool sync_master, mac_recv_t rx)
         return false;
     }
 
-    return nphy_init(handle_rx, sync_master);
+    return nphy_init(cell, sync_master, handle_rx);
 }
 
 u16 nmac_get_addr(void)
@@ -282,7 +284,7 @@ static bool do_send(mac_txq_t *txqi)
         }
     }
 
-    const sclk_t start = sclk_time();
+    //const sclk_t start = sclk_time();
     u8 retry = NMAC_PEND_RETRY;
 
     _retry_tx:
@@ -321,7 +323,8 @@ static bool do_send(mac_txq_t *txqi)
                     //nmac_debug("retry: start=%lu now=%lu seq=%lu", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
                     goto _retry_tx;
                 } else {
-                    nmac_debug("retry: start=%lu now=%lu seq=%lu <fail>", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
+                    //nmac_debug("retry: start=%lu now=%lu seq=%lu <fail>", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
+                    nmac_debug("<drop> %02X %u", pkt->seqn, pkt->size);
                 }
             }
 
@@ -456,10 +459,12 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                         }
                     }
 
-                    if (i == NMAC_PEND_MAX) {
-                        nmac_debug("(warning) ack too late: now=%lu seq=%lu", SCLK_MSEC(sclk_time()), (u32)seqn);
-                    }
+                    //if (i == NMAC_PEND_MAX) {
+                    //    nmac_debug("(warning) ack too late");
+                    //}
+
                 } else {
+
                     nmac.rx(mac_addr, pkt->addr, pkt->dest, pkt->size, pkt->data, rssi, lqi);
                 }
 

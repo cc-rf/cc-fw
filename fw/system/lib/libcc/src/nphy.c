@@ -22,6 +22,7 @@
 
 typedef struct __packed {
     u8 len;
+    u8 cell;
     u8 flag;
 
 } phy_pkt_hdr_t;
@@ -83,10 +84,11 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 
         //{CC1200_PREAMBLE_CFG1, /*0xD*/0x4 << 2},
         //{CC1200_SYNC_CFG1,  0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16/* changed from 11 */},
-        {CC1200_PKT_CFG2,   CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_NOT_RX/*CC1200_PKT_CFG2_CCA_MODE_ALWAYS*//*CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT*/},
-        {CC1200_PKT_CFG1,   CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F | CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF | CC1200_PKT_CFG1_APPEND_STATUS | CC1200_PKT_CFG1_WHITE_DATA},
+        {CC1200_PKT_CFG2,   CC1200_PKT_CFG2_CCA_MODE_ALWAYS/*CC1200_PKT_CFG2_CCA_MODE_RSSI_THR*//*CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT*/},
+        {CC1200_PKT_CFG1,   CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F | CC1200_PKT_CFG1_ADDR_CHECK_CFG_ON_NO_BCAST | CC1200_PKT_CFG1_APPEND_STATUS | CC1200_PKT_CFG1_WHITE_DATA},
         {CC1200_PKT_CFG0,   CC1200_PKT_CFG0_LENGTH_CONFIG_VARIABLE},
-        {CC1200_PKT_LEN,    255},
+        {CC1200_PKT_LEN,    125}, // CRC Autoflush limits this to 127 in variable packet length mode, and then there needs to be room for the two status bytes
+        {CC1200_DEV_ADDR,   0x00},
         //{CC1200_SERIAL_STATUS, CC1200_SERIAL_STATUS_IOC_SYNC_PINS_EN}, // Enable access to GPIO state in CC1200_GPIO_STATUS.GPIO_STATE
 
         {CC1200_RNDGEN,     CC1200_RNDGEN_EN}, // Needed for random backoff for LBT CCA: https://e2e.ti.com/support/wireless_connectivity/f/156/t/370230
@@ -166,6 +168,7 @@ static bool sync_needed;
 static bool sync_slow;
 static sclk_t sync_last;
 static sclk_t sync_time;
+static u8 cell_cur, cell_new;
 
 
 
@@ -184,10 +187,9 @@ static inline bool chan_set(u32 chan)
         // chance of switching during rx -- TODO: maybe try to extract valid packets?
         if (st & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFRX);
 
-        do {
-            st = cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M;
-
-        } while (st != CC1200_STATE_IDLE);
+        //do {
+        //    st = cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M;
+        //} while (st != CC1200_STATE_IDLE);
 
         chan_select(&chnl.group, chnl.hop_table[chan]);
         //cc_dbg_v("#%u\t%lu\t%lu\t\t%lu", chan, chnl.hop_table[chan], sync_timestamp(), sync_timestamp() - sync_time);
@@ -198,7 +200,7 @@ static inline bool chan_set(u32 chan)
     return false;
 }
 
-s32 nphy_mem_count = 0;
+/*s32 nphy_mem_count = 0;
 
 static inline void *nphy_malloc(size_t size)
 {
@@ -211,13 +213,16 @@ static inline void nphy_free(void *ptr)
 {
     if (ptr) --nphy_mem_count;
     return free(ptr);
-}
+}*/
 
+#define nphy_malloc     malloc
+#define nphy_free       free
 
-bool nphy_init(nphy_rx_t rx, bool sync_master)
+bool nphy_init(u8 cell, bool sync_master, nphy_rx_t rx)
 {
     sclk_init();
 
+    cell_new = cell_cur = cell;
     boss = sync_master;
 
     cc_spi_init(dev);
@@ -244,9 +249,10 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
+    cc_set(dev, CC1200_DEV_ADDR, cell);
 
     nphy.txq = xQueueCreate(7, sizeof(void *)); assert(nphy.txq);
-    nphy.rxq = xQueueCreate(7, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
+    //nphy.rxq = xQueueCreate(7, sizeof(phy_recv_queue_t *)); assert(nphy.rxq);
     nphy.rx = rx;
 
 
@@ -255,6 +261,7 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
 
     amp_ctrl(dev, AMP_LNA, true);
     chan_grp_init(&chnl.group, chnl.hop_table);
+    chan_table_reorder(&chnl.group, cell, chnl.hop_table);
     chan_grp_calibrate(&chnl.group);
     amp_ctrl(dev, AMP_LNA, false);
 
@@ -274,10 +281,10 @@ bool nphy_init(nphy_rx_t rx, bool sync_master)
         return false;
     }
 
-    if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 1, &nphy.disp)) {
+    /*if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 1, &nphy.disp)) {
         cc_dbg("[%u] error: unable to create dispatch task", dev);
         return false;
-    }
+    }*/
 
     // ensure the tasks run even if their priority is lower
     vTaskDelay(pdMS_TO_TICKS(chan_time/4000));
@@ -301,6 +308,7 @@ void nphy_tx(u8 flag, u8 *buf, u8 len)
     phy_pkt_t *qpkt = nphy_malloc(len + sizeof(phy_pkt_t)); assert(qpkt);
     if (len && buf) memcpy(qpkt->data, buf, len);
     qpkt->hdr.len = len + (sizeof(phy_pkt_t) - sizeof(rf_pkt_t)); // NOTE: upon receive, this reflects size minus phy header, but here it is all the data bytes
+    qpkt->hdr.cell = cell_cur;
     qpkt->hdr.flag = flag & (u8)PHY_PKT_FLAG_IMMEDIATE;
 
     if (qpkt->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
@@ -377,7 +385,6 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
     phy_pkt_t *const ppkt = (phy_pkt_t *)pkt;
 
     if (ppkt->hdr.len < sizeof(phy_pkt_hdr_t)) {
-        cc_dbg("rx: pkt too small for header");
         return false;
     }
 
@@ -408,7 +415,7 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
     }
 
     // TODO: check for size underflow vs. phy packet size
-    phy_recv_queue_t *recv = nphy_malloc(sizeof(phy_recv_queue_t) + ppkt->hdr.len); assert(recv);
+    /*phy_recv_queue_t *recv = nphy_malloc(sizeof(phy_recv_queue_t) + ppkt->hdr.len); assert(recv);
 
     recv->meta = (phy_pkt_meta_t){
             .chan = (u8)chnl.group.cur->id,
@@ -424,8 +431,6 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
             nphy_free(recv);
         }
 
-        taskYIELD();
-
         return true;
     } else {
         if (!xQueueSend(nphy.rxq, &recv, pdMS_TO_TICKS(100))) {
@@ -433,16 +438,17 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
             nphy_free(recv);
         }
 
-        taskYIELD();
-
         return false;
-    }
+    }*/
+
+    nphy.rx(ppkt->hdr.flag, ppkt->hdr.len, ppkt->data, rssi, lqi);
+
+    return (ppkt->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) != 0;
 }
 
 static bool nphy_rx(bool flush)
 {
-    /* Assumption (may change later): variable packet length, 2 status bytes -> 3 total. */
-    const static u8 PKT_OVERHEAD = 3;
+    const static u8 PKT_OVERHEAD = 3; // length, 2x status
 
     u8 len = cc_get(dev, CC1200_NUM_RXBYTES);
 
@@ -561,47 +567,34 @@ static bool cca_enabled = false;
 
 void cca_enable(void)
 {
-    if (!cca_enabled) {
+    /*if (!cca_enabled) {
         cca_enabled = true;
-
-        /*u8 st = cc_strobe(dev, CC1200_SNOP | CC1200_ACCESS_READ);
-
-        if ((st & CC1200_STATUS_STATE_M) != CC1200_STATE_IDLE) {
-            //cc_dbg("SIDLE");
-            cc_strobe(dev, CC1200_SIDLE);
-        }
-
-        if (st & CC1200_STATUS_EXTRA_M) {
-            //cc_dbg("SFRX");
-            cc_strobe(dev, CC1200_SFRX);
-        }*/
-
         //cc_update(dev, CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RXOFF_MODE_M, CC1200_RFEND_CFG1_RXOFF_MODE_TX);
         //cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_RSSI_THR_ETSI_LBT);
         //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_CARRIER_SENSE);
-        //cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0);
-    }
+        cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0);
+    }*/
 }
 
 void cca_run(void)
 {
-    u8 reg;
+    /*u8 reg;
 
     ensure_rx();
 
     do {
         reg = cc_get(dev, CC1200_RSSI0) & (CC1200_RSSI0_RSSI_VALID | CC1200_RSSI0_CARRIER_SENSE_VALID);
-    } while (reg != (CC1200_RSSI0_RSSI_VALID | CC1200_RSSI0_CARRIER_SENSE_VALID));
+    } while (reg != (CC1200_RSSI0_RSSI_VALID | CC1200_RSSI0_CARRIER_SENSE_VALID));*/
 }
 
 void cca_disable(void)
 {
-    if (cca_enabled) {
+    /*if (cca_enabled) {
         cca_enabled = false;
         //cc_update(dev, CC1200_PKT_CFG2, CC1200_PKT_CFG2_CCA_MODE_M, CC1200_PKT_CFG2_CCA_MODE_ALWAYS);
         //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_NORMAL);
-        //cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0xA); // NOTE: cheating here and using known value
-    }
+        cc_update(dev, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0xA); // NOTE: cheating here and using known value
+    }*/
 }
 
 
@@ -711,7 +704,7 @@ static void nphy_task(void *param __unused)
                 switch (ms) {
                     case CC1200_MARC_STATUS1_RX_FINISHED:
                         nphy_rx(true);
-                        if (!pkt) tx_next = 0;
+                        //if (!pkt) tx_next = 0;
 
                         //if (!nphy_rx(true)) {
                         //    if (!pkt) tx_next = 0;
@@ -932,21 +925,18 @@ static void nphy_task(void *param __unused)
                             continue;
 
                         case RF_STATE_TX_ERR:
-                            if (ms == CC1200_MARC_STATUS1_TX_ON_CCA_FAILED) {
-                                assert(pkt);
+                            if ((ms == CC1200_MARC_STATUS1_TX_ON_CCA_FAILED) && pkt) {
 
-                                // TODO: Implement CCA retry mechanism
+                                //cc_dbg_v("cca fail: pkt=0x%p\n", pkt);
 
-                                cc_strobe(dev, CC1200_SFTX);
-                                //cc_dbg_v("cca fail: now=%lu st=0x%02X", SCLK_MSEC(sclk_time()), (u32)cc_strobe(dev, CC1200_SNOP));
-                                //puts("cca fail\n");
+                                cca_run();
+                                cc_strobe(dev, CC1200_STX);
+                                continue;
 
-                            } else {
-
-                                cc_dbg("tx fail: ms=0x%02X", ms);
                             }
 
-                            cc_strobe(dev, CC1200_SIDLE);
+                            cc_dbg("tx fail: ms=0x%02X", ms);
+                            if (cc_strobe(dev, CC1200_SIDLE) & CC1200_STATUS_EXTRA_M) cc_strobe(dev, CC1200_SFTX);
 
                         case RF_STATE_TX_END:
                             if (pkt) {
@@ -957,16 +947,10 @@ static void nphy_task(void *param __unused)
                                 } else {
                                     assert(pkt != (void*)&pkt_sync);
                                     nphy_free(pkt);
-
-                                    //if (!sync_needed) {
-                                        // NOTE: ^ This should actually always happen!
-                                    // TODO: VERIFY
-
-                                        loop_state_next = LOOP_STATE_RX;
-                                        pkt = NULL;
-                                        cca_disable();
-                                        continue;
-                                    //}
+                                    pkt = NULL;
+                                    cca_disable();
+                                    loop_state_next = LOOP_STATE_RX;
+                                    continue;
                                 }
 
                                 pkt = NULL;
@@ -1004,8 +988,10 @@ static void nphy_task(void *param __unused)
                             }
                         }
 
+                        pkt_sync.hdr.cell = cell_cur;
+
                         tx_next = cc_get_tx_time(dev, pkt->len);
-                        pkt_sync.ts = (u32)(ticks + tx_next + 750);
+                        pkt_sync.ts = (u32)(ticks + tx_next*2 + 1750);
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
@@ -1036,17 +1022,17 @@ static void nphy_task(void *param __unused)
                             chan_ticks = (u32)(ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if (chan_ticks < 1500) {
+                            if (chan_ticks < 2500) {
 
-                                tx_next = ts + (1500 - chan_ticks);
+                                tx_next = ts + (2500 - chan_ticks);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            if (remaining < (1500 + pkt_time)) {
+                            if (remaining < (2500 + pkt_time)) {
 
-                                tx_next = ts + ((1500 + pkt_time) - remaining);
+                                tx_next = ts + ((2500 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
@@ -1068,17 +1054,17 @@ static void nphy_task(void *param __unused)
                             chan_ticks = (u32)(ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if (chan_ticks < 2500) {
+                            if (chan_ticks < 5000) {
 
-                                tx_next = ts + (2500 - chan_ticks);
+                                tx_next = ts + (5000 - chan_ticks);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            if (remaining < (2500 + pkt_time)) {
+                            if (remaining < (5000 + pkt_time)) {
 
-                                tx_next = ts + ((2500 + pkt_time) - remaining);
+                                tx_next = ts + ((5000 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
@@ -1125,7 +1111,7 @@ static void nphy_task(void *param __unused)
                         } else {
                             ts = sclk_time();
 
-                            if (ts >= (tx_next+7000)) {
+                            if (ts >= (tx_next+17000)) {
                                 cc_dbg("tx: timed out: now=%lu tx_next=%lu", SCLK_MSEC(ts), SCLK_MSEC(tx_next));
                                 if ((void *)pkt != &pkt_sync) nphy_free(pkt);
                                 pkt = NULL;

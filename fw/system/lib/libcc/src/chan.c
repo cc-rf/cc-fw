@@ -34,24 +34,24 @@ void chan_grp_init(chan_grp_t *grp, chan_t hop_table[])
         grp->chan[c].freq = cc_map_freq(grp->dev, freq, &grp->chan[c].cal.reg.freq);
         if (hop_table) hop_table[c] = c;
     }
+}
 
-    if (hop_table) {
-        chan_t chan_temp;
-        chan_t rnd;
+void chan_table_reorder(chan_grp_t *grp, u_int seed, chan_t hop_table[])
+{
+    chan_t chan_temp;
+    chan_t rnd;
 
-        srand(42);
+    srand(seed);
 
-        // NOTE: Channel 0 keeps its index.
-        for (chan_t c = 1; c < grp->size; ++c) {
-            do {
-                rnd = (chan_t)(rand() % grp->size);
+    for (chan_t c = 0; c < grp->size; ++c) {
+        do {
+            rnd = (chan_t)(rand() % grp->size);
 
-            } while (!rnd || rnd == c);
+        } while (rnd == c);
 
-            chan_temp = hop_table[c];
-            hop_table[c] = hop_table[rnd];
-            hop_table[rnd] = chan_temp;
-        }
+        chan_temp = hop_table[c];
+        hop_table[c] = hop_table[rnd];
+        hop_table[rnd] = chan_temp;
     }
 }
 
