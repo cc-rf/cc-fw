@@ -38,24 +38,38 @@
 
 
 
-
-
-
-
-#define USB_QUEUE_LEN       4
-#define USB_IO_MAX_LEN      16
+#define USB_VCOM_TASK_STACK_SIZE            (TASK_STACK_SIZE_DEFAULT / sizeof(StackType_t))
+#define USB_VCOM_DEVICE_TASK_STACK_SIZE     (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
+#define USB_VCOM_TX_QUEUE_LEN               4
 
 typedef struct {
     size_t len;
-    u8 buf[];
+    u8 *buf;
 
 } usb_io_t;
 
-static QueueHandle_t usb_tx_q = NULL;
-static QueueHandle_t usb_rx_q = NULL;
+static struct {
+    usb_rx_cb_t rx;
 
+    xTaskHandle task;
+    StaticTask_t task_static;
+    StackType_t task_stack[USB_VCOM_TASK_STACK_SIZE];
 
-static usb_rx_cb_t usb_rx_cb = NULL;
+    xQueueHandle txq;
+    StaticQueue_t txq_static;
+    usb_io_t txq_buf[USB_VCOM_TX_QUEUE_LEN];
+
+    SemaphoreHandle_t txs;
+    StaticSemaphore_t txs_static;
+
+    #if USB_DEVICE_CONFIG_USE_TASK
+        xTaskHandle device_task;
+        StaticTask_t device_task_static;
+        StackType_t device_task_stack[USB_VCOM_DEVICE_TASK_STACK_SIZE];
+    #endif
+
+} usb_vcom;
+
 
 static volatile bool flush_needed = false;
 
@@ -130,10 +144,6 @@ volatile static uint8_t s_comOpen = 0;
 
 
 
-static SemaphoreHandle_t usb_tx_s = NULL;
-
-
-
 /*******************************************************************************
 * Code
 ******************************************************************************/
@@ -198,7 +208,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 #endif
                     }
 
-                    if (uxSemaphoreGetCount(usb_tx_s) && !uxQueueMessagesWaiting(usb_tx_q)) {
+                    if (uxSemaphoreGetCount(usb_vcom.txs) && !uxQueueMessagesWaiting(usb_vcom.txq)) {
                         // TODO: test this and determine if it is needed
                         //itm_puts(0, "<itm> usb: post-tx flush\r\n");
                         error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
@@ -206,7 +216,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 
                     if (sending) {
                         sending = false;
-                        xSemaphoreGive(usb_tx_s);
+                        xSemaphoreGive(usb_vcom.txs);
                     }
                 }
             }
@@ -241,8 +251,8 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                         }*/
 
                         // actually, just be lazy and call a callback
-                        if (usb_rx_cb) {
-                            usb_rx_cb(s_recvSize, s_currRecvBuf);
+                        if (usb_vcom.rx) {
+                            usb_vcom.rx(s_recvSize, s_currRecvBuf);
                         }
 
                         s_recvSize = 0;
@@ -684,85 +694,54 @@ void USB_DeviceTask(void *handle)
 #endif
 
 
-/*!
- * @brief Application task function.
- *
- * This function runs the task for application.
- *
- * @return None.
- */
-void APPTask(void *handle)
+
+
+
+void usb_vcom_task(void *param __unused)
 {
-    usb_tx_q = xQueueCreate(USB_QUEUE_LEN, sizeof(usb_io_t *)); assert(usb_tx_q);
-    //usb_rx_q = xQueueCreate(USB_QUEUE_LEN, sizeof(usb_io_t *)); assert(usb_rx_q);
-
-    usb_tx_s = xSemaphoreCreateBinary();
-
-    xSemaphoreGive(usb_tx_s);
-
     usb_status_t error = kStatus_USB_Error;
 
     USB_DeviceApplicationInit();
+    assert(s_cdcVcom.deviceHandle);
 
-#if USB_DEVICE_CONFIG_USE_TASK
-    if (s_cdcVcom.deviceHandle)
-    {
-        if (xTaskCreate(USB_DeviceTask,                  /* pointer to the task                      */
-                        (char const *)"usb:dev", /* task name for kernel awareness debugging */
-                        TASK_STACK_SIZE_LARGE,  /* task stack size                          */
-                        s_cdcVcom.deviceHandle,          /* optional task startup argument           */
-                        TASK_PRIO_DEFAULT+2,                /* initial priority                         */
-                        &s_cdcVcom.deviceTaskHandle      /* optional task handle to create           */
-                        ) != pdPASS)
-        {
-            usb_echo("usb device task create failed!\r\n");
-            return;
-        }
-    }
-#endif
+    #if USB_DEVICE_CONFIG_USE_TASK
 
-    usb_io_t *io;
+    usb_vcom.device_task = xTaskCreateStatic(USB_DeviceTask, "usb:dev", USB_VCOM_DEVICE_TASK_STACK_SIZE,
+                                             s_cdcVcom.deviceHandle, TASK_PRIO_DEFAULT + 2,
+                                             usb_vcom.device_task_stack, &usb_vcom.device_task_static);
+    #endif
+
+    usb_io_t io;
 
     while (1) {
-        if (!xQueueReceive(usb_tx_q, &io, portMAX_DELAY)) continue;
-        xSemaphoreTake(usb_tx_s, portMAX_DELAY);
+        if (!xQueueReceive(usb_vcom.txq, &io, portMAX_DELAY)) continue;
+        xSemaphoreTake(usb_vcom.txs, portMAX_DELAY);
         sending = true;
         //itm_printf(0, "<itm> usb: send io=0x%08X size=%lu receiving=%u\n", io, io->len, receiving);
 
-        if ((error = USB_DeviceCdcAcmSend(s_cdcVcom.cdcAcmHandle, USB_CDC_VCOM_BULK_IN_ENDPOINT, io->buf, io->len))) {
+        if ((error = USB_DeviceCdcAcmSend(s_cdcVcom.cdcAcmHandle, USB_CDC_VCOM_BULK_IN_ENDPOINT, io.buf, io.len))) {
             itm_printf(0, "<itm> usb: tx error=%u\r\n", error);
-            xSemaphoreGive(usb_tx_s);
+            xSemaphoreGive(usb_vcom.txs);
             continue;
         }
 
-        xSemaphoreTake(usb_tx_s, portMAX_DELAY);
+        xSemaphoreTake(usb_vcom.txs, portMAX_DELAY);
 
-        free(io);
-        io = NULL;
+        free(io.buf);
+        io.buf = NULL;
 
-        xSemaphoreGive(usb_tx_s);
+        xSemaphoreGive(usb_vcom.txs);
     }
 }
 
 bool vcom_init(usb_rx_cb_t rx_cb)
 {
-    usb_rx_cb = rx_cb;
-
-    if (xTaskCreate(APPTask,                         /* pointer to the task                      */
-                    "usb:vcom",                       /* task name for kernel awareness debugging */
-                    TASK_STACK_SIZE_DEFAULT,           /* task stack size                          */
-                    &s_cdcVcom,                      /* optional task startup argument           */
-                    TASK_PRIO_DEFAULT+1,                  /* initial priority                         */
-                    &s_cdcVcom.applicationTaskHandle /* optional task handle to create           */
-                    ) != pdPASS)
-    {
-        usb_echo("app task create failed!\r\n");
-        return false;
-    }
-
-#if (defined(__CC_ARM) || defined(__GNUC__))
-    return 1;
-#endif
+    usb_vcom.rx = rx_cb;
+    usb_vcom.txq = xQueueCreateStatic(USB_VCOM_TX_QUEUE_LEN, sizeof(usb_io_t), (u8 *)usb_vcom.txq_buf, &usb_vcom.txq_static);
+    usb_vcom.txs = xSemaphoreCreateBinaryStatic(&usb_vcom.txs_static);
+    xSemaphoreGive(usb_vcom.txs);
+    usb_vcom.task = xTaskCreateStatic(usb_vcom_task, "usb:vcom", USB_VCOM_TASK_STACK_SIZE, NULL, TASK_PRIO_DEFAULT + 1, usb_vcom.task_stack, &usb_vcom.task_static);
+    return true;
 }
 
 static inline bool isInterrupt()
@@ -782,7 +761,6 @@ void usb_write(u8 *buf, size_t len)
 
     if (frame) {
         usb_write_direct(frame, size);
-        free(frame);
 
         /*xSemaphoreTake(usb_tx_s, portMAX_DELAY);
         if (flush_needed) flush_needed = false;
@@ -797,19 +775,21 @@ void usb_write_direct(u8 *buf, size_t len)
 {
     if (!s_cdcVcom.attach || !s_cdcVcom.startTransactions || !buf) return;
 
-    usb_io_t *io = malloc(sizeof(usb_io_t) + len); assert(io);
-    io->len = len;
-    memcpy(io->buf, buf, len);
+    //usb_io_t *io = malloc(sizeof(usb_io_t) + len); assert(io);
+    //io->len = len;
+    //memcpy(io->buf, buf, len);
+
+    usb_io_t io = { len, buf };
 
     //itm_printf(0, "<itm> usb: queu io=0x%08X size=%lu\n", io, io->len);
 
     if (!isInterrupt()) {
-        if (!xQueueSend(usb_tx_q, &io, portMAX_DELAY)) {
-            free(io);
+        if (!xQueueSend(usb_vcom.txq, &io, portMAX_DELAY)) {
+            //free(io);
         }
     } else {
-        if (!xQueueSendFromISR(usb_tx_q, &io, NULL)) {
-            free(io);
+        if (!xQueueSendFromISR(usb_vcom.txq, &io, NULL)) {
+            //free(io);
         }
     }
 

@@ -89,6 +89,8 @@ void BOARD_BootClockVLPR(void)
 
     SystemCoreClock = 4000000U;
 
+    SystemCoreClockUpdate();
+
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
     SMC_SetPowerModeVlpr(SMC);
     while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateVlpr)
@@ -117,6 +119,8 @@ void BOARD_BootClockRUN(void)
     CLOCK_SetSimConfig(&simConfig);
 
     SystemCoreClock = 120000000U;
+
+    SystemCoreClockUpdate();
 }
 
 void BOARD_BootClockHSRUN(void)
@@ -145,6 +149,8 @@ void BOARD_BootClockHSRUN(void)
     CLOCK_SetSimConfig(&simConfig);
 
     SystemCoreClock = 180000000U;
+
+    SystemCoreClockUpdate();
 }
 
 void BOARD_BootClockOCHSRUN(void)
@@ -173,6 +179,8 @@ void BOARD_BootClockOCHSRUN(void)
     CLOCK_SetSimConfig(&simConfig);
 
     SystemCoreClock = 210000000U;
+
+    SystemCoreClockUpdate();
 }
 
 void BOARD_InitOsc0(void)

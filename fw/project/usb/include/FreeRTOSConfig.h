@@ -72,11 +72,12 @@
 
 /* Phillip: Additional configs from FreeRTOS.h */
 #define configUSE_NEWLIB_REENTRANT          0/*1*/
-#define configSUPPORT_STATIC_ALLOCATION     0
+#define configSUPPORT_STATIC_ALLOCATION     1
 
 /* Phillip: specific task priorities */
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
 #define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 9)
+#define TASK_STACK_SIZE_MEDIUM      (TASK_STACK_SIZE_SMALL * 5)
 #define TASK_STACK_SIZE_DEFAULT     (TASK_STACK_SIZE_SMALL * 2)
 
 #define TASK_PRIO_MAX               (configMAX_PRIORITIES - 1)
@@ -99,7 +100,7 @@
  * See http://www.freertos.org/a00110.html.
  *----------------------------------------------------------*/
 
-#define configUSE_PREEMPTION 1U//0U/*1U*/
+#define configUSE_PREEMPTION 0u//1U//0U/*1U*/
 #define configUSE_IDLE_HOOK 0U
 #define configUSE_TICK_HOOK 0U
 
@@ -111,7 +112,7 @@
 #if defined(USB_STACK_FREERTOS_HEAP_SIZE) && (USB_STACK_FREERTOS_HEAP_SIZE > 0)
 #define configTOTAL_HEAP_SIZE ((size_t)(USB_STACK_FREERTOS_HEAP_SIZE))
 #else
-#define configTOTAL_HEAP_SIZE ((size_t)(32U * 1024U))
+#define configTOTAL_HEAP_SIZE ((size_t)(0U * 1024U))
 #endif
 #define configMAX_TASK_NAME_LEN (10U)
 #define configUSE_TRACE_FACILITY 1U
@@ -124,7 +125,7 @@
 #define configUSE_MALLOC_FAILED_HOOK 0U
 #define configUSE_APPLICATION_TASK_TAG 0U
 #define configUSE_COUNTING_SEMAPHORES 1U
-#define configUSE_TIME_SLICING 1U//0U/*1U*/
+#define configUSE_TIME_SLICING 0u//1U//0U/*1U*/
 
 /* Co-routine definitions. */
 #define configUSE_CO_ROUTINES 0U

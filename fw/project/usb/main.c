@@ -65,13 +65,18 @@ static void usb_recv(size_t size, u8 *data);
 // For the GDB helper
 bool dbgPendSVHookState = 0;
 
+
+#define MAIN_TASK_STACK_SIZE    (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
+
+StackType_t main_task_stack[MAIN_TASK_STACK_SIZE];
+StaticTask_t main_task_static;
+
 int main(void)
 {
     BOARD_InitPins();
     LED_A_ON();
-    BOARD_BootClockRUN();
-
-    //BOARD_BootClockOCHSRUN();
+    //BOARD_BootClockRUN();
+    BOARD_BootClockOCHSRUN();
 
     //write_sem = xSemaphoreCreateBinary();
     //xSemaphoreGive(write_sem);
@@ -107,7 +112,11 @@ int main(void)
 
     LED_C_ON();
 
-    xTaskCreate(main_task, "main", TASK_STACK_SIZE_DEFAULT, NULL, TASK_PRIO_DEFAULT, NULL);
+
+    const xTaskHandle main_task_handle = xTaskCreateStatic(
+            main_task, "main", MAIN_TASK_STACK_SIZE, NULL, TASK_PRIO_DEFAULT,
+            main_task_stack, &main_task_static
+    );
 
     //LED_C_ON();
 
@@ -290,10 +299,6 @@ static void main_task(void *param)
     vTaskDelete(NULL);
 }
 
-void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
-{
-    itm_printf(0, "stack overflow in task 0x%08p '%s'\r\n", xTask, pcTaskName);
-}
 
 
 typedef struct __packed {
@@ -475,7 +480,7 @@ static void write_code_status(code_status_t *code_status)
     if (frame) {
         //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
         usb_write_direct(frame, size);
-        free(frame);
+        //free(frame);
     }
 }
 
@@ -505,7 +510,7 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
         //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
         usb_write_direct(frame, size);
         //itm_printf(0, "<itm> recv: frame size=%lu <wrote>\n", size);
-        free(frame);
+        //free(frame);
     }
 }
 
@@ -669,8 +674,11 @@ size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame)
 }
 
 
+#define USB_IN_DATA_MAX     (MAC_PKT_SIZE_MAX + 64)
+
 static size_t usb_in_size = 0;
-static u8 *usb_in_data = NULL;
+static u8 usb_in_data[USB_IN_DATA_MAX];
+static u8 usb_in_decode_data[USB_IN_DATA_MAX+1];
 
 static void usb_recv(size_t size, u8 *data)
 {
@@ -684,60 +692,33 @@ static void usb_recv(size_t size, u8 *data)
         if (!data[i]) break;
     }
 
-    if (i == size) {
-        //itm_puts(0, "usb: (recv) no mark found\r\n");
-
-        usb_in_data = realloc(usb_in_data, usb_in_size + size); assert(usb_in_data);
-        memcpy(&usb_in_data[usb_in_size], data, size);
-        usb_in_size += size;
-        return;
+    if ((usb_in_size + size) > USB_IN_DATA_MAX) {
+        printf("(usb) input buffer overflow: buffered=%u in=%u overage=%u\r\n", usb_in_size, size, (usb_in_size + size) - USB_IN_DATA_MAX);
+        usb_in_size = 0;
     }
+
+    memcpy(&usb_in_data[usb_in_size], data, i);
+    usb_in_size += i;
+
+    if (i == size)
+        return;
 
     frame_size = i;
-    //printf("usb: (recv) frame_size=%u\r\n", frame_size);
-
-    if (usb_in_size) {
-        usb_in_data = realloc(usb_in_data, usb_in_size + frame_size);
-        memcpy(&usb_in_data[usb_in_size], data, frame_size);
-        frame_size += usb_in_size;
-        usb_in_size = frame_size;
-        //printf("usb: (recv) frame_size=%u (updated)\r\n", frame_size);
-
-    } else {
-        if (usb_in_data) {
-            free(usb_in_data);
-            usb_in_data = NULL;
-        }
-
-        usb_in_data = data;
-    }
 
     // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
     // max decode length: size
 
-    u8 *decoded = malloc(size + 1); assert(decoded);
-    size_t decoded_size = cobs_decode(usb_in_data, frame_size, decoded);
+    size_t decoded_size = cobs_decode(usb_in_data, frame_size, usb_in_decode_data);
 
-    if (usb_in_data != data) {
-        free(usb_in_data);
+    usb_in_size = size - (i + 1);
+
+    if (usb_in_size) {
+        memcpy(usb_in_data, &data[i+1], usb_in_size);
     }
-
-    usb_in_data = NULL;
-    usb_in_size = 0;
 
     if (decoded_size) {
-        decoded[decoded_size] = 0;
-        frame_recv(decoded_size, decoded);
-        free(decoded);
-    }
-
-    if ((size - 1) > i) {
-
-        // copy tail to usb_in_data
-        //usb_in_size = size - i;
-        //usb_in_data = realloc(usb_in_data, usb_in_size); assert(usb_in_data);
-        //memcpy(usb_in_data, &data[i], usb_in_size);
-        printf("usb: (recv) dropping %u tail byte(s): size=%u frame_size=%u usb_in_size=%u\r\n", size - i, size, frame_size, usb_in_size);
+        usb_in_decode_data[decoded_size] = 0;
+        frame_recv(decoded_size, usb_in_decode_data);
     }
 }
 
@@ -816,4 +797,39 @@ caddr_t _sbrk(int incr)
     heap_end += incr;
 
     return (caddr_t)prev_heap_end;
+}
+
+
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
+{
+    itm_printf(0, "stack overflow in task 0x%08p '%s'\r\n", xTask, pcTaskName);
+}
+
+StaticTask_t xIdleTaskTCB; // TODO: Force in RAM
+StackType_t uxIdleTaskStack[configMINIMAL_STACK_SIZE]; // TODO: Force in RAM
+
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize)
+{
+    /* Pass out a pointer to the StaticTask_t structure in which the Idle task's
+    state will be stored. */
+    *ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
+
+    /* Pass out the array that will be used as the Idle task's stack. */
+    *ppxIdleTaskStackBuffer = uxIdleTaskStack;
+
+    /* Pass out the size of the array pointed to by *ppxIdleTaskStackBuffer.
+    Note that, as the array is necessarily of type StackType_t,
+    configMINIMAL_STACK_SIZE is specified in words, not bytes. */
+    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
+}
+
+static StaticTask_t xTimerTaskTCB; // TODO: Force in RAM
+static StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH]; // TODO: Force in RAM
+
+void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer, StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize)
+{
+    *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
+    *ppxTimerTaskStackBuffer = uxTimerTaskStack;
+    *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
 }
