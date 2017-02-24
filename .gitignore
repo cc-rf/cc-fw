@@ -5,6 +5,7 @@ pub/
 tmp/
 *.log
 out/
+*.pyc
 
 # https://github.com/github/gitignore/blob/master/Global/Windows.gitignore
 Thumbs.db
