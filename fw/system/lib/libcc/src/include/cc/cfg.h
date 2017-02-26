@@ -86,10 +86,41 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  * PREAMBLE_CFG1: 0x20->0x28->0x2C. Preamble size 6->8->12 bytes. Was still seeing loss when packet size varies, but this takes care of it (does not seem to be costly despite the big overhead increase)
  * PA_CFG1: 0x7F->0x77: Latter was the highest recommended by TI, and output power can decrease if the PA's input level is too high.
  * FREQOFF_CFG:0x24->0x26 (ki factor -> 2, do foc during packet). Trying again because it has been noticed that longer packets are more often dropped.
+ * PREAMBLE_CFG1: 0x2C->0x18. Preamble size 12->4 bytes. Finding it hard to believe it needs to be so long...
+ * DEVIATION_M/DEV_E: 0xFF/0x0D->0x9A/0x0C->0x48/0x0D->0x48/0x0C. Deviation 156kHz->62.5kHz->100kHz->50kHz. Feeling like ~MSK is the correct choice. 62.5 magically solved the periodic random drop issues! Trying 100 gave drops after ~7min, but then 50 was good.
+ * DCFILT_CFG: 0x5D->0x1D. Enable. Need to explore these values further.
+ * DEVIATION_M/DEV_E: 0x48/0x0C->0x48/0x04. 2-GFSK->2-FSK. Trying with new lower deviation. New LQI is only +1/2 (to ~9/8) on 60dB attenuator. Will keep and evaluate.
+ * DCFILT_CFG: 0x1D->0x5D. Disable. Still unlcear on benefit.
+ * TEMP: Testing smaller RX BW (again): CHAN_BW to 416 (0x03->0x04), IQIC 0x4B->0xCB(enable). SYNC_CFG0:0x03->0x13(No more auto clear, but set limitation bit), IF_MIX_CFG:0x1C->0x1C(Why was it this already?!) IFAMP:0x0D->0x09(ssbw=1MHz, could be 600kHz(0x05) but that is < 615kHz (f_IF + RXBW/2))
+ * TEMP: ^ Results so far good, next to explore alternate decimation factor with same rx bw. (CHAN_BW->0x81, dec fact 48). SSBW can go to 600kHz (IFAMP->0x05), IF_MIX_CFG:0x1C->0x01(f_IF becomes 208.33kHz)
+ * TEMP: ^ End result: do not keep IQIC, DO keep RX config limitation (improves LQI by ~5), go back to 555kHz RXBW, Fix wrong IF_MIX_CFG (was set for 400kHz rxbw)
+ * IF_MIX_CFG:0x08. f_IF->555.5kHz. IFAMP:0x09. SSBW->1MHz.
+ * IF_MIX_CFG:0x04. f_IF->833.3kHz. IFAMP:0x0D. SSBW->1.5MHz. IQIC:0x4B->0x80. Enable, no coefficients, low sample counts. Overall better LQI, sensitivty est. down 3dB. Sensitivity improved 5dB at the cost of -8 lqi (~97/92dBm) when using this config with f_IF back to 555.5kHz (same at -51dBm, much loss)
+ * DEVIATION_M/DEV_E: 0x48/0x04->0x89/0x04->0x9A/0x04->0x48/0x05->0x48/0x0D->0x48/0x0C->0x48/0x04. Deviation 50kHz->60kHz->62.5kHz->100kHz->GFSK->50kHz->FSK. Seems to be generally the best choice.
+ * AGC_CFG2: 0x00->0x20->0x00. AGC mode back to normal (instead of optimized linearity mode). Needs more testing before kept.
+ * PREAMBLE_CFG1: Saw varied performance/sensitivity at higher values and more accurate RSSI measurement at 5 but magically 4 seems to always be best, although the rssi measurement is down by exactly 10dB.
+ * DEVIATION_M/DEV_E: 0x48/0x04->0xCB/0x04->0x68/0x05->0x89/0x05->0x48/0x05->0x48/0x0D. Deviation 50kHz->70kHz->110kHz->120kHz->100kHz->GFSK.
+ * AGC_CFG3: 0xB1->0x31. Freeze AGC gain and RSSI -> Freeze AGC but keep measuring RSSI. Makes RSSI measurement much more accurate without having to alter preamble length!
+ * AGC_CFG2: 0x00->0x20. AGC mode -> back to normal. Might be making more sense now.
+ * FREQOFF_CFG: 0x26->0x34->0x2C. Enable FB2PLL with medium loop gain at rxbw/8 max -> high loop gain.
+ * IF_MIX_CFG:0x08. f_IF->555.5kHz. IFAMP:0x09. SSBW->1MHz. Now performs better thanks to FB2PLL.
+ * AGC_CFG2: 0x20->0x00. Yet more differences, going to leave it here FOREVER.
+ * AGC_CFG1: 0x51->0x0C. RSSI step 3dB, AGC win size 16 samples, settle 64 samples
+ * AGC_CFG0: 0x87->0x0B->0x07->0x0B. Hysteresis 2dB, RSSI avg 5 samples -> RSSI avg 2 samples -> back to 5.
+ * TEMP: CHAN_BW: 0x03->0x04. Should be able to go to 416kHz now, FB2PLL adds a bit to RXBW and with 10pmm crystal min rxbw is 436.6kHz (rate+2*dev+4*ppm*freq). Result: great, but lqi drops by 3.
+ * TEMP: DEVIATION_M/DEV_E: 0x48/0x0D->0x27/0x0D->0x48/0x0D. Deviation 100kHz->90kHz. Reduces min rxbw to exactly 416kHz. Putting back, prefer phased shift and performance/lqi clearly better at -100dB.
+ * TEMP: IQIC: 0x80->0x00->0xD8. SmartRF disables IQIC when reducing RXBW but its default for other configs has it on. Became useful to have off after reducing IF freq to 416kHz. These two changes together bring a ~+15dB RSSI level indication increase that seems maybe inaccurate (update: 100dB of atten reads as -85dBm, 90dB reads as -95, clearly signal was just too low).
+ * TEMP: IF_MIX_CFG: 0x08->0x18->0x1C. -f_IF -> f_IF, 555kHz->416kHz. IFAMP: 0x09->0x05->0x09 (SSBW 1MHz->600kHz->back). 600kHz clearly was causing issues.
+ * ^ Overall okay results but not as good across power range as with larger rxbw.
+ * IQIC: 0x80->0x00->0xD8. SmartRF cannot decide it seems. 0xD8 better than 0x80 but 3dB down.
+ * IF_MIX_CFG: 0x08->0x18. Invert f_IF.
+ * SYNC_CFG1: 0x13->0x33. Re-enable auto clear (SmartRF).
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
  * TODO: Look at MDMCFG1 collision detect (|=0x08) and CS sync search gate (|=0x80).
+ *
+ * 2017-02-25: TI DN005 Gives some insight on deviation selection and DC filter impact. http://www.ti.com/lit/an/swra122c/swra122c.pdf
  */
 
 static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
@@ -98,24 +129,25 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC1,             0xBE},
         {CC1200_SYNC0,             0x66},
         {CC1200_SYNC_CFG1,         0xAA},
-        {CC1200_SYNC_CFG0,         0x03},
-        {CC1200_DEVIATION_M,       0xFF},
+        {CC1200_SYNC_CFG0,         0x33},
+        {CC1200_DEVIATION_M,       0x48},
         {CC1200_MODCFG_DEV_E,      0x0D},
         {CC1200_DCFILT_CFG,        0x5D},
-        {CC1200_PREAMBLE_CFG1,     0x2C},
+        {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
-        {CC1200_IQIC,              0x4B},
+        {CC1200_IQIC,              0x80},
         {CC1200_CHAN_BW,           0x03},
         {CC1200_MDMCFG1,           0x42},
         {CC1200_MDMCFG0,           0x05},
         {CC1200_SYMBOL_RATE2,      0xB9},
         {CC1200_SYMBOL_RATE1,      0x99},
         {CC1200_SYMBOL_RATE0,      0x9A},
-        {CC1200_AGC_REF,           0x33},
-        {CC1200_AGC_CS_THR,        (u8)((s8)96 - (s8)79)},
+        {CC1200_AGC_REF,           0x35},
+        {CC1200_AGC_CS_THR,        (u8)((s8)96 - (s8)103)},
+        {CC1200_AGC_CFG3,          0x31},
         {CC1200_AGC_CFG2,          0x00},
-        {CC1200_AGC_CFG1,          /*0x00*/0x51},
-        {CC1200_AGC_CFG0,          /*0x40*/0x87},
+        {CC1200_AGC_CFG1,          0x0C},
+        {CC1200_AGC_CFG0,          0x0B},
         {CC1200_FIFO_CFG,          0x00},
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},
@@ -123,8 +155,8 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_PA_CFG1,           0x77}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_PKT_LEN,           0xFF},
-        {CC1200_IF_MIX_CFG,        0x1C},
-        {CC1200_FREQOFF_CFG,       0x26},
+        {CC1200_IF_MIX_CFG,        0x18},
+        {CC1200_FREQOFF_CFG,       0x2C},
         {CC1200_MDMCFG2,           0x02},
         {CC1200_FREQ2,             0x5C},
         {CC1200_FREQ1,             0x0F},
@@ -144,7 +176,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_FS_REG_DIV_CML,    0x1C},
         {CC1200_FS_SPARE,          0xAC},
         {CC1200_FS_VCO0,           0xB5},
-        {CC1200_IFAMP,             0x0D},
+        {CC1200_IFAMP,             0x09},
         {CC1200_XOSC5,             0x0E},
         {CC1200_XOSC1,             0x03},
 };

@@ -15,6 +15,14 @@
 #include <cc/sys/kinetis/isrd.h>
 #include <sclk.h>
 
+#include <cc/chan.h>
+#include <fsl_rnga.h>
+#include <itm.h>
+#include <stdatomic.h>
+#include <malloc.h>
+#include <cc/amp.h>
+#include <cc/sys/kinetis/pit.h>
+
 
 #define PHY_PKT_FLAG_SYNC       1   // is a sync packet
 #define PHY_PKT_FLAG_NOSYNC     2   // not synced
@@ -50,7 +58,7 @@ typedef struct __packed {
 
 typedef struct __packed {
     phy_pkt_hdr_t hdr;
-    s32 ts;
+    sclk_t ts;
 
 } phy_sync_pkt_t;
 
@@ -63,6 +71,7 @@ typedef struct __packed {
 static void isr_mcu_wake(void);
 static void isr_ctl_lna(void);
 static void isr_ctl_pa(void);
+static void isr_chan_hop(pit_t pit __unused, void *param __unused);
 
 static void cca_run(void);
 
@@ -71,7 +80,7 @@ static bool nphy_rx(bool flush);
 static void nphy_dispatch_task(void *param);
 static void nphy_task(void *param);
 
-#define CC_RSSI_OFFSET      (s8)(-81 - 15 /*+ 11*/)
+#define CC_RSSI_OFFSET      (s8)(-81 - 15)
 
 static const struct cc_cfg_reg CC_CFG_PHY[] = {
         {CC1200_IOCFG3, CC1200_IOCFG_GPIO_CFG_HW0},
@@ -116,8 +125,6 @@ static const struct cc_cfg_reg CC_CFG_PHY[] = {
 #define assert(x) if (!(x)) { itm_printf(0, "ASSERT FAIL: ( " #x " ) on line %u of %s\r\n", __LINE__, __FILE__); asm("bkpt #0"); while (1) { asm("nop"); } }
 
 
-
-
 static const cc_dev_t dev = 0;
 
 #define PHY_TASK_STACK_SIZE     (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
@@ -157,14 +164,6 @@ static const u32 freq_side_bw   = FREQ_BW / 2;
 static const u32 chan_count     = CHAN_COUNT;
 static const u32 chan_time      = CHAN_TIME;
 
-#include <cc/chan.h>
-#include <fsl_rnga.h>
-#include <itm.h>
-#include <stdatomic.h>
-#include <malloc.h>
-#include <cc/amp.h>
-
-
 static struct {
     chan_grp_t group;
     chan_inf_t chan[CHAN_COUNT];
@@ -189,8 +188,7 @@ static bool sync_slow;
 static sclk_t sync_last;
 static sclk_t sync_time;
 static u8 cell_cur, cell_new;
-
-
+static pit_t pit_hop;
 
 static inline bool chan_set(u32 chan)
 {
@@ -220,23 +218,6 @@ static inline bool chan_set(u32 chan)
     return false;
 }
 
-/*s32 nphy_mem_count = 0;
-
-static inline void *nphy_malloc(size_t size)
-{
-    void *ptr = malloc(size);
-    if (ptr) ++nphy_mem_count;
-    return ptr;
-}
-
-static inline void nphy_free(void *ptr)
-{
-    if (ptr) --nphy_mem_count;
-    return free(ptr);
-}*/
-
-#define nphy_malloc     malloc
-#define nphy_free       free
 
 bool nphy_init(u8 cell, bool sync_master, nphy_rx_t rx)
 {
@@ -291,6 +272,8 @@ bool nphy_init(u8 cell, bool sync_master, nphy_rx_t rx)
     chan_table_reorder(&chnl.group, cell, chnl.hop_table);
     chan_grp_calibrate(&chnl.group);
 
+    //pit_hop = pit_alloc(&(pit_cfg_t){ .handler = isr_chan_hop, .period = pit_nsec_tick(CHAN_TIME * 1000) });
+
     nphy.task = xTaskCreateStatic(nphy_task, "nphy:main", PHY_TASK_STACK_SIZE, NULL, TASK_PRIO_HIGH + 1, nphy.task_stack, &nphy.task_static);
 
     /*if (!xTaskCreate(nphy_dispatch_task, "nphy:disp", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIO_HIGH + 1, &nphy.disp)) {
@@ -312,8 +295,9 @@ void nphy_hook_sync(nphy_hook_t hook)
 }
 
 
-#define NOTIFY_MASK_ISR    2
-#define NOTIFY_MASK_TX     4
+#define NOTIFY_MASK_ISR    (1<<1)
+#define NOTIFY_MASK_TX     (1<<2)
+#define NOTIFY_MASK_HOP    (1<<3)
 
 void nphy_tx(u8 flag, u8 *buf, u8 len)
 {
@@ -341,8 +325,6 @@ void nphy_tx(u8 flag, u8 *buf, u8 len)
             cc_dbg("tx pkt queue immediate fail");
         }
 
-        taskYIELD();
-
     } else if (xQueueSend(nphy.txq, &sqpkt, portMAX_DELAY/*pdMS_TO_TICKS(500)*/)) {
         xTaskNotify(nphy.task, NOTIFY_MASK_TX, eSetBits);
     } else {
@@ -367,6 +349,12 @@ static void isr_ctl_pa(void)
     amp_ctrl(dev, AMP_PA, !isrd_state(2, 12));
 }
 
+static void isr_chan_hop(pit_t pit __unused, void *param __unused)
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(nphy.task, NOTIFY_MASK_HOP, eSetBits, &xHigherPriorityTaskWoken);
+    portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
+}
 
 /*typedef enum __packed {
     MARC_2PIN_STATUS_SETTLING,
@@ -419,12 +407,13 @@ static bool process_packet(rf_pkt_t *pkt, s8 rssi, u8 lqi)
                 sync_slow = ppkt_sync_slow;
                 sync_last = sclk_time();
                 sync_time = sync_last - spkt->ts;
+                //pit_restart(pit_hop);
                 if (hook_sync) hook_sync(chan_cur);
 
-                if (ppkt->hdr.flag & PHY_PKT_FLAG_RECAL) {
+                /*if (ppkt->hdr.flag & PHY_PKT_FLAG_RECAL) {
                     cc_strobe(dev, CC1200_SIDLE);
                     chan_grp_calibrate(&chnl.group);
-                }
+                }*/
 
             //}
         }
@@ -720,7 +709,7 @@ static void nphy_task(void *param __unused)
 
 
     while (1) {
-        if (xTaskNotifyWait(0, UINT32_MAX, &notify, pdMS_TO_TICKS(((remaining/2)+1001)/1000))) {
+        if (xTaskNotifyWait(0, UINT32_MAX, &notify, pdMS_TO_TICKS((remaining+1000)/1000))) {
 
             if (notify & NOTIFY_MASK_ISR) {
 
@@ -839,6 +828,11 @@ static void nphy_task(void *param __unused)
                 remaining = chan_time_cur - (u32)(ticks % chan_time_cur);
             }
 
+            // This introduces some much-needed determinism to the hop timing.
+            if (remaining <= 1000) {
+                ticks += remaining;
+            }
+
             if (chan_set((u32)((ticks / chan_time_cur) % (chan_count * 2)))) {
                 if (pkt) {
                     const u8 tx_bytes = cc_get(dev, CC1200_NUM_TXBYTES);
@@ -860,8 +854,9 @@ static void nphy_task(void *param __unused)
                     sync_needed = true;
                     loop_state = LOOP_STATE_TX;
                 } else {
-                    tx_next = sclk_time() + 5000;
-                    loop_state = LOOP_STATE_RX;
+                    cc_strobe(dev, CC1200_SRX);
+                    tx_next = sclk_time() + 2000;
+                    goto _loop_end;
                 }
             }
         } else if (!boss) {
@@ -870,6 +865,10 @@ static void nphy_task(void *param __unused)
             ts = sclk_time();
             ticks = ts - start_time;
             remaining = (2 * chan_time) - (u32)(ticks % (2 * chan_time));
+
+            if (remaining <= 1000) {
+                ticks += remaining;
+            }
 
             if (chan_set((u32)((ticks / (2 * chan_time)) % (chan_count * 2)))) {
                 if (pkt) {
@@ -958,7 +957,6 @@ static void nphy_task(void *param __unused)
                                 cca_run();
                                 cc_strobe(dev, CC1200_STX);
                                 continue;
-
                             }
 
                             cc_dbg("tx fail: ms=0x%02X", ms);
@@ -968,15 +966,14 @@ static void nphy_task(void *param __unused)
                             if (pkt) {
                                 if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
                                     if ((void*)pkt == &pkt_sync) {
-                                        if (pkt_sync.hdr.flag & PHY_PKT_FLAG_RECAL) {
+                                        /*if (pkt_sync.hdr.flag & PHY_PKT_FLAG_RECAL) {
                                             pkt_sync.hdr.flag &= ~PHY_PKT_FLAG_RECAL;
                                             cc_strobe(dev, CC1200_SIDLE);
                                             chan_grp_calibrate(&chnl.group);
-                                        }
+                                        }*/
                                     }
                                 } else {
                                     assert(pkt != (void*)&pkt_sync);
-                                    //nphy_free(pkt);
                                     pkt = NULL;
                                     cca_disable();
                                     loop_state_next = LOOP_STATE_RX;
@@ -1009,13 +1006,7 @@ static void nphy_task(void *param __unused)
                             sync_time = sclk_time();
                             ticks = 0;
                         } else {
-                            ticks = sclk_time() - sync_time;
-
-                            if (boss && !chan_cur && ticks >= (CHAN_TIME*CHAN_COUNT)) {
-                                // TODO: Need to also realign the sync window for non-boss nodes sending provisional sync packets
-                                sync_time = sclk_time();
-                                ticks = 0;
-                            }
+                            ticks = sclk_time() - (sync_time ? sync_time : start_time);
                         }
 
                         pkt_sync.hdr.cell = cell_cur;
@@ -1026,14 +1017,16 @@ static void nphy_task(void *param __unused)
                         }*/
 
                         tx_next = cc_get_tx_time(dev, pkt->len);
-                        pkt_sync.ts = (u32)(ticks + tx_next*2 + 500);
+                        pkt_sync.ts = ticks + tx_next*2 + 1000;
 
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
                         cc_strobe(dev, CC1200_STX);
 
-                        tx_next += sclk_time();
+                        tx_next += sclk_time() + 2000;
+                        //pit_restart(pit_hop);
 
                         sync_needed = false;
+
                         if (hook_sync) hook_sync(chan_cur);
 
                     } else if (!pkt && xQueuePeek(nphy.txq, &spkt, 0)) {
@@ -1058,17 +1051,17 @@ static void nphy_task(void *param __unused)
                             chan_ticks = (u32)(ticks % chan_time);
                             remaining = chan_time - chan_ticks;
 
-                            if (chan_ticks < 2500) {
+                            if (chan_ticks < 2000) {
 
-                                tx_next = ts + (2500 - chan_ticks);
+                                tx_next = ts + (2000 - chan_ticks);
                                 pkt = NULL;
                                 loop_state_next = LOOP_STATE_RX;
                                 continue;
                             }
 
-                            if (remaining < (2500 + pkt_time)) {
+                            if (remaining < (2000 + pkt_time)) {
 
-                                tx_next = ts + ((2500 + pkt_time) - remaining);
+                                tx_next = ts + ((2000 + pkt_time) - remaining);
                                 pkt = NULL;
                                 continue;
                             }
@@ -1118,14 +1111,14 @@ static void nphy_task(void *param __unused)
                         xQueueReceive(nphy.txq, &spkt, 0);
                         //pkt = (rf_pkt_t *)&spkt;
 
+                        if ((cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M) != CC1200_STATE_IDLE)
+                            cc_strobe(dev, CC1200_SIDLE);
+
                         cc_fifo_write(dev, (u8 *) pkt, pkt->len + 1);
 
                         //if (!imm) {
                         //    cca_enable();
                         //    cca_run();
-                        //} else {
-                            if ((cc_strobe(dev, CC1200_SNOP) & CC1200_STATUS_STATE_M) != CC1200_STATE_IDLE)
-                                cc_strobe(dev, CC1200_SIDLE);
                         //}
 
                         cc_strobe(dev, CC1200_STX);

@@ -22,14 +22,19 @@
 #include <itm.h>
 #include <sclk.h>
 
+
 #define NMAC_PEER_MAX       10
 
 #define NMAC_PEND_MAX       1
-#define NMAC_PEND_TIME      57
+#define NMAC_PEND_TIME      63
 #define NMAC_PEND_RETRY     3
 
 #define NMAC_TXQ_COUNT      1 // NMAC_PEND_MAX? When this is implemented it should be user-facing
 #define NMAC_TXQ_SIZE       (NMAC_PEND_MAX * NMAC_TXQ_COUNT)
+#define NMAC_RXQ_SIZE       4
+
+#define MAC_TX_TASK_STACK_SIZE  (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
+#define MAC_RX_TASK_STACK_SIZE  (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
 
 
 #define nmac_debug(format, ...) cc_dbg_printf(format "\r\n", ##__VA_ARGS__ )
@@ -38,6 +43,7 @@
 
 #undef assert
 #define assert(x) if (!(x)) { itm_printf(0, "ASSERT FAIL: ( " #x " ) on line %u of %s\r\n", __LINE__, __FILE__); asm("bkpt #0"); while (1) { asm("nop"); } }
+
 
 typedef enum __packed {
     MAC_FLAG_PKT_IMM = 1 << 0,
@@ -69,6 +75,23 @@ typedef struct __packed {
 } nmac_static_pkt_t;
 
 typedef struct __packed {
+    s8 rssi;
+    u8 lqi;
+    u16 node;
+    u16 peer;
+    u16 dest;
+    u16 size;
+    u8 data[MAC_PKT_SIZE_MAX];
+
+} nmac_recv_t;
+
+typedef struct __packed {
+    u16 addr;
+    u8 seqn;
+
+} nmac_peer_t;
+
+typedef struct __packed {
     nmac_pkt_t *pkt;
     xSemaphoreHandle mtx;
     StaticSemaphore_t mtx_static;
@@ -80,26 +103,28 @@ typedef struct __packed {
 
 static bool send(u16 dest, u8 flag, u16 size, u8 data[]);
 static void tx_task(void *param);
+static void rx_task(void *param);
 static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
 
-typedef struct __packed {
-    u16 addr;
-    u8 seqn;
-
-} nmac_peer_t;
-
-#define MAC_TASK_STACK_SIZE  (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
 
 static struct {
     mac_recv_t rx;
 
     xTaskHandle task;
     StaticTask_t task_static;
-    StackType_t task_stack[MAC_TASK_STACK_SIZE];
+    StackType_t task_stack[MAC_TX_TASK_STACK_SIZE];
+
+    xTaskHandle rx_task;
+    StaticTask_t rx_task_static;
+    StackType_t rx_task_stack[MAC_RX_TASK_STACK_SIZE];
 
     xQueueHandle txq;
     StaticQueue_t txq_static;
     nmac_static_pkt_t txq_buf[NMAC_TXQ_SIZE];
+
+    xQueueHandle rxq;
+    StaticQueue_t rxq_static;
+    nmac_recv_t rxq_buf[NMAC_RXQ_SIZE];
 
     xQueueHandle pendq;
     StaticQueue_t pendq_static;
@@ -113,8 +138,6 @@ static struct {
 static u16 mac_addr = 0;
 static u8 mac_seqn = 0;
 
-#define nmac_malloc     malloc
-#define nmac_free       free
 
 static nmac_peer_t *peer_get_or_add(u16 addr)
 {
@@ -145,6 +168,7 @@ bool nmac_init(u8 cell, u16 addr, bool sync_master, mac_recv_t rx)
     nmac.rx = rx;
 
     nmac.txq = xQueueCreateStatic(NMAC_TXQ_SIZE, sizeof(nmac.txq_buf[0]), (u8 *)nmac.txq_buf, &nmac.txq_static);
+    nmac.rxq = xQueueCreateStatic(NMAC_RXQ_SIZE, sizeof(nmac.rxq_buf[0]), (u8 *)nmac.rxq_buf, &nmac.rxq_static);
     nmac.pendq = xQueueCreateStatic(NMAC_PEND_MAX, sizeof(u8), nmac.pendq_buf, &nmac.pendq_static);
 
     for (u8 i = 0; i < NMAC_PEND_MAX; ++i) {
@@ -160,7 +184,8 @@ bool nmac_init(u8 cell, u16 addr, bool sync_master, mac_recv_t rx)
         }
     }
 
-    //nmac.task = xTaskCreateStatic(tx_task, "nmac:send", MAC_TASK_STACK_SIZE, NULL, TASK_PRIO_HIGH - 1, nmac.task_stack, &nmac.task_static);
+    //nmac.task = xTaskCreateStatic(tx_task, "nmac:send", MAC_TX_TASK_STACK_SIZE, NULL, TASK_PRIO_HIGH - 1, nmac.task_stack, &nmac.task_static);
+    nmac.rx_task = xTaskCreateStatic(rx_task, "nmac:recv", MAC_RX_TASK_STACK_SIZE, NULL, uxTaskPriorityGet(NULL) + 1, nmac.rx_task_stack, &nmac.rx_task_static);
 
     return nphy_init(cell, sync_master, handle_rx);
 }
@@ -174,7 +199,7 @@ bool nmac_send(nmac_send_t type, u16 dest, u16 size, u8 data[])
 {
     switch (type) {
         case NMAC_SEND_DGRM:
-            return send(dest, MAC_FLAG_PKT_BLK, size, data);
+            return send(dest, 0, size, data);
 
         case NMAC_SEND_MESG:
             return send(dest, MAC_FLAG_PKT_BLK | MAC_FLAG_ACK_REQ, size, data);
@@ -183,7 +208,7 @@ bool nmac_send(nmac_send_t type, u16 dest, u16 size, u8 data[])
             return send(dest, MAC_FLAG_PKT_BLK | MAC_FLAG_ACK_REQ, size, data);
 
         case NMAC_SEND_STRM:
-            return send(dest, MAC_FLAG_PKT_BLK | MAC_FLAG_PKT_IMM, size, data);
+            return send(dest, MAC_FLAG_PKT_IMM, size, data);
 
         default:
             return false;
@@ -195,35 +220,23 @@ static bool send_packet(nmac_static_pkt_t *pkt)
     assert(pkt->size <= MAC_PKT_SIZE_MAX);
 
     const u8 pkt_len = sizeof(nmac_pkt_t) + pkt->size;
+    const bool imm = pkt->flag & MAC_FLAG_PKT_IMM;
     const bool needs_ack = pkt->flag & MAC_FLAG_ACK_REQ;
+    const u8 nphy_flag = (u8)(imm ? PHY_PKT_FLAG_IMMEDIATE : 0);
     nmac_pend_t *pend = NULL;
     u8 pend_idx;
-    u8 nphy_flag = 0;
+    u8 retry = NMAC_PEND_RETRY;
 
     //nmac_debug_pkt(
     //        "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t TX-BEGIN",
     //        pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, SCLK_MSEC(sclk_time())
     //);
 
-    if (pkt->flag & MAC_FLAG_PKT_IMM) {
-        nphy_flag |= PHY_PKT_FLAG_IMMEDIATE;
-    }
-
     if (needs_ack) {
         if (!(pkt->flag & MAC_FLAG_PKT_BLK)) {
-            if (pkt->flag & MAC_FLAG_ACK_RSP) {
-                // Currently this does not happen
-                if (!xQueueSendToFront(nmac.txq, pkt, pdMS_TO_TICKS(1000))) {
-                    nmac_debug("mac/tx: queue immediate failed");
-                    //nmac_free(pkt);
-                    return false;
-                }
-            } else {
-                if (!xQueueSend(nmac.txq, pkt, portMAX_DELAY)) {
-                    nmac_debug("mac/tx: queue failed");
-                    //nmac_free(pkt);
-                    return false;
-                }
+            if (!xQueueSend(nmac.txq, pkt, portMAX_DELAY)) {
+                nmac_debug("mac/tx: queue failed");
+                return false;
             }
 
             // packet was queued
@@ -232,7 +245,6 @@ static bool send_packet(nmac_static_pkt_t *pkt)
 
         if (!xQueueReceive(nmac.pendq, &pend_idx, pdMS_TO_TICKS(1000))) {
             nmac_debug("mac/tx: acquire pend failed");
-            //nmac_free(pkt);
             return false;
         }
 
@@ -241,15 +253,13 @@ static bool send_packet(nmac_static_pkt_t *pkt)
 
         if (!xSemaphoreTake(pend->mtx, pdMS_TO_TICKS(1000))) {
             nmac_debug("mac/tx: acquire pend mtx failed");
-            //nmac_free(pkt);
             return false;
         }
     }
 
-    //const sclk_t start = sclk_time();
-    u8 retry = NMAC_PEND_RETRY;
+    const sclk_t start = sclk_time();
 
-    _retry_tx:
+_retry_tx:
     nphy_tx(nphy_flag, (u8 *)pkt, pkt_len);
     nmac_debug_pkt(
             "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t %s",
@@ -282,7 +292,7 @@ static bool send_packet(nmac_static_pkt_t *pkt)
                         pkt->flag |= MAC_FLAG_ACK_RQR;
                     }
 
-                    //nmac_debug("retry: start=%lu now=%lu seq=%lu", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
+                    nmac_debug("retry: start=%lu now=%lu seq=%lu", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
                     goto _retry_tx;
                 } else {
                     //nmac_debug("retry: start=%lu now=%lu seq=%lu <fail>", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
@@ -349,6 +359,18 @@ static void tx_task(void *param __unused)
     }
 }
 
+static void rx_task(void *param __unused)
+{
+    const xQueueHandle rxq = nmac.rxq;
+    nmac_recv_t recv;
+
+    while (1) {
+        if (xQueueReceive(rxq, &recv, portMAX_DELAY)) {
+            nmac.rx(recv.node, recv.peer, recv.dest, recv.size, recv.data, recv.rssi, recv.lqi);
+        }
+    }
+}
+
 static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 {
     nmac_pkt_t *const pkt = (nmac_pkt_t *)data;
@@ -380,7 +402,7 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 
                     for (i = 0; i < NMAC_PEND_MAX; ++i) {
                         if (nmac.pend[i].pkt) {
-                            if (!xSemaphoreTake(nmac.pend[i].mtx, pdMS_TO_TICKS(1000))) {
+                            if (!xSemaphoreTake(nmac.pend[i].mtx, pdMS_TO_TICKS(5))) {
                                 nmac_debug("(critical) unable to aquire mutex for ack");
                                 assert(false);
                             }
@@ -410,15 +432,29 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                         }
                     }
 
-                    //if (i == NMAC_PEND_MAX) {
-                    //    nmac_debug("(warning) ack too late");
-                    //}
+                    if (i == NMAC_PEND_MAX) {
+                        nmac_debug("(warning) ack too late");
+                    }
 
                 } else {
                     // Assumption: packets always arrive in non-monotonic increasing sequence order, retransmits included
+                    //  This will not be the case if there is ever more than one TX queue
                     if (!(pkt->flag & MAC_FLAG_ACK_RQR) || (peer->seqn != pkt->seqn)) {
                         peer->seqn = pkt->seqn;
-                        nmac.rx(mac_addr, pkt->addr, pkt->dest, pkt->size, pkt->data, rssi, lqi);
+
+                        nmac_recv_t recv = {
+                                .rssi = rssi, .lqi = lqi,
+                                .node = mac_addr,
+                                .peer = pkt->addr,
+                                .dest = pkt->dest,
+                                .size = pkt->size,
+                        };
+
+                        if (recv.size) memcpy(recv.data, pkt->data, recv.size);
+
+                        if (!xQueueSend(nmac.rxq, &recv, pdMS_TO_TICKS(5))) {
+                            nmac_debug("(rx) queue failed");
+                        }
                     }
 
                 }

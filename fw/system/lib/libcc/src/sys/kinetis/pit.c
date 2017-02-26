@@ -180,6 +180,11 @@ void pit_stop(pit_t pit)
     PIT_StopTimer(PIT, pit->chnl);
 }
 
+void pit_restart(pit_t pit)
+{
+    pit_stop(pit);
+    pit_start(pit);
+}
 
 static u32 pit_ltt_nsec_div = 1;
 

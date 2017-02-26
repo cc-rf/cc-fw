@@ -6,6 +6,7 @@ import os
 import sys
 import struct
 import time
+import random
 import threading
 import traceback
 import cleanup
@@ -206,10 +207,10 @@ def send_frames(cc):
 
     while 1:
         count += 1
-        data = '\x3A' * 48
-        # data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
+        # data = '\x3A' * 48
+        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
         cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x0000, data)
-        # cc.send(random.choice((0, 1)), 0x0000, data)
+        # cc.io.send(random.choice((0, 1, 3)), 0x0000, data)
         # time.sleep(.020)
 
 
