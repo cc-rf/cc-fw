@@ -26,7 +26,7 @@
 #define NMAC_PEER_MAX       10
 
 #define NMAC_PEND_MAX       1
-#define NMAC_PEND_TIME      63
+#define NMAC_PEND_TIME      17
 #define NMAC_PEND_RETRY     3
 
 #define NMAC_TXQ_COUNT      1 // NMAC_PEND_MAX? When this is implemented it should be user-facing
@@ -226,6 +226,7 @@ static bool send_packet(nmac_static_pkt_t *pkt)
     nmac_pend_t *pend = NULL;
     u8 pend_idx;
     u8 retry = NMAC_PEND_RETRY;
+    u32 txtime;
 
     //nmac_debug_pkt(
     //        "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t TX-BEGIN",
@@ -251,6 +252,8 @@ static bool send_packet(nmac_static_pkt_t *pkt)
         pend = &nmac.pend[pend_idx];
         pend->pkt = (nmac_pkt_t *)pkt;
 
+        txtime = 2 * cc_get_tx_time(0, MAC_PKT_OVERHEAD + pkt->size) / 1000;
+
         if (!xSemaphoreTake(pend->mtx, pdMS_TO_TICKS(1000))) {
             nmac_debug("mac/tx: acquire pend mtx failed");
             return false;
@@ -267,16 +270,10 @@ _retry_tx:
             pkt->flag & MAC_FLAG_ACK_REQ ? "TX-ACK-REQ" : (pkt->flag & MAC_FLAG_ACK_RSP ? "TX-ACK-RSP" : "TX")
     );
 
-
     if (needs_ack) {
         xSemaphoreGive(pend->mtx);
 
-        /**
-         * TODO: Dynamic timeout, current value is ridiculously long and wastes time.
-         *       Should probably be something more like pkt_time*6 + <channel-block>.
-         */
-
-        if (!xSemaphoreTake(pend->sem, pdMS_TO_TICKS(NMAC_PEND_TIME))) {
+        if (!xSemaphoreTake(pend->sem, pdMS_TO_TICKS(txtime + NMAC_PEND_TIME * (NMAC_PEND_RETRY - retry + 1)))) {
             if (!xSemaphoreTake(pend->mtx, pdMS_TO_TICKS(1000))) {
                 nmac_debug("(critical) unable to aquire mutex for pend (1)");
                 assert(false);
@@ -292,7 +289,7 @@ _retry_tx:
                         pkt->flag |= MAC_FLAG_ACK_RQR;
                     }
 
-                    nmac_debug("retry: start=%lu now=%lu seq=%lu", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
+                    nmac_debug("retry: start=%lu now=%lu seq=%lu len=%lu", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn, (u32)pkt->size);
                     goto _retry_tx;
                 } else {
                     //nmac_debug("retry: start=%lu now=%lu seq=%lu <fail>", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
