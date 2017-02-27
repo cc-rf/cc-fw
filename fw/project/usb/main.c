@@ -250,9 +250,9 @@ static void main_task(void *param)
 
     boss = pflag_set();
 
-    if (uflag1_set())       cell = 0x2B;
-    else if (uflag2_set())  cell = 0x2C;
-    else                    cell = 0x2A;
+    if (uflag1_set())       cell = 0xA1;
+    else if (uflag2_set())  cell = 0xA2;
+    else                    cell = 0xA0;
 
     sim_uid_t sim_uid;
     SIM_GetUniqueId(&sim_uid);

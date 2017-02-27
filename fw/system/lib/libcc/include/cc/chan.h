@@ -20,7 +20,6 @@ typedef struct __packed {
     chan_t id;
     u32 freq;
     chan_cal_t cal;
-    bool skip;
 
 } chan_inf_t;
 

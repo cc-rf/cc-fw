@@ -149,8 +149,8 @@ static struct {
 static void ensure_rx(void);
 
 
-#define FREQ_BASE       905000000
-#define FREQ_BW         800000
+#define FREQ_BASE       902125000
+#define FREQ_BW         950000
 #define CHAN_COUNT      25
 #define CHAN_TIME       100000
 #define RECAL_CYCLES    4
