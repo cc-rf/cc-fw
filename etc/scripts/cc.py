@@ -172,6 +172,7 @@ class Stats:
             lqi_avg = 0
 
         elapsed = int(round(now - self._start_time))
+        elapsed -= elapsed % 5
         elapsed_hour = elapsed / 3600
         elapsed_min = (elapsed / 60) % 60
         elapsed_sec = elapsed % 60
@@ -207,10 +208,9 @@ def send_frames(cc):
 
     while 1:
         count += 1
-        # data = '\x3A' * 48
+        # data = '\x3A' * 1
         data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
         cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x0000, data)
-        # cc.io.send(random.choice((0, 1, 3)), 0x0000, data)
         # time.sleep(.020)
 
 
@@ -249,6 +249,7 @@ def main(args):
 
         if tx:
             send_frames(cc)
+            sys.exit(0)
 
         while not cc.join(1):
             pass

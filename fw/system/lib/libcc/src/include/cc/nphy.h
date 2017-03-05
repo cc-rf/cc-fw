@@ -13,3 +13,6 @@ bool nphy_init(u8 cell, bool sync_master, nphy_rx_t rx);
 void nphy_hook_sync(nphy_hook_t hook);
 
 void nphy_tx(u8 flag, u8 *buf, u8 len);
+
+void chan_clock_trig(void);
+void chan_cycle_trig(void);

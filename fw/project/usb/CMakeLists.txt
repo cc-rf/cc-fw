@@ -30,7 +30,7 @@ target_link_libraries(
         PUBLIC util_uart
         PUBLIC libcc
         "-Xlinker -defsym=__heap_size__=0x4000"
-        "-Xlinker -defsym=__stack_size__=0x400"
+        "-Xlinker -defsym=__stack_size__=0x500"
 )
 
 add_library(kinetis_freertos_config INTERFACE)

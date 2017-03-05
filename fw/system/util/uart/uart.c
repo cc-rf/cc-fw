@@ -1,5 +1,6 @@
 #include "uart.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 
 static void uart_dma_callback(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData);
@@ -26,10 +27,14 @@ uart_t uart_init(const uart_id_t id, const baud_t baud)
 
     UART_Init(uart->base, &config, CLOCK_GetFreq(SYSTEM_UART_CLOCK_SRCS[id]));
 
-    uart->rx_mtx = xSemaphoreCreateMutex(); assert(uart->rx_mtx);
-    uart->rx_sem = xSemaphoreCreateBinary(); assert(uart->rx_sem);
-    uart->tx_sem = xSemaphoreCreateBinary(); assert(uart->tx_sem);
-    xSemaphoreGive(uart->tx_sem);
+    if (!uart->rx_mtx) uart->rx_mtx = xSemaphoreCreateMutexStatic(&uart->rx_mtx_static);
+
+    if (!uart->rx_sem) uart->rx_sem = xSemaphoreCreateBinaryStatic(&uart->rx_sem_static);
+
+    if (!uart->tx_sem) {
+        uart->tx_sem = xSemaphoreCreateBinaryStatic(&uart->tx_sem_static);
+        xSemaphoreGive(uart->tx_sem);
+    }
 
     status_t status;
 
@@ -59,9 +64,9 @@ void uart_free(uart_t const uart)
     if (uart->base) {
         DMAMGR_ReleaseChannel(&uart->rx_handle);
         DMAMGR_ReleaseChannel(&uart->tx_handle);
-        vSemaphoreDelete(uart->rx_mtx);
-        vSemaphoreDelete(uart->rx_sem);
-        vSemaphoreDelete(uart->tx_sem);
+        //vSemaphoreDelete(uart->rx_mtx);
+        //vSemaphoreDelete(uart->rx_sem);
+        //vSemaphoreDelete(uart->tx_sem);
         UART_Deinit(uart->base);
         uart->base = NULL;
     }

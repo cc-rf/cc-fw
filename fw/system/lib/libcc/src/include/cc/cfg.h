@@ -115,6 +115,8 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  * IQIC: 0x80->0x00->0xD8. SmartRF cannot decide it seems. 0xD8 better than 0x80 but 3dB down.
  * IF_MIX_CFG: 0x08->0x18. Invert f_IF.
  * SYNC_CFG1: 0x13->0x33. Re-enable auto clear (SmartRF).
+ * AGC_CFG0: 0x0B->0x4F. Hysteresis 2dB->4dB. RSSI valid cnt 5->9. The RSSI count further improved measurement accuracy.
+ * AGC_CFG1: 0x0C->0x12->0x08->0x1D->0x1E->0x27->0x1E. AGC settle/64->settle/40. AGC win/32->win/16,settle/24->64/80->64/96->128/127->64/80. 64/80 improves RSSI measurement accuracy.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -143,11 +145,10 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYMBOL_RATE1,      0x99},
         {CC1200_SYMBOL_RATE0,      0x9A},
         {CC1200_AGC_REF,           0x35},
-        {CC1200_AGC_CS_THR,        (u8)((s8)96 - (s8)103)},
         {CC1200_AGC_CFG3,          0x31},
         {CC1200_AGC_CFG2,          0x00},
-        {CC1200_AGC_CFG1,          0x0C},
-        {CC1200_AGC_CFG0,          0x0B},
+        {CC1200_AGC_CFG1,          0x27},
+        {CC1200_AGC_CFG0,          0x4F},
         {CC1200_FIFO_CFG,          0x00},
         {CC1200_FS_CFG,            0x12},
         {CC1200_PKT_CFG2,          0x00},

@@ -6,6 +6,8 @@ static pit_t sclk_pit[3];
 
 void sclk_init(void)
 {
+    pit_init();
+
     sclk_pit[0] = pit_alloc(&(pit_cfg_t){
             .period = pit_nsec_tick(1000)
     });

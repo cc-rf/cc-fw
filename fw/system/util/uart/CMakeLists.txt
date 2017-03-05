@@ -1,7 +1,7 @@
 set(NAME util_uart)
 
 if(NOT DEFINED CONFIG_UTIL_UART_COUNT)
-    set(CONFIG_UTIL_UART_COUNT 0 CACHE STRING "Number of UARTs that can be managed (-1: MAX, 0: INFINITE/ON-DEMAND)")
+    set(CONFIG_UTIL_UART_COUNT 1 CACHE STRING "Number of UARTs that can be managed (-1: MAX, 0: INFINITE/ON-DEMAND)")
 endif()
 
 add_library(

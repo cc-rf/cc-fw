@@ -18,7 +18,7 @@ typedef struct {
 
 } pit_cfg_t;
 
-
+void pit_init(void);
 pit_t pit_alloc(const pit_cfg_t *cfg);
 pit_t pit_chain(pit_t pit, pit_cfg_t *cfg);
 void pit_free(pit_t pit);

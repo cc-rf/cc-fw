@@ -71,12 +71,12 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTA, 10u, kPORT_MuxAlt7);      // TRACE_D0 -- also default*/
 
     /* UART0 */
-    PORT_SetPinMux(PORTA, 14u, kPORT_MuxAlt3);      // UART0_TX
-    PORT_SetPinMux(PORTA, 15u, kPORT_MuxAlt3);      // UART0_RX
-    PORT_SetPinMux(PORTA, 16u, kPORT_MuxAlt3);      // UART0_RTS_b
-    PORT_SetPinMux(PORTA, 17u, kPORT_MuxAlt3);      // UART0_CTS_b
-    //PORT_SetPinMux(PORTB, 2u, kPORT_MuxAlt3);       // UART0_RTS_b
-    //PORT_SetPinMux(PORTB, 3u, kPORT_MuxAlt3);       // UART0_CTS_b
+    PORT_SetPinMux(PORTA, 14u, kPORT_MuxAlt3);                  // UART_HDR #5      UART0_TX
+    PORT_SetPinMux(PORTA, 15u, kPORT_MuxAlt3);                  // UART_HDR #3      UART0_RX
+    PORT_SetPinMux(PORTA, 16u, kPORT_MuxAsGpio);                // UART_HDR #4      UART0_RTS_b         Using as GPIO
+    PORT_SetPinMux(PORTA, 17u, kPORT_MuxAsGpio);                // UART_HDR #6      UART0_CTS_b         Using as GPIO
+    //PORT_SetPinMux(PORTB, 2u, kPORT_MuxAlt3);                   // UART_HDR #4      UART0_RTS_b
+    //PORT_SetPinMux(PORTB, 3u, kPORT_MuxAlt3);                   // UART_HDR #6      UART0_CTS_b
 
     /* SPI0 */
     PORT_SetPinMux(PORTC,  4u, kPORT_MuxAlt2);      // SPI0_PCS0

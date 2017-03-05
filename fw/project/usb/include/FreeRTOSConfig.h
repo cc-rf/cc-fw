@@ -76,6 +76,7 @@
 
 /* Phillip: specific task priorities */
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
+#define TASK_STACK_SIZE_HUGE        (TASK_STACK_SIZE_SMALL * 13)
 #define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 9)
 #define TASK_STACK_SIZE_MEDIUM      (TASK_STACK_SIZE_SMALL * 5)
 #define TASK_STACK_SIZE_DEFAULT     (TASK_STACK_SIZE_SMALL * 2)

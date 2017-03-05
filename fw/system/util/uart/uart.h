@@ -26,8 +26,11 @@ typedef struct uart {
     edma_handle_t rx_handle;
 
     xSemaphoreHandle rx_mtx;
+    StaticSemaphore_t rx_mtx_static;
     xSemaphoreHandle rx_sem;
+    StaticSemaphore_t rx_sem_static;
     xSemaphoreHandle tx_sem;
+    StaticSemaphore_t tx_sem_static;
 
     volatile bool rx_pending;
     volatile u8 *tx_buf;

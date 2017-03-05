@@ -2,6 +2,7 @@
 #include <cc/sys/kinetis/pit.h>
 
 #include <fsl_pit.h>
+#include <FreeRTOSConfig.h>
 
 
 #define PIT_COUNT               4
@@ -29,6 +30,7 @@ static inline void pit_clear(pit_t pit);
 
 
 static s32 pit_used = 0;
+static u32 bus_freq;
 
 static struct pit pits[PIT_COUNT] = {
         { .chnl = PIT_CHNL(0) },
@@ -37,8 +39,12 @@ static struct pit pits[PIT_COUNT] = {
         { .chnl = PIT_CHNL(3) },
 };
 
+void pit_init(void)
+{
+    bus_freq = CLOCK_GetBusClkFreq();
+}
 
-static inline void pit_init(void)
+static inline void pit_auto_init(void)
 {
     const pit_config_t pit_config = { false };
     PIT_Init(PIT, &pit_config);
@@ -91,12 +97,12 @@ void pit_free(pit_t pit)
 static inline void pit_setup(pit_t pit, const pit_cfg_t *cfg, bool chain)
 {
     pit->used = true;
-    if (++pit_used == 1) pit_init();
+    if (++pit_used == 1) pit_auto_init();
 
     if (cfg->handler) {
         pit->handler = cfg->handler;
         pit->param = cfg->param;
-        // TODO: Set default priority?
+        NVIC_SetPriority(PIT_CHNL_IRQN(pit->chnl), configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY); // TODO: Priority adjustment?
         EnableIRQ(PIT_CHNL_IRQN(pit->chnl));
         PIT_EnableInterrupts(PIT, pit->chnl, kPIT_TimerInterruptEnable);
     } else {
@@ -123,14 +129,14 @@ static inline void pit_clear(pit_t pit)
 
 pit_tick_t pit_nsec_tick(pit_nsec_t nsec)
 {
-    nsec = (nsec * CLOCK_GetBusClkFreq()) / NSEC_SEC;
+    nsec = (nsec * bus_freq) / NSEC_SEC;
     if (nsec > UINT32_MAX) nsec = UINT32_MAX;
     return (pit_tick_t)nsec;
 }
 
 pit_nsec_t pit_tick_nsec(pit_tick_t tick)
 {
-    return (NSEC_SEC * tick) / CLOCK_GetBusClkFreq();
+    return (NSEC_SEC * tick) / bus_freq;
 }
 
 pit_prio_t pit_get_prio(pit_t pit)
@@ -191,7 +197,7 @@ static u32 pit_ltt_nsec_div = 1;
 void pit_ltt_init(void)
 {
     assert(!pits[0].used && !pits[1].used);
-    pit_ltt_nsec_div = CLOCK_GetBusClkFreq();
+    pit_ltt_nsec_div = bus_freq;
 
     pit_t pit_0 = pit_alloc(&(pit_cfg_t){
             .period = UINT32_MAX

@@ -29,29 +29,34 @@ static struct {
     #endif
     #ifdef CC_SPI_LOCK
     xSemaphoreHandle mtx;
+    StaticQueue_t mtx_static;
     #endif
     xSemaphoreHandle sem;
+    StaticQueue_t sem_static;
 
 } spi[CC_NUM_DEVICES];
 
 void cc_spi_init(cc_dev_t dev)
 {
+    /**
+     * TODO: Pass a bit mask to be used for task notifications instead of using semaphores.
+     */
+
     assert(CC_DEV_VALID(dev));
     const spi_config_t *const cfg = &cc_interface[dev].spi;
 
     #ifdef CC_SPI_LOCK
-        //spi[dev].mtx = xSemaphoreCreateMutex(); assert(spi[dev].mtx != NULL);
-        spi[dev].mtx = xSemaphoreCreateBinary(); assert(spi[dev].mtx != NULL);
+        spi[dev].mtx = xSemaphoreCreateBinaryStatic(&spi[dev].mtx_static);
         xSemaphoreGive(spi[dev].mtx);
     #endif
 
-    spi[dev].sem = xSemaphoreCreateBinary(); assert(spi[dev].sem != NULL);
+    spi[dev].sem = xSemaphoreCreateBinaryStatic(&spi[dev].sem_static);
 
     dspi_master_config_t spi_config;
     DSPI_MasterGetDefaultConfig(&spi_config);
     spi_config.whichPcs = (dspi_which_pcs_t)(1u << cfg->pcs);
-    spi_config.ctarConfig.pcsToSckDelayInNanoSec = /*1000*/0;
-    spi_config.ctarConfig.lastSckToPcsDelayInNanoSec = /*1000*/1000;
+    spi_config.ctarConfig.pcsToSckDelayInNanoSec = 0;
+    spi_config.ctarConfig.lastSckToPcsDelayInNanoSec = 1000;
     spi_config.ctarConfig.betweenTransferDelayInNanoSec = 0;
     spi_config.ctarConfig.baudRate = 8000000;
 

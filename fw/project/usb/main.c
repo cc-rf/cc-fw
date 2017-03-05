@@ -33,25 +33,33 @@
 #include <uhdcd.h>
 #include <sclk.h>
 
-#define PFLAG_PORT PORTB
-#define PFLAG_GPIO GPIOB
-#define PFLAG_PIN  5
+#define PFLAG_PORT          PORTB
+#define PFLAG_GPIO          GPIOB
+#define PFLAG_PIN           5
 
-#define UFLAG1_ON_PORT  PORTE
-#define UFLAG1_ON_GPIO  GPIOE
-#define UFLAG1_ON_PIN   3
+#define UFLAG1_ON_PORT      PORTE
+#define UFLAG1_ON_GPIO      GPIOE
+#define UFLAG1_ON_PIN       3
 
-#define UFLAG1_PORT     PORTB
-#define UFLAG1_GPIO     GPIOB
-#define UFLAG1_PIN      4
+#define UFLAG1_PORT         PORTB
+#define UFLAG1_GPIO         GPIOB
+#define UFLAG1_PIN          4
 
-#define UFLAG2_ON_PORT  PORTE
-#define UFLAG2_ON_GPIO  GPIOE
-#define UFLAG2_ON_PIN   2
+#define UFLAG2_ON_PORT      PORTE
+#define UFLAG2_ON_GPIO      GPIOE
+#define UFLAG2_ON_PIN       2
 
-#define UFLAG2_PORT     PORTE
-#define UFLAG2_GPIO     GPIOE
-#define UFLAG2_PIN      4
+#define UFLAG2_PORT         PORTE
+#define UFLAG2_GPIO         GPIOE
+#define UFLAG2_PIN          4
+
+#define CHAN_CLOCK_PORT     PORTA
+#define CHAN_CLOCK_GPIO     GPIOA
+#define CHAN_CLOCK_PIN      16
+
+#define CHAN_CYCLE_PORT     PORTA
+#define CHAN_CYCLE_GPIO     GPIOA
+#define CHAN_CYCLE_PIN      17
 
 static void pin_flag_init(void);
 static void main_task(void *param);
@@ -112,7 +120,6 @@ int main(void)
 
     LED_C_ON();
 
-
     const xTaskHandle main_task_handle = xTaskCreateStatic(
             main_task, "main", MAIN_TASK_STACK_SIZE, NULL, TASK_PRIO_DEFAULT,
             main_task_stack, &main_task_static
@@ -128,7 +135,7 @@ int main(void)
     vTaskStartScheduler();
 }
 
-static bool __pflag_set, __uflag1_set, __uflag2_set;
+static bool __pflag_set, __uflag1_set, __uflag2_set, __chan_clock, __chan_cycle;
 
 static void pin_flag_init(void)
 {
@@ -173,13 +180,19 @@ static void pin_flag_init(void)
     GPIO_PinInit(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, &gpio_pin_config_out);
     GPIO_PinInit(UFLAG2_GPIO, UFLAG2_PIN, &gpio_pin_config);
     GPIO_PinInit(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, &gpio_pin_config_out);
+    GPIO_PinInit(CHAN_CLOCK_GPIO, CHAN_CLOCK_PIN, &gpio_pin_config_out);
+    GPIO_PinInit(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, &gpio_pin_config_out);
 
     __pflag_set = GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
     __uflag1_set = GPIO_ReadPinInput(UFLAG1_GPIO, UFLAG1_PIN) != 0;
     __uflag2_set = GPIO_ReadPinInput(UFLAG2_GPIO, UFLAG2_PIN) != 0;
 
-    GPIO_ClearPinsOutput(UFLAG1_ON_GPIO, UFLAG1_ON_PIN);
-    GPIO_ClearPinsOutput(UFLAG2_ON_GPIO, UFLAG2_ON_PIN);
+    __chan_clock = true;
+    GPIO_WritePinOutput(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, 0);
+    __chan_cycle = false;
+
+    GPIO_WritePinOutput(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, 0);
+    GPIO_WritePinOutput(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, 0);
 }
 
 static inline bool pflag_set(void)
@@ -197,6 +210,15 @@ static inline bool uflag2_set(void)
     return __uflag2_set;
 }
 
+void chan_clock_trig(void)
+{
+    GPIO_WritePinOutput(CHAN_CLOCK_GPIO, CHAN_CLOCK_PIN, (u8)(__chan_clock = !__chan_clock));
+}
+
+void chan_cycle_trig(void)
+{
+    GPIO_WritePinOutput(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, (u8)(__chan_cycle = !__chan_cycle));
+}
 
 static bool boss;
 static u8 cell;
@@ -269,18 +291,17 @@ static void main_task(void *param)
     if (nmac_init(cell, addr, boss, handle_rx)) {
 
         if (uflag1_set()) {
-            printf("uart: relay enabled\r\n");
             uart_relay_run();
         }
 
         if (uflag2_set() && boss) {
             printf("meter: auto-tx enabled\r\n");
-            #define TXLEN 30
+            #define TXLEN 45
 
             while (1) {
                 const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
                 nmac_send(NMAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send);
-                vTaskDelay(pdMS_TO_TICKS(1));
+                vTaskDelay(pdMS_TO_TICKS(23));
             }
         }
 
@@ -321,7 +342,9 @@ static void uart_relay_run(void)
             .pkt.type = 0x2a
     };
 
-    uart = uart_init(0, 119200);
+    itm_puts(0, "uart: relay enabled\r\n");
+
+    uart = uart_init(0, 115200);
 
     while (1) {
         uart_read(uart, (u8 *)message.input, 1);
@@ -335,16 +358,61 @@ static void uart_relay_run(void)
     }
 }
 
+#define UART_PACKET_MAX (MAC_PKT_SIZE_MAX - sizeof(uart_pkt_t))
+
+static void uart_relay_send(size_t size, u8 data[])
+{
+    const static size_t max = UART_PACKET_MAX;
+    size_t pos = 0, chunk = 0;
+
+    struct __packed {
+        uart_pkt_t pkt;
+        u8 data[UART_PACKET_MAX];
+
+    } message = {
+            .pkt.type = 0x2a
+    };
+
+    itm_puts(0, "uart: relay send\r\n");
+
+
+    while (size) {
+        chunk = size <= max ? size : max;
+
+        if (chunk) {
+            memcpy(message.data, &data[pos], chunk);
+        }
+
+        itm_printf(0, "uart: relay %lu byte chunk\r\n", chunk);
+
+        if (nmac_send(NMAC_SEND_DGRM, 0x0000, sizeof(uart_pkt_t) + chunk, (u8 *)&message)) {
+            if (!uflag2_set()) {
+                LED_C_TOGGLE();
+                LED_D_TOGGLE();
+            }
+        }
+
+        size -= chunk;
+        pos += chunk;
+    }
+}
 
 static void sync_hook(u32 chan)
 {
-    if (chan == 11 || chan == 13) LED_D_ON();
+    if (chan == 11) LED_A_ON();
+    else LED_A_OFF();
+    if (chan == 13) LED_B_ON();
+    else LED_B_OFF();
+    if (chan == 15) LED_C_ON();
+    else LED_C_OFF();
+    if (chan == 17) LED_D_ON();
     else LED_D_OFF();
 }
 
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi);
 
+extern bool usb_attached(void);
 
 static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi)
 {
@@ -363,7 +431,16 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
                 LED_B_TOGGLE();
             }
 
-            uart_write(uart, uart_pkt->data, size - sizeof(uart_pkt_t));
+            size -= sizeof(uart_pkt_t);
+            itm_printf(0, "uart: rf rx %u byte(s)\r\n", size);
+            uart_write(uart, uart_pkt->data, size);
+
+            if (usb_attached()) {
+                u8 *buf = malloc(size); assert(buf);
+                usb_write_direct(buf, size);
+            }
+
+            return;
         }
     }
 
@@ -392,7 +469,10 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
 
         if (!boss) {
             nmac_send(NMAC_SEND_STRM, 0x0000, size, data);
+            return;
         }
+
+        return;
     }
 
     write_code_recv(node, peer, dest, size, data, rssi, lqi);
@@ -682,9 +762,14 @@ static u8 usb_in_decode_data[USB_IN_DATA_MAX+1];
 
 static void usb_recv(size_t size, u8 *data)
 {
-    //printf("usb: (recv) size=%u data=0x%p\r\n", size, (void *)data);
+    //itm_printf(0, "usb: (recv) size=%lu data=0x%p\r\n", size, (void *)data);
 
     if (!size || !data) return;
+
+    if (uflag1_set()) {
+        uart_relay_send(size, data);
+        return;
+    }
 
     size_t i, frame_size;
 
@@ -804,6 +889,12 @@ caddr_t _sbrk(int incr)
 void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
 {
     itm_printf(0, "stack overflow in task 0x%08p '%s'\r\n", xTask, pcTaskName);
+}
+
+void vApplicationMallocFailedHook(void)
+{
+    itm_puts(0, "malloc failed!\r\n");
+    while (1) asm("nop");
 }
 
 StaticTask_t xIdleTaskTCB; // TODO: Force in RAM
