@@ -88,8 +88,8 @@ static void chan_set(chan_grp_t *grp, chan_inf_t *chan)
     if (chan->cal.valid) {
         if (grp->cur) {
             if (chan->cal.reg.chp != grp->cur->cal.reg.chp)    cc_set(grp->dev, CC1200_FS_CHP, chan->cal.reg.chp);
-            if (chan->cal.reg.chp != grp->cur->cal.reg.vco[0]) cc_set(grp->dev, CC1200_FS_VCO4, chan->cal.reg.vco[0]);
-            if (chan->cal.reg.chp != grp->cur->cal.reg.vco[1]) cc_set(grp->dev, CC1200_FS_VCO2, chan->cal.reg.vco[1]);
+            if (chan->cal.reg.vco[0] != grp->cur->cal.reg.vco[0]) cc_set(grp->dev, CC1200_FS_VCO4, chan->cal.reg.vco[0]);
+            if (chan->cal.reg.vco[1] != grp->cur->cal.reg.vco[1]) cc_set(grp->dev, CC1200_FS_VCO2, chan->cal.reg.vco[1]);
         } else {
             cc_set(grp->dev, CC1200_FS_CHP, chan->cal.reg.chp);
             cc_set(grp->dev, CC1200_FS_VCO4, chan->cal.reg.vco[0]);

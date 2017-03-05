@@ -992,7 +992,7 @@ static void nphy_task(void *param __unused)
 
                             if (!boss && !chan_cur) {
                                 chan_ticks = CHAN_TIME - remaining;
-                                const u32 lead_time = 500 + tx_times[pkt_sync.hdr.len];
+                                const u32 lead_time = 800 + tx_times[pkt_sync.hdr.len];
 
                                 if (chan_ticks < lead_time) {
 
