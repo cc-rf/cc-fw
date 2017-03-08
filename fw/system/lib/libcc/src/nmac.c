@@ -30,10 +30,10 @@ extern pit_t pit_hop;
 #define NMAC_PEER_MAX       10
 
 #define NMAC_PEND_MAX       1
-#define NMAC_PEND_TIME      10
+#define NMAC_PEND_TIME      5
 #define NMAC_PEND_RETRY     3
 
-#define NMAC_TXQ_COUNT      1 // This should eventually reflect the number of threads waiting on messages
+#define NMAC_TXQ_COUNT      3 // This should eventually reflect the number of threads waiting on messages
 #define NMAC_TXQ_SIZE       (NMAC_PEND_MAX * NMAC_TXQ_COUNT)
 #define NMAC_RXQ_SIZE       7
 
@@ -95,6 +95,7 @@ typedef struct __packed {
     u8 seqn;
     u32 ack_prev_rem;
     chan_t ack_prev_chan;
+    u8 ack_prev_seqn;
 
 } nmac_peer_t;
 
@@ -165,6 +166,7 @@ static nmac_peer_t *peer_get_or_add(u16 addr)
         pp->seqn = 0;
         pp->ack_prev_rem = UINT32_MAX;
         pp->ack_prev_chan = (chan_t) -1;
+        pp->ack_prev_seqn = 0;
         return pp;
     }
 
@@ -284,7 +286,7 @@ _retry_tx:
     if (needs_ack) {
         xSemaphoreGive(pend->mtx);
 
-        const u32 tx_time = NMAC_PEND_TIME + (2000 + tx_times[pkt->size + MAC_PKT_OVERHEAD]) / 1000;
+        const u32 tx_time = NMAC_PEND_TIME + (1000 + 2 * nphy_delay(pkt->size + (u8)MAC_PKT_OVERHEAD)) / 1000;
 
         if (!xSemaphoreTake(pend->sem, pdMS_TO_TICKS(tx_time))) {
 
@@ -303,9 +305,10 @@ _retry_tx:
                         pkt->flag |= MAC_FLAG_ACK_RQR;
                     }
 
-                    nmac_debug("retry: start=%lu elapsed=%lu now=%lu seq=%lu len=%lu chan=%u rem=%lu",
-                               SCLK_MSEC(start), SCLK_MSEC(sclk_time()) - SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn, (u32)pkt->size,
-                               chan_cur, (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000000u)
+                    nmac_debug("retry:  seq=%03lu chan=%02u rem=%05lu len=%03lu elapsed=%02lu",
+                               (u32)pkt->seqn, chan_cur,
+                               (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u),
+                               (u32)pkt->size, sclk_time() - start
                     );
 
                     goto _retry_tx;
@@ -406,20 +409,21 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 
             if (peer) {
                 if (pkt->flag & MAC_FLAG_ACK_REQ) {
-                    const u32 remaining = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000000u);
+                    const u32 remaining = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
 
                     send(pkt->addr, MAC_FLAG_PKT_BLK | MAC_FLAG_PKT_IMM | MAC_FLAG_ACK_RSP, sizeof(pkt->seqn), &pkt->seqn);
 
                     if (pkt->flag & MAC_FLAG_ACK_RQR) {
                         nmac_debug(
-                                "rqr ack send: now=%lu my_seq=%lu peer_seq=%lu pkt_seq=%lu chan=%u rem=%lu chan_prev=%u rem_prev=%lu",
-                                SCLK_MSEC(sclk_time()), (u32)mac_seqn, (u32)peer->seqn, (u32)pkt->seqn,
-                                chan_cur, remaining, peer->ack_prev_chan, peer->ack_prev_rem
+                                "rqr-tx: seq=%03lu chan=%02u seq_prev=%03lu chan_prev=%02u rem=%05lu rem_prev=%05lu",
+                                (u32)pkt->seqn, chan_cur, (u32)peer->ack_prev_seqn,
+                                peer->ack_prev_chan, remaining, peer->ack_prev_rem
                         );
                     }
 
                     peer->ack_prev_rem = remaining;
                     peer->ack_prev_chan = chan_cur;
+                    peer->ack_prev_seqn = pkt->seqn;
                 }
 
                 if (pkt->flag & MAC_FLAG_ACK_RSP) {
@@ -441,18 +445,18 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                                     pend->flag |= MAC_FLAG_ACK_RSP;
 
                                     if ((pend->flag & MAC_FLAG_ACK_RQR)) {
-                                        nmac_debug("rqr ack done: now=%lu seq=%lu sseq=%lu chan=%u rem=%lu",
-                                                   SCLK_MSEC(sclk_time()), (u32)seqn, (u32)pkt->seqn,
-                                                   chan_cur, (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000000u)
+                                        nmac_debug("rqr-rx: seq=%03lu chan=%02u rem=%05lu",
+                                                   (u32)seqn, chan_cur,
+                                                   (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u)
                                         );
                                     }
 
                                     xSemaphoreGive(nmac.pend[i].mtx);
                                     xSemaphoreGive(nmac.pend[i].sem);
                                 } else {
-                                    nmac_debug("(warning) ack already received: now=%lu seq=%lu sseq=%lu chan=%u rem=%lu",
-                                               SCLK_MSEC(sclk_time()), (u32)seqn, (u32)pkt->seqn,
-                                               chan_cur, (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000000u)
+                                    nmac_debug("rqr-dp: seq=%03lu chan=%02u rem=%05lu",
+                                               (u32)seqn, chan_cur,
+                                               (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u)
                                     );
                                     xSemaphoreGive(nmac.pend[i].mtx);
                                 }
@@ -465,9 +469,9 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                     }
 
                     if (i == NMAC_PEND_MAX) {
-                        nmac_warn("(warning) ack too late: now=%lu seq=%lu sseq=%lu, chan=%u rem=%lu",
-                                   SCLK_MSEC(sclk_time()), (u32)seqn, (u32)pkt->seqn,
-                                   chan_cur, (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000000u)
+                        nmac_debug("rqr-lt: seq=%03lu chan=%02u rem=%05lu",
+                                   (u32)seqn, chan_cur,
+                                   (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u)
                         );
                     }
 

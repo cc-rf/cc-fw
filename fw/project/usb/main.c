@@ -348,7 +348,7 @@ static void uart_relay_run(void)
 
     while (1) {
         uart_read(uart, (u8 *)message.input, 1);
-        itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
+        //itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
         if (nmac_send(NMAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
             if (!uflag2_set()) {
                 LED_C_TOGGLE();
@@ -373,7 +373,7 @@ static void uart_relay_send(size_t size, u8 data[])
             .pkt.type = 0x2a
     };
 
-    itm_puts(0, "uart: relay send\r\n");
+    //itm_puts(0, "uart: relay send\r\n");
 
 
     while (size) {
@@ -383,7 +383,7 @@ static void uart_relay_send(size_t size, u8 data[])
             memcpy(message.data, &data[pos], chunk);
         }
 
-        itm_printf(0, "uart: relay %lu byte chunk\r\n", chunk);
+        //itm_printf(0, "uart: relay %lu byte chunk\r\n", chunk);
 
         if (nmac_send(NMAC_SEND_DGRM, 0x0000, sizeof(uart_pkt_t) + chunk, (u8 *)&message)) {
             if (!uflag2_set()) {
@@ -432,7 +432,7 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
             }
 
             size -= sizeof(uart_pkt_t);
-            itm_printf(0, "uart: rf rx %u byte(s)\r\n", size);
+            //itm_printf(0, "uart: rf rx %u byte(s)\r\n", size);
             uart_write(uart, uart_pkt->data, size);
 
             if (usb_attached()) {

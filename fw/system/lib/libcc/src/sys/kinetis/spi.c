@@ -6,9 +6,11 @@
 
 #include <FreeRTOS.h>
 #include <semphr.h>
+#include <task.h>
 
 //#define CC_SPI_DMA
 //#define CC_SPI_LOCK
+//#define CC_SPI_NOTIFY   (1u<<29)
 
 // TODO: see if CC1200 will accept 8-bit addresses with leading zeroes in upper 8 bits
 
@@ -31,8 +33,10 @@ static struct {
     xSemaphoreHandle mtx;
     StaticQueue_t mtx_static;
     #endif
+    #ifndef CC_SPI_NOTIFY
     xSemaphoreHandle sem;
     StaticQueue_t sem_static;
+    #endif
 
 } spi[CC_NUM_DEVICES];
 
@@ -50,7 +54,9 @@ void cc_spi_init(cc_dev_t dev)
         xSemaphoreGive(spi[dev].mtx);
     #endif
 
-    spi[dev].sem = xSemaphoreCreateBinaryStatic(&spi[dev].sem_static);
+    #ifndef CC_SPI_NOTIFY
+        spi[dev].sem = xSemaphoreCreateBinaryStatic(&spi[dev].sem_static);
+    #endif
 
     dspi_master_config_t spi_config;
     DSPI_MasterGetDefaultConfig(&spi_config);
@@ -116,9 +122,15 @@ void cc_spi_init(cc_dev_t dev)
 
     #else
 
-        DSPI_MasterTransferCreateHandle(
-                cfg->spi, &spi[dev].master_handle, spi_irq_callback, (void *) spi[dev].sem
-        );
+        #ifndef CC_SPI_NOTIFY
+            DSPI_MasterTransferCreateHandle(
+                    cfg->spi, &spi[dev].master_handle, spi_irq_callback, (void *) spi[dev].sem
+            );
+        #else
+            DSPI_MasterTransferCreateHandle(
+                    cfg->spi, &spi[dev].master_handle, spi_irq_callback, NULL
+            );
+        #endif
 
         IRQn_Type irqn = NotAvail_IRQn;
 
@@ -214,8 +226,17 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
             xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
         #endif
 
+        #ifdef CC_SPI_NOTIFY
+            spi[dev].master_handle.userData = xTaskGetCurrentTaskHandle();
+        #endif
+
         DSPI_MasterTransferNonBlocking(cfg->spi, &spi[dev].master_handle, &xfer);
-        xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
+
+        #ifndef CC_SPI_NOTIFY
+            xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
+        #else
+            while (!xTaskNotifyWait(CC_SPI_NOTIFY, CC_SPI_NOTIFY, NULL, portMAX_DELAY));
+        #endif
 
         #ifdef CC_SPI_LOCK
             xSemaphoreGive(spi[dev].mtx);
@@ -245,7 +266,13 @@ static void spi_dma_callback(SPI_Type *base, dspi_master_edma_handle_t *handle, 
 static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData)
 {
     BaseType_t xHigherPriorityTaskWoken;
-    xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
+
+    #ifndef CC_SPI_NOTIFY
+        xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
+    #else
+        xTaskNotifyFromISR((xTaskHandle)userData, CC_SPI_NOTIFY, eSetBits, &xHigherPriorityTaskWoken);
+    #endif
+
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 

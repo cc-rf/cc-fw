@@ -117,6 +117,7 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  * SYNC_CFG1: 0x13->0x33. Re-enable auto clear (SmartRF).
  * AGC_CFG0: 0x0B->0x4F. Hysteresis 2dB->4dB. RSSI valid cnt 5->9. The RSSI count further improved measurement accuracy.
  * AGC_CFG1: 0x0C->0x12->0x08->0x1D->0x1E->0x27->0x1E. AGC settle/64->settle/40. AGC win/32->win/16,settle/24->64/80->64/96->128/127->64/80. 64/80 improves RSSI measurement accuracy.
+ * PREAMBLE_CFG1: 0x18->0x20. Preamble size 4->6 bytes. To help with synchronization and support greter packet-to-packet size variation.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -135,7 +136,7 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_DEVIATION_M,       0x48},
         {CC1200_MODCFG_DEV_E,      0x0D},
         {CC1200_DCFILT_CFG,        0x5D},
-        {CC1200_PREAMBLE_CFG1,     0x18},
+        {CC1200_PREAMBLE_CFG1,     0x20},
         {CC1200_PREAMBLE_CFG0,     0x8F},
         {CC1200_IQIC,              0x80},
         {CC1200_CHAN_BW,           0x03},

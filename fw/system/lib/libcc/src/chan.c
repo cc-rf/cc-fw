@@ -86,11 +86,11 @@ static void chan_set(chan_grp_t *grp, chan_inf_t *chan)
     cc_set_freq_reg(grp->dev, chan->cal.reg.freq);
 
     if (chan->cal.valid) {
-        if (grp->cur) {
+        /*if (grp->cur) {
             if (chan->cal.reg.chp != grp->cur->cal.reg.chp)    cc_set(grp->dev, CC1200_FS_CHP, chan->cal.reg.chp);
             if (chan->cal.reg.vco[0] != grp->cur->cal.reg.vco[0]) cc_set(grp->dev, CC1200_FS_VCO4, chan->cal.reg.vco[0]);
             if (chan->cal.reg.vco[1] != grp->cur->cal.reg.vco[1]) cc_set(grp->dev, CC1200_FS_VCO2, chan->cal.reg.vco[1]);
-        } else {
+        } else*/ {
             cc_set(grp->dev, CC1200_FS_CHP, chan->cal.reg.chp);
             cc_set(grp->dev, CC1200_FS_VCO4, chan->cal.reg.vco[0]);
             cc_set(grp->dev, CC1200_FS_VCO2, chan->cal.reg.vco[1]);
@@ -105,4 +105,11 @@ void chan_select(chan_grp_t *grp, chan_t id)
     assert(grp);
     assert(id < grp->size);
     chan_set(grp, &grp->chan[id]);
+}
+
+void chan_recalibrate(chan_grp_t *grp, chan_t id)
+{
+    assert(grp);
+    assert(id < grp->size);
+    chan_calibrate(grp, &grp->chan[id]);
 }

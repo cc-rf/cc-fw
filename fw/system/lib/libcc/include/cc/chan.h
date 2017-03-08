@@ -43,3 +43,4 @@ void chan_grp_calibrate(chan_grp_t *grp);
 void chan_table_reorder(chan_grp_t *grp, u_int seed, chan_t hop_table[]);
 
 void chan_select(chan_grp_t *grp, chan_t id);
+void chan_recalibrate(chan_grp_t *grp, chan_t id);

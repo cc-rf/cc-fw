@@ -103,8 +103,10 @@ class CloudChaser(Serf):
         if self.handler is not None:
             self.handler(node, peer, dest, rssi, lqi, data)
 
-        # if not tx:
-        #     serf_send(serial_current, NMAC_SEND_STRM, peer, 'extra stuff!')
+        # self.io.send(CloudChaser.NMAC_SEND_STRM, peer, data)
+
+        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
+        self.io.send(CloudChaser.NMAC_SEND_MESG, peer, data)
 
 
 class Stats:
@@ -208,10 +210,11 @@ def send_frames(cc):
 
     while 1:
         count += 1
-        # data = '\x3A' * 1
+        # data = '\x3A' * 37
         data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
         cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x0000, data)
-        # time.sleep(.020)
+        break
+        # time.sleep(.010)
 
 
 def main(args):
@@ -249,7 +252,6 @@ def main(args):
 
         if tx:
             send_frames(cc)
-            sys.exit(0)
 
         while not cc.join(1):
             pass
