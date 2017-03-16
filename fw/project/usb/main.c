@@ -45,6 +45,11 @@
 #define UFLAG1_GPIO         GPIOA
 #define UFLAG1_PIN          17
 
+#define UFLAG2_ON_PORT      PORTE
+#define UFLAG2_ON_GPIO      GPIOE
+#define UFLAG2_ON_PIN       0
+#define UFLAG2_ON_MUX_ORIG  kPORT_MuxAlt2
+
 #define UFLAG2_PORT         PORTE
 #define UFLAG2_GPIO         GPIOE
 #define UFLAG2_PIN          4
@@ -148,8 +153,9 @@ static void pin_flag_init(void)
     };
 
     PORT_SetPinConfig(PFLAG_PORT, PFLAG_PIN, &port_pin_config);
-    PORT_SetPinConfig(UFLAG1_PORT, UFLAG1_PIN, &port_pin_config);
     PORT_SetPinConfig(UFLAG1_ON_PORT, UFLAG1_ON_PIN, &port_pin_config_out);
+    PORT_SetPinConfig(UFLAG1_PORT, UFLAG1_PIN, &port_pin_config);
+    PORT_SetPinConfig(UFLAG2_ON_PORT, UFLAG2_ON_PIN, &port_pin_config_out);
     PORT_SetPinConfig(UFLAG2_PORT, UFLAG2_PIN, &port_pin_config);
 
     const gpio_pin_config_t gpio_pin_config = {
@@ -163,8 +169,9 @@ static void pin_flag_init(void)
     };
 
     GPIO_PinInit(PFLAG_GPIO, PFLAG_PIN, &gpio_pin_config);
-    GPIO_PinInit(UFLAG1_GPIO, UFLAG1_PIN, &gpio_pin_config);
     GPIO_PinInit(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, &gpio_pin_config_out);
+    GPIO_PinInit(UFLAG1_GPIO, UFLAG1_PIN, &gpio_pin_config);
+    GPIO_PinInit(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, &gpio_pin_config_out);
     GPIO_PinInit(UFLAG2_GPIO, UFLAG2_PIN, &gpio_pin_config);
 
     __pflag_set = GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
@@ -172,6 +179,8 @@ static void pin_flag_init(void)
     __uflag2_set = GPIO_ReadPinInput(UFLAG2_GPIO, UFLAG2_PIN) != 0;
 
     GPIO_WritePinOutput(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, 0);
+    GPIO_WritePinOutput(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, 0);
+    PORT_SetPinMux(UFLAG2_ON_PORT,  UFLAG2_ON_PIN, UFLAG2_ON_MUX_ORIG);
 }
 
 static inline bool pflag_set(void)
@@ -219,7 +228,7 @@ static void main_task(void *param)
         LED_A_TOGGLE();
         LED_C_TOGGLE();
 
-    } else if (true /*(temp) uflag2_set()*/) {
+    } else {
         nphy_hook_sync(sync_hook);
     }
 
@@ -368,14 +377,19 @@ static void uart_relay_send(size_t size, u8 data[])
 
 static void sync_hook(u32 chan)
 {
-    if (chan == 11) LED_A_ON();
-    else LED_A_OFF();
-    if (chan == 13) LED_B_ON();
-    else LED_B_OFF();
-    if (chan == 15) LED_C_ON();
-    else LED_C_OFF();
-    if (chan == 17) LED_D_ON();
-    else LED_D_OFF();
+    if (uflag2_set()) {
+        if (chan == 11 || chan == 13 || chan == 15 || chan == 17) LED_D_ON();
+        else LED_D_OFF();
+    } else {
+        if (chan == 11) LED_A_ON();
+        else LED_A_OFF();
+        if (chan == 13) LED_B_ON();
+        else LED_B_OFF();
+        if (chan == 15) LED_C_ON();
+        else LED_C_OFF();
+        if (chan == 17) LED_D_ON();
+        else LED_D_OFF();
+    }
 }
 
 
@@ -414,19 +428,19 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
     }
 
     if (uflag2_set()) {
-        if (rssi >= -47) {
+        if (rssi >= -34) {  // 60 dB down
             LED_A_ON();
             LED_B_ON();
             LED_C_ON();
-        } else if (rssi >= -71) {
+        } else if (rssi >= -44) { // 70 dB down
             LED_A_ON();
             LED_B_ON();
             LED_C_OFF();
-        } else if (rssi >= -93) {
+        } else if (rssi >= -74) { // 100 dB down
             LED_A_ON();
             LED_B_OFF();
             LED_C_OFF();
-        } else if (rssi >= -107) {
+        } else if (rssi >= -89) { // 115 dB down
             LED_A_OFF();
             LED_B_OFF();
             LED_C_ON();
