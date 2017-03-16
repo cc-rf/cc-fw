@@ -78,7 +78,6 @@ static void cca_run(void);
 
 static bool nphy_rx(bool flush);
 
-static void nphy_dispatch_task(void *param);
 static void nphy_task(void *param);
 
 #define CC_RSSI_OFFSET      (s8)(-81 - 3)
@@ -668,7 +667,7 @@ static void nphy_task(void *param __unused)
 {
     phy_static_pkt_t spkt;
     rf_pkt_t *pkt = NULL;
-    u8 ms = 0, st;
+    u8 ms = 0;
 
     sclk_t ts;
     u32 chan_ticks;
@@ -795,9 +794,6 @@ static void nphy_task(void *param __unused)
                 chan_prev = chan_cur;
                 chan_set(chan_cycle_cur);
                 //itm_printf(0, "hop: chan_cycle_cur=%u chan_cur=%u\r\n", chan_cycle_cur, chan_cur);
-
-                chan_clock_trig();
-                if (!chan_cur || (!chan_prev && chan_cur == 1)) chan_cycle_trig();
 
                 if (boss) {
                     /**

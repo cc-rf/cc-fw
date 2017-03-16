@@ -58,25 +58,13 @@ void BOARD_InitPins(void)
     LED_ABCD_INIT(C, LOGIC_LED_OFF);
     LED_ABCD_INIT(D, LOGIC_LED_OFF);
 
-    /* JTAG pins */
-/*    PORT_SetPinMux(PORTA, 0u, kPORT_MuxAlt7);       // JTAG_TCLK/SWD_CLK -- also default
-    PORT_SetPinMux(PORTA, 1u, kPORT_MuxAlt7);       // JTAG_TDI -- also default
-    PORT_SetPinMux(PORTA, 2u, kPORT_MuxAlt7);       // JTAG_TDO -- also default
-    PORT_SetPinMux(PORTA, 3u, kPORT_MuxAlt7);       // JTAG_TMS/SWD_DIO -- also default
-    PORT_SetPinMux(PORTA, 4u, kPORT_MuxAlt7);       // NMI_b -- also default -- 7
-    PORT_SetPinMux(PORTA, 6u, kPORT_MuxAlt7);       // TRACE_CLKOUT -- also default
-    PORT_SetPinMux(PORTA, 7u, kPORT_MuxAlt7);       // TRACE_D3 -- also default
-    PORT_SetPinMux(PORTA, 8u, kPORT_MuxAlt7);       // TRACE_D2 -- also default
-    PORT_SetPinMux(PORTA, 9u, kPORT_MuxAlt7);       // TRACE_D1 -- also default
-    PORT_SetPinMux(PORTA, 10u, kPORT_MuxAlt7);      // TRACE_D0 -- also default*/
-
     /* UART0 */
-    PORT_SetPinMux(PORTA, 14u, kPORT_MuxAlt3);                  // UART_HDR #5      UART0_TX
-    PORT_SetPinMux(PORTA, 15u, kPORT_MuxAlt3);                  // UART_HDR #3      UART0_RX
-    PORT_SetPinMux(PORTA, 16u, kPORT_MuxAsGpio);                // UART_HDR #4      UART0_RTS_b         Using as GPIO
-    PORT_SetPinMux(PORTA, 17u, kPORT_MuxAsGpio);                // UART_HDR #6      UART0_CTS_b         Using as GPIO
-    //PORT_SetPinMux(PORTB, 2u, kPORT_MuxAlt3);                   // UART_HDR #4      UART0_RTS_b
-    //PORT_SetPinMux(PORTB, 3u, kPORT_MuxAlt3);                   // UART_HDR #6      UART0_CTS_b
+    PORT_SetPinMux(PORTA, 14u, kPORT_MuxAlt3);      // UART_HDR #5      UART0_TX
+    PORT_SetPinMux(PORTA, 15u, kPORT_MuxAlt3);      // UART_HDR #3      UART0_RX
+    PORT_SetPinMux(PORTA, 16u, kPORT_MuxAsGpio);    // UART_HDR #4      ** uflag1 pwr
+    PORT_SetPinMux(PORTA, 17u, kPORT_MuxAsGpio);    // UART_HDR #6      ** uflag1 input
+    //PORT_SetPinMux(PORTA, 16u, kPORT_MuxAlt3);      // UART_HDR #4      UART0_RTS_b
+    //PORT_SetPinMux(PORTA, 17u, kPORT_MuxAlt3);      // UART_HDR #6      UART0_CTS_b
 
     /* SPI0 */
     PORT_SetPinMux(PORTC,  4u, kPORT_MuxAlt2);      // SPI0_PCS0
@@ -111,28 +99,21 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTE, 11u, kPORT_MuxAsGpio);    // PA2_PA_EN
 
     /* Multifunction GPIOs */
-    PORT_SetPinMux(PORTE,  0u, kPORT_MuxAlt6);                  // GPIO_HDR #6                          0:ADC1_SE4a 2:SPI1_PCS1 3:UART1_TX    4:SDHC0_D1     6:I2C1_SDA 7:RTC_CLKOUT
-    PORT_SetPinMux(PORTE,  1u, kPORT_MuxAlt6);                  // GPIO_HDR #4                          0:ADC1_SE5a 2:SPI1_SOUT 3:UART1_RX    4:SDHC0_D0     6:I2C1_SCL 7:SPI1_SIN
-    PORT_SetPinMux(PORTE,  2u, kPORT_MuxAsGpio);                // GPIO_HDR #3   ** uflag2 pwr          0:ADC1_SE6a 2:SPI1_SCK  3:UART1_CTS_b 4:SDHC0_DCLK
-    PORT_SetPinMux(PORTE,  3u, kPORT_MuxAsGpio);                // GPIO_HDR #7   ** uflag1 pwr          0:ADC1_SE7a 2:SPI1_SIN  3:UART1_RTS_b 4:SDHC0_CMD               7:SPI1_SOUT
-    PORT_SetPinMux(PORTE,  4u, kPORT_MuxAsGpio);                // GPIO_HDR #5   ** input "uflag2"
+    PORT_SetPinMux(PORTE,  0u, kPORT_MuxAlt2);                  // GPIO_HDR #6   ** uflag2 pwr          0:ADC1_SE4a 2:SPI1_PCS1 3:UART1_TX    4:SDHC0_D1     6:I2C1_SDA 7:RTC_CLKOUT
+    PORT_SetPinMux(PORTE,  1u, kPORT_MuxAlt2);                  // GPIO_HDR #4                          0:ADC1_SE5a 2:SPI1_SOUT 3:UART1_RX    4:SDHC0_D0     6:I2C1_SCL 7:SPI1_SIN
+    PORT_SetPinMux(PORTE,  2u, kPORT_MuxAlt2);                  // GPIO_HDR #3                          0:ADC1_SE6a 2:SPI1_SCK  3:UART1_CTS_b 4:SDHC0_DCLK
+    PORT_SetPinMux(PORTE,  3u, kPORT_MuxAlt2);                  // GPIO_HDR #7                          0:ADC1_SE7a 2:SPI1_SIN  3:UART1_RTS_b 4:SDHC0_CMD               7:SPI1_SOUT
+    PORT_SetPinMux(PORTE,  4u, kPORT_MuxAsGpio);                // GPIO_HDR #5   ** uflag2 input
     PORT_SetPinMux(PORTE,  5u, kPORT_PinDisabledOrAnalog);      // GPIO_HDR #2
-    PORT_SetPinMux(PORTB,  4u, kPORT_MuxAsGpio);                // GPIO_HDR #8   ** input "uflag1"
-    PORT_SetPinMux(PORTB,  5u, kPORT_MuxAsGpio);                // GPIO_HDR #9   ** currently used for config variant (rx/tx) input "pflag"
+    PORT_SetPinMux(PORTB,  4u, kPORT_MuxAsGpio);                // GPIO_HDR #8   ** extra pwr
+    PORT_SetPinMux(PORTB,  5u, kPORT_MuxAsGpio);                // GPIO_HDR #9   ** pflag input
 
-    /*port_pin_config_t port_pin_config = {
-            kPORT_PullUp,
-            kPORT_FastSlewRate,
-            kPORT_PassiveFilterDisable,
-            kPORT_OpenDrainEnable,
-            kPORT_LowDriveStrength,
-            kPORT_MuxAlt6,
-            kPORT_UnlockRegister,
+    const gpio_pin_config_t gpio_pin_config_out = {
+            .pinDirection = kGPIO_DigitalOutput,
+            .outputLogic = 1
     };
 
-
-    PORT_SetPinConfig(PORTE, 0u, &port_pin_config);
-    PORT_SetPinConfig(PORTE, 1u, &port_pin_config);*/
+    GPIO_PinInit(GPIOB, 4u, &gpio_pin_config_out);
 
     //((volatile port_pin_config_t *)(&PORTE->PCR[0]))->openDrainEnable = 1;
     //((volatile port_pin_config_t *)(&PORTE->PCR[1]))->openDrainEnable = 1;
