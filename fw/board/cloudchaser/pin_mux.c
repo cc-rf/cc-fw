@@ -99,15 +99,34 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTE, 11u, kPORT_MuxAsGpio);    // PA2_PA_EN
 
     /* Multifunction GPIOs */
-    PORT_SetPinMux(PORTE,  0u, kPORT_MuxAlt2);                  // GPIO_HDR #6   ** uflag2 pwr          0:ADC1_SE4a 2:SPI1_PCS1 3:UART1_TX    4:SDHC0_D1     6:I2C1_SDA 7:RTC_CLKOUT
+    PORT_SetPinMux(PORTE,  0u, kPORT_MuxAsGpio);                // GPIO_HDR #6   ** uflag2 pwr          0:ADC1_SE4a 2:SPI1_PCS1 3:UART1_TX    4:SDHC0_D1     6:I2C1_SDA 7:RTC_CLKOUT
     PORT_SetPinMux(PORTE,  1u, kPORT_MuxAlt2);                  // GPIO_HDR #4                          0:ADC1_SE5a 2:SPI1_SOUT 3:UART1_RX    4:SDHC0_D0     6:I2C1_SCL 7:SPI1_SIN
     PORT_SetPinMux(PORTE,  2u, kPORT_MuxAlt2);                  // GPIO_HDR #3                          0:ADC1_SE6a 2:SPI1_SCK  3:UART1_CTS_b 4:SDHC0_DCLK
     PORT_SetPinMux(PORTE,  3u, kPORT_MuxAlt2);                  // GPIO_HDR #7                          0:ADC1_SE7a 2:SPI1_SIN  3:UART1_RTS_b 4:SDHC0_CMD               7:SPI1_SOUT
-    PORT_SetPinMux(PORTE,  4u, kPORT_MuxAsGpio);                // GPIO_HDR #5   ** uflag2 input
-    PORT_SetPinMux(PORTE,  5u, kPORT_PinDisabledOrAnalog);      // GPIO_HDR #2
+    PORT_SetPinMux(PORTE,  4u, kPORT_MuxAlt2);                  // GPIO_HDR #5   ** uflag2 input                    2:SPI1_PCS0 3:UART3_TX
+    PORT_SetPinMux(PORTE,  5u, kPORT_PinDisabledOrAnalog);      // GPIO_HDR #2                                      2:SPI1_PCS2 3:UART3_TX
     PORT_SetPinMux(PORTB,  4u, kPORT_MuxAsGpio);                // GPIO_HDR #8   ** extra pwr
     PORT_SetPinMux(PORTB,  5u, kPORT_MuxAsGpio);                // GPIO_HDR #9   ** pflag input
 
+    /**
+     * Pull-up for SPI slave PCS
+     */
+    /*const port_pin_config_t port_pin_config = {
+            kPORT_PullUp,
+            kPORT_FastSlewRate,
+            kPORT_PassiveFilterDisable,
+            kPORT_OpenDrainDisable,
+            kPORT_HighDriveStrength,
+            kPORT_MuxAlt2,
+            kPORT_LockRegister,
+    };
+
+    PORT_SetPinConfig(PORTE, 4u, &port_pin_config);*/
+
+
+    /**
+     * Enable extra power pin (NOT high drive, 50mA limit?)
+     */
     const gpio_pin_config_t gpio_pin_config_out = {
             .pinDirection = kGPIO_DigitalOutput,
             .outputLogic = 1

@@ -32,6 +32,7 @@
 #include <util/uart.h>
 #include <uhdcd.h>
 #include <sclk.h>
+#include <fsl_flash.h>
 
 #define PFLAG_PORT          PORTB
 #define PFLAG_GPIO          GPIOB
@@ -152,12 +153,6 @@ static void pin_flag_init(void)
             kPORT_LockRegister,
     };
 
-    PORT_SetPinConfig(PFLAG_PORT, PFLAG_PIN, &port_pin_config);
-    PORT_SetPinConfig(UFLAG1_ON_PORT, UFLAG1_ON_PIN, &port_pin_config_out);
-    PORT_SetPinConfig(UFLAG1_PORT, UFLAG1_PIN, &port_pin_config);
-    PORT_SetPinConfig(UFLAG2_ON_PORT, UFLAG2_ON_PIN, &port_pin_config_out);
-    PORT_SetPinConfig(UFLAG2_PORT, UFLAG2_PIN, &port_pin_config);
-
     const gpio_pin_config_t gpio_pin_config = {
             .pinDirection = kGPIO_DigitalInput,
             .outputLogic = 0
@@ -168,17 +163,23 @@ static void pin_flag_init(void)
             .outputLogic = 1
     };
 
+
+    PORT_SetPinConfig(PFLAG_PORT, PFLAG_PIN, &port_pin_config);
     GPIO_PinInit(PFLAG_GPIO, PFLAG_PIN, &gpio_pin_config);
+    __pflag_set = GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
+
+    PORT_SetPinConfig(UFLAG1_ON_PORT, UFLAG1_ON_PIN, &port_pin_config_out);
+    PORT_SetPinConfig(UFLAG1_PORT, UFLAG1_PIN, &port_pin_config);
     GPIO_PinInit(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, &gpio_pin_config_out);
     GPIO_PinInit(UFLAG1_GPIO, UFLAG1_PIN, &gpio_pin_config);
+    __uflag1_set = GPIO_ReadPinInput(UFLAG1_GPIO, UFLAG1_PIN) != 0;
+    GPIO_WritePinOutput(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, 0);
+
+    PORT_SetPinConfig(UFLAG2_ON_PORT, UFLAG2_ON_PIN, &port_pin_config_out);
+    PORT_SetPinConfig(UFLAG2_PORT, UFLAG2_PIN, &port_pin_config);
     GPIO_PinInit(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, &gpio_pin_config_out);
     GPIO_PinInit(UFLAG2_GPIO, UFLAG2_PIN, &gpio_pin_config);
-
-    __pflag_set = GPIO_ReadPinInput(PFLAG_GPIO, PFLAG_PIN) != 0;
-    __uflag1_set = GPIO_ReadPinInput(UFLAG1_GPIO, UFLAG1_PIN) != 0;
     __uflag2_set = GPIO_ReadPinInput(UFLAG2_GPIO, UFLAG2_PIN) != 0;
-
-    GPIO_WritePinOutput(UFLAG1_ON_GPIO, UFLAG1_ON_PIN, 0);
     GPIO_WritePinOutput(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, 0);
     PORT_SetPinMux(UFLAG2_ON_PORT,  UFLAG2_ON_PIN, UFLAG2_ON_MUX_ORIG);
 }
@@ -223,6 +224,55 @@ static void main_task(void *param)
     vTaskDelay(pdMS_TO_TICKS(500));
 
     LED_ABCD_ALL_OFF();
+
+
+    /**
+     * SPI interconnect (mcuc) testing
+     */
+
+    /*if (pflag_set()) {
+
+        extern void spi_master_init(SPI_Type *spi);
+        extern void spi_master_io(size_t size, u8 *tx, u8 *rx);
+
+        spi_master_init(SPI1);
+        u8 ch[] = { 6, 'h', 'e', 'l', 'l', 'o', '\0', '\0' };
+        u8 r = 0;
+
+        //do {
+            spi_master_io(1, &ch[0], &r);
+        //} while (r != 0x7e);
+
+        for (int i = 0; i < 100000; ++i) asm("nop");
+
+        spi_master_io(ch[0], &ch[1], &ch[1]);
+        itm_printf(0, "r=0x%x ch=%s\n", r, &ch[1]);
+
+        //itm_puts(0, "\ndone.\n");
+        vTaskDelay(portMAX_DELAY);
+
+    } else {
+
+        extern void spi_slave_init(SPI_Type *spi);
+        extern void spi_slave_io(size_t size, u8 *tx, u8 *rx);
+
+        spi_slave_init(SPI1);
+
+        u8 len;
+        u8 ch[24];
+
+        while (1) {
+            len = 0xab;
+            memset(ch, 'o', 24);
+
+            spi_slave_io(1, &len, &len);
+            spi_slave_io(len, ch, ch);
+
+            itm_printf(0, "ch/%u=%s\n", len, ch);
+        }
+
+    }*/
+
 
     if (uflag1_set()) {
         LED_A_TOGGLE();
@@ -601,7 +651,7 @@ static void handle_code_status(size_t size, u8 *data)
 
     code_status_t code_status = {
             .version = 1,
-            .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32), // TODO: Check higher serial bytes on MCUs with same L and ML (happened once already)
+            .serial = (u64)sim_uid.L | ((u64)sim_uid.ML << 32),
             .uptime = SCLK_MSEC(sclk_time()),
             .node = nmac_get_addr(),
             .recv_count = recv_count,

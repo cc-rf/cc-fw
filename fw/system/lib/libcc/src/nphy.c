@@ -257,6 +257,8 @@ bool nphy_init(u8 cell, bool sync_master, nphy_rx_t rx)
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(0), CC1200_IOCFG_GPIO_CFG_MCU_WAKEUP);
     isrd_configure(2, 10, kPORT_InterruptRisingEdge, isr_mcu_wake, 0);
+    // For use with SPI1/external radio:
+    //isrd_configure(4, 4, kPORT_InterruptRisingEdge, isr_mcu_wake, 0);
 
     cc_set(dev, (u16)CC1200_IOCFG_REG_FROM_PIN(1), CC1200_IOCFG_GPIO_CFG_LNA_PD);
     isrd_configure(2, 11, kPORT_InterruptEitherEdge, isr_ctl_lna, 1);

@@ -39,14 +39,19 @@ static inline bool itm_port_available(const uint8_t port)
     return (ITM->TER & (1UL << port)) != 0UL;
 }
 
+static inline void itm_putch(const uint8_t port, const char ch)
+{
+    while (ITM->PORT[port].u32 == 0UL) __NOP();
+    ITM->PORT[port].u8 = ch;
+}
+
 static inline void itm_puts(const uint8_t port, const char *str)
 {
     //if (!itm_available() || !itm_port_available(port)) return;
     char ch;
 
     while ((ch = *str++)) {
-        while (ITM->PORT[port].u32 == 0UL) __NOP();
-        ITM->PORT[port].u8 = ch;
+        itm_putch(port, ch);
     }
 }
 

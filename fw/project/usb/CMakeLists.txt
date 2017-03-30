@@ -8,6 +8,7 @@ add_library(
         usb/usb_device_class.c
         usb/usb_device_descriptor.c
         usb/virtual_com.c
+        serf.c
 )
 
 #set_source_files_properties(main.c PROPERTIES COMPILE_FLAGS "-Wa,-a,-ad")
@@ -29,6 +30,7 @@ target_link_libraries(
         PUBLIC fw_system_framework_trace
         PUBLIC util_uart
         PUBLIC libcc
+        PUBLIC mcuc
         "-Xlinker -defsym=__heap_size__=0x4000"
         "-Xlinker -defsym=__stack_size__=0x500"
 )

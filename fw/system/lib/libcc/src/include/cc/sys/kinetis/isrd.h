@@ -7,7 +7,9 @@
 #define ISRD_PORTC_MAX_PIN      12
 //#define ISRD_PORTD
 //#define ISRD_PORTD_MAX_PIN      7
-
+// For use with SPI1/external radio
+//#define ISRD_PORTE
+//#define ISRD_PORTE_MAX_PIN      12
 
 typedef void (* isr_t)(void);
 
