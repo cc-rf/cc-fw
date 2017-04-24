@@ -121,6 +121,12 @@ void BOARD_BootClockRUN(void)
     SystemCoreClock = 120000000U;
 
     SystemCoreClockUpdate();
+
+    SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
+    SMC_SetPowerModeRun(SMC);
+    while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateRun)
+    {
+    }
 }
 
 void BOARD_BootClockHSRUN(void)

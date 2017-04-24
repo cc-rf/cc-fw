@@ -73,6 +73,7 @@
 /* Phillip: Additional configs from FreeRTOS.h */
 #define configUSE_NEWLIB_REENTRANT          0/*1*/
 #define configSUPPORT_STATIC_ALLOCATION     1
+#define portCRITICAL_NESTING_IN_TCB         1
 
 /* Phillip: specific task priorities */
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE

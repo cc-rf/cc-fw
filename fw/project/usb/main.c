@@ -77,7 +77,6 @@ int main(void)
 {
     BOARD_InitPins();
     LED_A_ON();
-    //BOARD_BootClockRUN();
     BOARD_BootClockOCHSRUN();
 
     //write_sem = xSemaphoreCreateBinary();
@@ -90,7 +89,6 @@ int main(void)
     /*printf("how about a fault.\r\n");
     *(int *)(0xfffefafe) = 42;
     while (1) {};*/
-
 
     itm_printf(0, "\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",
        CLOCK_GetFreq(kCLOCK_CoreSysClk),
@@ -211,10 +209,93 @@ static void sync_hook(u32 chan);
 static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi);
 
 
+#define USER_FLASH_ADDR 0x000FF000
+#define USER_FLASH_SIZE FSL_FEATURE_FLASH_PFLASH_BLOCK_SECTOR_SIZE
+
+typedef struct {
+    u32 header;
+
+    u8 pad[USER_FLASH_SIZE - sizeof(u32)];
+
+} user_flash_t;
+
+static user_flash_t user_flash_data = {
+        .header = 0xBABCCAB1,
+        .pad = {0}
+};
+
+/*__attribute__((section(".heap")))*/
+static void user_flash_init(void)
+{
+    BOARD_BootClockRUN();
+    itm_init();
+
+
+    flash_config_t flash_config;
+    memset(&flash_config, 0, sizeof(flash_config_t));
+
+    itm_puts(0, "initializing...\n");
+
+    status_t status = FLASH_Init(&flash_config);
+
+    if (status != kStatus_FLASH_Success) {
+        itm_printf(0, "init fail: status = %li\n", status);
+
+    } else {
+        //FLASH_PrepareExecuteInRamFunctions(&flash_config);
+
+        user_flash_t *user_flash = (user_flash_t *) USER_FLASH_ADDR;
+
+        itm_printf(0, "flash header value: 0x%lX\n", user_flash->header);
+
+        itm_puts(0, "erasing...\n");
+
+        taskENTER_CRITICAL();
+
+        status = FLASH_Erase(&flash_config, USER_FLASH_ADDR, USER_FLASH_SIZE, kFLASH_ApiEraseKey);
+
+        if (status != kStatus_FLASH_Success) {
+            itm_printf(0, "erase fail: status = %li\n", status);
+            taskEXIT_CRITICAL();
+
+        } else {
+            //itm_puts(0, "erase successful\n");
+
+
+
+            //itm_puts(0, "writing...\n");
+
+            status = FLASH_Program(&flash_config, USER_FLASH_ADDR, (u32 *) &user_flash_data, USER_FLASH_SIZE);
+
+            taskEXIT_CRITICAL();
+
+            if (status != kStatus_FLASH_Success) {
+                itm_printf(0, "%li fail\n", status);
+            } else {
+                itm_puts(0, "write successful\n");
+            }
+
+            vTaskDelay(1);
+        }
+    }
+
+    //while (1) asm("nop");
+
+    BOARD_BootClockOCHSRUN();
+    itm_init();
+}
+
+
+
 static void main_task(void *param)
 {
     (void)param;
     LED_D_ON();
+    vTaskDelay(pdMS_TO_TICKS(1));
+
+
+    user_flash_init();
+
 
     if (!vcom_init(usb_recv)) {
         itm_puts(0, "vcom: init fail\r\n");
@@ -225,12 +306,11 @@ static void main_task(void *param)
 
     LED_ABCD_ALL_OFF();
 
-
     /**
      * SPI interconnect (mcuc) testing
      */
 
-    /*if (pflag_set()) {
+    if (pflag_set()) {
 
         extern void spi_master_init(SPI_Type *spi);
         extern void spi_master_io(size_t size, u8 *tx, u8 *rx);
@@ -271,7 +351,7 @@ static void main_task(void *param)
             itm_printf(0, "ch/%u=%s\n", len, ch);
         }
 
-    }*/
+    }
 
 
     if (uflag1_set()) {
