@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -153,15 +153,16 @@ extern usb_status_t USB_HostCh9RequestCommon(usb_host_device_instance_t *deviceI
 
 #if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
 
-extern usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
+extern usb_status_t USB_HostHubDeviceEvent(usb_host_handle hostHandle,
+                                           usb_device_handle deviceHandle,
                                            usb_host_configuration_handle configurationHandle,
                                            uint32_t eventCode);
 
-extern uint32_t USB_HostHubGetHsHubNumber(uint8_t parentHubNo);
+extern uint32_t USB_HostHubGetHsHubNumber(usb_host_handle hostHandle, uint8_t parentHubNo);
 
-extern uint32_t USB_HostHubGetHsHubPort(uint8_t parentHubNo, uint8_t parentPortNo);
+extern uint32_t USB_HostHubGetHsHubPort(usb_host_handle hostHandle, uint8_t parentHubNo, uint8_t parentPortNo);
 
-extern usb_status_t USB_HostHubRemovePort(uint8_t hubNumber, uint8_t portNumber);
+extern usb_status_t USB_HostHubRemovePort(usb_host_handle hostHandle, uint8_t hubNumber, uint8_t portNumber);
 
 #endif
 
@@ -535,8 +536,8 @@ static usb_status_t USB_HostNotifyDevice(usb_host_device_instance_t *deviceInsta
     }
     if (haveHub)
     {
-        status2 =
-            USB_HostHubDeviceEvent(deviceInstance, &deviceInstance->configuration, eventCode); /* notify hub event */
+        status2 = USB_HostHubDeviceEvent(hostInstance, deviceInstance, &deviceInstance->configuration,
+                                         eventCode); /* notify hub event */
     }
 
     if ((status1 == kStatus_USB_Success) || (status2 == kStatus_USB_Success)) /* the device is supported */
@@ -989,8 +990,8 @@ usb_status_t USB_HostAttachDevice(usb_host_handle hostHandle,
 
     if ((speed != USB_SPEED_HIGH) && (level > 1))
     {
-        newInstance->hsHubNumber = USB_HostHubGetHsHubNumber(hubNumber);
-        newInstance->hsHubPort = USB_HostHubGetHsHubPort(hubNumber, portNumber);
+        newInstance->hsHubNumber = USB_HostHubGetHsHubNumber(hostHandle, hubNumber);
+        newInstance->hsHubPort = USB_HostHubGetHsHubPort(hostHandle, hubNumber, portNumber);
     }
     else
     {
@@ -1348,7 +1349,7 @@ usb_status_t USB_HostRemoveDevice(usb_host_handle hostHandle, usb_device_handle 
         }
         else
         {
-            USB_HostHubRemovePort(devHubNo, devPortNo); /* reset hub port */
+            USB_HostHubRemovePort(hostHandle, devHubNo, devPortNo); /* reset hub port */
         }
 #else
         USB_HostControlBus(hostHandle, kUSB_HostBusReset);   /* reset controller port */

@@ -294,7 +294,7 @@ static void main_task(void *param)
     vTaskDelay(pdMS_TO_TICKS(1));
 
 
-    user_flash_init();
+    //user_flash_init();
 
 
     if (!vcom_init(usb_recv)) {
@@ -310,7 +310,7 @@ static void main_task(void *param)
      * SPI interconnect (mcuc) testing
      */
 
-    if (pflag_set()) {
+    /*if (pflag_set()) {
 
         extern void spi_master_init(SPI_Type *spi);
         extern void spi_master_io(size_t size, u8 *tx, u8 *rx);
@@ -351,7 +351,7 @@ static void main_task(void *param)
             itm_printf(0, "ch/%u=%s\n", len, ch);
         }
 
-    }
+    }*/
 
 
     if (uflag1_set()) {

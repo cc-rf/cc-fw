@@ -11,7 +11,7 @@ add_library(
         portable/GCC/ARM_CM4F/fsl_tickless_lptmr.c
         portable/GCC/ARM_CM4F/fsl_tickless_systick.c
         portable/GCC/ARM_CM4F/port.c
-        portable/MemMang/heap_1.c
+        portable/MemMang/heap_3.c
         driver/fsl_i2c_freertos.c
         driver/fsl_dspi_freertos.c
         driver/fsl_lpuart_freertos.c

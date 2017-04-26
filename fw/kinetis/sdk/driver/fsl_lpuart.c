@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016-2017 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -118,7 +118,14 @@ static const IRQn_Type s_lpuartIRQ[] = LPUART_RX_TX_IRQS;
 #if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
 /* Array of LPUART clock name. */
 static const clock_ip_name_t s_lpuartClock[] = LPUART_CLOCKS;
+
+#if defined(LPUART_PERIPH_CLOCKS)
+/* Array of LPUART functional clock name. */
+static const clock_ip_name_t s_lpuartPeriphClocks[] = LPUART_PERIPH_CLOCKS;
+#endif
+
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
+
 /* LPUART ISR for transactional APIs. */
 static lpuart_isr_t s_lpuartIsr;
 
@@ -130,7 +137,7 @@ uint32_t LPUART_GetInstance(LPUART_Type *base)
     uint32_t instance;
 
     /* Find the instance index from base address mappings. */
-    for (instance = 0; instance < FSL_FEATURE_SOC_LPUART_COUNT; instance++)
+    for (instance = 0; instance < ARRAY_SIZE(s_lpuartBases); instance++)
     {
         if (s_lpuartBases[instance] == base)
         {
@@ -138,7 +145,7 @@ uint32_t LPUART_GetInstance(LPUART_Type *base)
         }
     }
 
-    assert(instance < FSL_FEATURE_SOC_LPUART_COUNT);
+    assert(instance < ARRAY_SIZE(s_lpuartBases));
 
     return instance;
 }
@@ -283,8 +290,15 @@ status_t LPUART_Init(LPUART_Type *base, const lpuart_config_t *config, uint32_t 
     }
 
 #if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
+    
+    uint32_t instance = LPUART_GetInstance(base);
+
     /* Enable lpuart clock */
-    CLOCK_EnableClock(s_lpuartClock[LPUART_GetInstance(base)]);
+    CLOCK_EnableClock(s_lpuartClock[instance]);
+#if defined(LPUART_PERIPH_CLOCKS)
+    CLOCK_EnableClock(s_lpuartPeriphClocks[instance]);
+#endif
+
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
 
 #if defined(FSL_FEATURE_LPUART_HAS_GLOBAL) && FSL_FEATURE_LPUART_HAS_GLOBAL
@@ -432,8 +446,15 @@ void LPUART_Deinit(LPUART_Type *base)
     base->CTRL = 0;
 
 #if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
+    uint32_t instance = LPUART_GetInstance(base);
+
     /* Disable lpuart clock */
-    CLOCK_DisableClock(s_lpuartClock[LPUART_GetInstance(base)]);
+    CLOCK_DisableClock(s_lpuartClock[instance]);
+
+#if defined(LPUART_PERIPH_CLOCKS)
+    CLOCK_DisableClock(s_lpuartPeriphClocks[instance]);
+#endif
+
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
 }
 

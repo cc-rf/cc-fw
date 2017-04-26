@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -49,9 +49,19 @@ typedef enum _usb_device_notification
     kUSB_DeviceNotifyBusReset = 0x10U, /*!< Reset signal detected */
     kUSB_DeviceNotifySuspend,          /*!< Suspend signal detected */
     kUSB_DeviceNotifyResume,           /*!< Resume signal detected */
+    kUSB_DeviceNotifyLPMSleep,         /*!< LPM signal detected */
+    kUSB_DeviceNotifyLPMResume,        /*!< Resume signal detected */
     kUSB_DeviceNotifyError,            /*!< Errors happened in bus */
     kUSB_DeviceNotifyDetach,           /*!< Device disconnected from a host */
     kUSB_DeviceNotifyAttach,           /*!< Device connected to a host */
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U))
+    kUSB_DeviceNotifyDcdTimeOut,               /*!< Device charger detection timeout */
+    kUSB_DeviceNotifyDcdUnknownPortType,       /*!< Device charger detection unknown port type */
+    kUSB_DeviceNotifySDPDetected,              /*!< The SDP facility is detected */
+    kUSB_DeviceNotifyChargingPortDetected,     /*!< The charging port is detected */
+    kUSB_DeviceNotifyChargingHostDetected,     /*!< The CDP facility is detected */
+    kUSB_DeviceNotifyDedicatedChargerDetected, /*!< The DCP facility is detected */
+#endif
 } usb_device_notification_t;
 
 /*! @brief Device notification message structure */
@@ -77,12 +87,20 @@ typedef enum _usb_device_control_type
     kUSB_DeviceControlSetDeviceAddress,  /*!< Set device address */
     kUSB_DeviceControlGetSynchFrame,     /*!< Get current frame */
     kUSB_DeviceControlResume,            /*!< Drive controller to generate a resume signal in USB bus */
+    kUSB_DeviceControlSleepResume,       /*!< Drive controller to generate a LPM resume signal in USB bus */
     kUSB_DeviceControlSuspend,           /*!< Drive controller to enetr into suspend mode */
+    kUSB_DeviceControlSleep,             /*!< Drive controller to enetr into sleep mode */
     kUSB_DeviceControlSetDefaultStatus,  /*!< Set controller to default status */
     kUSB_DeviceControlGetSpeed,          /*!< Get current speed */
     kUSB_DeviceControlGetOtgStatus,      /*!< Get OTG status */
     kUSB_DeviceControlSetOtgStatus,      /*!< Set OTG status */
     kUSB_DeviceControlSetTestMode,       /*!< Drive xCHI into test mode */
+    kUSB_DeviceControlGetRemoteWakeUp,   /*!< Get flag of LPM Remote Wake-up Enabled by USB host. */
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U))
+    kUSB_DeviceControlDcdInitModule,
+    kUSB_DeviceControlDcdDeinitModule,
+    kUSB_DeviceControlGetDeviceAttachStatus,
+#endif
 } usb_device_control_type_t;
 
 /*! @brief USB device controller initialization function typedef */
@@ -146,6 +164,9 @@ typedef struct _usb_device_struct
     uint8_t remotewakeup; /*!< Remote wakeup is enabled or not */
 #endif
     uint8_t isResetting; /*!< Is doing device reset or not */
+#if (defined(USB_DEVICE_CONFIG_USE_TASK) && (USB_DEVICE_CONFIG_USE_TASK > 0U))
+    uint8_t epCallbackDirectly; /*!< Whether call ep callback directly when the task is enabled */
+#endif
 } usb_device_struct_t;
 
 /*******************************************************************************

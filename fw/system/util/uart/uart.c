@@ -5,6 +5,8 @@
 
 static void uart_dma_callback(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData);
 
+static dmamanager_handle_t dmamanager_handle;
+static bool dmamanager_initialized = false;
 
 uart_t uart_init(const uart_id_t id, const baud_t baud)
 {
@@ -38,18 +40,22 @@ uart_t uart_init(const uart_id_t id, const baud_t baud)
 
     status_t status;
 
-    DMAMGR_Init();
+    if (!dmamanager_initialized) {
+        dmamanager_initialized = true;
+        memset(&dmamanager_handle, 0, sizeof(dmamanager_handle));
+        DMAMGR_Init(&dmamanager_handle, DMA0, 0, 0);
+    }
 
     // NOTE: See FSL_FEATURE_UART_HAS_SEPARATE_DMA_RX_TX_REQn
 
-    status = DMAMGR_RequestChannel(SYSTEM_UART_TX_DMA_REQ_SRCS[id], DMAMGR_DYNAMIC_ALLOCATE, &uart->tx_handle);
+    status = DMAMGR_RequestChannel(&dmamanager_handle, SYSTEM_UART_TX_DMA_REQ_SRCS[id], DMAMGR_DYNAMIC_ALLOCATE, &uart->tx_handle);
     assert(status == kStatus_Success);
 
-    status = DMAMGR_RequestChannel(SYSTEM_UART_RX_DMA_REQ_SRCS[id], DMAMGR_DYNAMIC_ALLOCATE, &uart->rx_handle);
+    status = DMAMGR_RequestChannel(&dmamanager_handle, SYSTEM_UART_RX_DMA_REQ_SRCS[id], DMAMGR_DYNAMIC_ALLOCATE, &uart->rx_handle);
     assert(status == kStatus_Success);
 
-    NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[uart->tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
-    NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[uart->rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+    NVIC_SetPriority(((IRQn_Type[][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][uart->tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+    NVIC_SetPriority(((IRQn_Type[][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][uart->rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
 
     UART_TransferCreateHandleEDMA(
             uart->base, &uart->edma_handle, uart_dma_callback, uart,
@@ -62,8 +68,8 @@ uart_t uart_init(const uart_id_t id, const baud_t baud)
 void uart_free(uart_t const uart)
 {
     if (uart->base) {
-        DMAMGR_ReleaseChannel(&uart->rx_handle);
-        DMAMGR_ReleaseChannel(&uart->tx_handle);
+        DMAMGR_ReleaseChannel(&dmamanager_handle, &uart->rx_handle);
+        DMAMGR_ReleaseChannel(&dmamanager_handle, &uart->tx_handle);
         //vSemaphoreDelete(uart->rx_mtx);
         //vSemaphoreDelete(uart->rx_sem);
         //vSemaphoreDelete(uart->tx_sem);

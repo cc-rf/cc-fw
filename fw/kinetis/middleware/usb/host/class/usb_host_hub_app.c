@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -40,6 +40,12 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+
+/*! @brief HUB lock */
+#define USB_HostHubLock() USB_OsaMutexLock(hubGlobal->hubMutex)
+/*! @brief HUB unlock */
+#define USB_HostHubUnlock() USB_OsaMutexUnlock(hubGlobal->hubMutex)
+
 /*******************************************************************************
  * Prototypes
  ******************************************************************************/
@@ -84,7 +90,7 @@ static void USB_HostHubProcessPort(usb_host_hub_instance_t *hubInstance);
  *
  * @param hubInstance  hub instance pointer.
  */
-static void USB_HostHubProcessData(usb_host_hub_instance_t *hubInstance);
+static void USB_HostHubProcessData(usb_host_hub_global_t *hubGlobal, usb_host_hub_instance_t *hubInstance);
 
 /*!
  * @brief hub control pipe transfer callback.
@@ -106,7 +112,7 @@ void USB_HostHubInterruptInCallback(void *param, uint8_t *data, uint32_t data_le
 
 #if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
 
-static usb_host_hub_instance_t *USB_HostHubGetHubDeviceHandle(uint8_t parentHubNo);
+static usb_host_hub_instance_t *USB_HostHubGetHubDeviceHandle(usb_host_handle hostHandle, uint8_t parentHubNo);
 
 static usb_status_t USB_HostSendHubRequest(usb_device_handle deviceHandle,
                                            uint8_t requestType,
@@ -123,7 +129,7 @@ static usb_status_t USB_HostSendHubRequest(usb_device_handle deviceHandle,
 
 static usb_device_handle s_HubDeviceHandle;
 static usb_host_interface_handle s_HubInterfaceHandle;
-static usb_host_hub_global_t s_HubGlobal;
+static usb_host_hub_global_t s_HubGlobalArray[USB_HOST_CONFIG_MAX_HOST];
 
 #if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
 static usb_host_configuration_t *s_HubConfiguration;
@@ -132,6 +138,41 @@ static usb_host_configuration_t *s_HubConfiguration;
 /*******************************************************************************
  * Code
  ******************************************************************************/
+
+static usb_host_hub_global_t *USB_HostHubGetHubList(usb_host_handle hostHandle)
+{
+#if (USB_HOST_CONFIG_MAX_HOST == 1U)
+    return &s_HubGlobalArray[0];
+#else
+    uint8_t index;
+    for (index = 0; index < USB_HOST_CONFIG_MAX_HOST; ++index)
+    {
+        if (s_HubGlobalArray[index].hostHandle == hostHandle)
+        {
+            return &s_HubGlobalArray[index];
+        }
+    }
+    /* There is no used usb_host_hub_global_t instance */
+    for (index = 0; index < USB_HOST_CONFIG_MAX_HOST; ++index)
+    {
+        if (s_HubGlobalArray[index].hostHandle == NULL)
+        {
+            s_HubGlobalArray[index].hostHandle = hostHandle;
+            return &s_HubGlobalArray[index];
+        }
+    }
+    /* Look for the usb_host_hub_global_t instance that is not used any more */
+    for (index = 0; index < USB_HOST_CONFIG_MAX_HOST; ++index)
+    {
+        if (s_HubGlobalArray[index].hubList == NULL)
+        {
+            s_HubGlobalArray[index].hostHandle = hostHandle;
+            return &s_HubGlobalArray[index];
+        }
+    }
+    return NULL;
+#endif
+}
 
 static void USB_HostHubGetInterruptStatus(usb_host_hub_instance_t *hubInstance)
 {
@@ -383,6 +424,11 @@ static void USB_HostHubProcessPortAttach(usb_host_hub_instance_t *hubInstance)
     uint32_t specStatus;
     uint8_t feature;
     uint32_t infoValue;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hubInstance->hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return;
+    }
 
     switch (portInstance->portStatus)
     {
@@ -569,7 +615,7 @@ static void USB_HostHubProcessPortAttach(usb_host_hub_instance_t *hubInstance)
                                  hubInstance->hubLevel + 1, &portInstance->deviceHandle);
             processSuccess = 1;
             hubInstance->portProcess = 0;
-            s_HubGlobal.hubProcess = NULL;
+            hubGlobal->hubProcess = NULL;
             portInstance->resetCount = USB_HOST_HUB_PORT_RESET_TIMES;
             USB_HostHubGetInterruptStatus(hubInstance);
             break;
@@ -581,7 +627,7 @@ static void USB_HostHubProcessPortAttach(usb_host_hub_instance_t *hubInstance)
     {
         portInstance->portStatus = kPortRunWaitPortChange;
         hubInstance->portProcess = 0;
-        s_HubGlobal.hubProcess = NULL;
+        hubGlobal->hubProcess = NULL;
         portInstance->resetCount = USB_HOST_HUB_PORT_RESET_TIMES;
 
         USB_HostHubGetInterruptStatus(hubInstance);
@@ -596,6 +642,11 @@ static void USB_HostHubProcessPortDetach(usb_host_hub_instance_t *hubInstance)
 #endif
     uint8_t processSuccess = 0;
     uint32_t specStatus;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hubInstance->hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return;
+    }
 
     switch (portInstance->portStatus)
     {
@@ -683,7 +734,7 @@ static void USB_HostHubProcessPortDetach(usb_host_hub_instance_t *hubInstance)
                 portInstance->portStatus = kPortRunWaitPortChange;
                 USB_HostDetachDeviceInternal(hubInstance->hostHandle, portInstance->deviceHandle);
                 portInstance->deviceHandle = NULL;
-                s_HubGlobal.hubProcess = NULL;
+                hubGlobal->hubProcess = NULL;
                 hubInstance->portProcess = 0;
                 USB_HostHubGetInterruptStatus(hubInstance);
             }
@@ -723,13 +774,13 @@ static void USB_HostHubProcessPortDetach(usb_host_hub_instance_t *hubInstance)
     if (processSuccess == 0)
     {
         portInstance->portStatus = kPortRunPortAttached;
-        s_HubGlobal.hubProcess = NULL;
+        hubGlobal->hubProcess = NULL;
         hubInstance->portProcess = 0;
         USB_HostHubGetInterruptStatus(hubInstance);
     }
 }
 
-static void USB_HostHubProcessData(usb_host_hub_instance_t *hubInstance)
+static void USB_HostHubProcessData(usb_host_hub_global_t *hubGlobal, usb_host_hub_instance_t *hubInstance)
 {
     uint8_t needPrimeInterrupt = 1;
     uint8_t portIndex;
@@ -741,8 +792,8 @@ static void USB_HostHubProcessData(usb_host_hub_instance_t *hubInstance)
         {
             if (portIndex == 0) /* hub status change */
             {
-                if ((s_HubGlobal.hubProcess == NULL) ||
-                    ((s_HubGlobal.hubProcess == hubInstance) && (hubInstance->portProcess == 0)))
+                if ((hubGlobal->hubProcess == NULL) ||
+                    ((hubGlobal->hubProcess == hubInstance) && (hubInstance->portProcess == 0)))
                 {
                     hubInstance->hubStatus = kHubRunGetStatusDone;
                     if (USB_HostHubGetStatus(hubInstance, hubInstance->hubStatusBuffer, 4, USB_HostHubControlCallback,
@@ -764,13 +815,13 @@ static void USB_HostHubProcessData(usb_host_hub_instance_t *hubInstance)
             else /* port's status change */
             {
                 /* process the on-going port or process one new port */
-                if ((s_HubGlobal.hubProcess == NULL) ||
-                    ((s_HubGlobal.hubProcess == hubInstance) && (hubInstance->portProcess == 0)) ||
-                    ((s_HubGlobal.hubProcess == hubInstance) && (hubInstance->portProcess == portIndex)))
+                if ((hubGlobal->hubProcess == NULL) ||
+                    ((hubGlobal->hubProcess == hubInstance) && (hubInstance->portProcess == 0)) ||
+                    ((hubGlobal->hubProcess == hubInstance) && (hubInstance->portProcess == portIndex)))
                 {
                     if (hubInstance->controlTransfer == NULL)
                     {
-                        s_HubGlobal.hubProcess = hubInstance;
+                        hubGlobal->hubProcess = hubInstance;
                         hubInstance->portProcess = portIndex;
                         needPrimeInterrupt = 0;
                         USB_HostHubProcessPort(hubInstance);
@@ -790,6 +841,11 @@ static void USB_HostHubProcessData(usb_host_hub_instance_t *hubInstance)
 void USB_HostHubControlCallback(void *param, uint8_t *data, uint32_t data_len, usb_status_t status)
 {
     usb_host_hub_instance_t *hubInstance = (usb_host_hub_instance_t *)param;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hubInstance->hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return;
+    }
 
     if (hubInstance->invalid == 1)
     {
@@ -799,7 +855,7 @@ void USB_HostHubControlCallback(void *param, uint8_t *data, uint32_t data_len, u
     {
         /* if transfer fail, prime a new interrupt in transfer */
         hubInstance->primeStatus = kPrimeNone;
-        s_HubGlobal.hubProcess = NULL;
+        hubGlobal->hubProcess = NULL;
         hubInstance->portProcess = 0;
         USB_HostHubGetInterruptStatus(hubInstance);
         return;
@@ -828,10 +884,16 @@ void USB_HostHubControlCallback(void *param, uint8_t *data, uint32_t data_len, u
  *
  * @return think time value.
  */
-static usb_host_hub_instance_t *USB_HostHubGetHubDeviceHandle(uint8_t parentHubNo)
+static usb_host_hub_instance_t *USB_HostHubGetHubDeviceHandle(usb_host_handle hostHandle, uint8_t parentHubNo)
 {
-    usb_host_hub_instance_t *hubInstance = s_HubGlobal.hubList;
+    usb_host_hub_instance_t *hubInstance;
     uint32_t deviceAddress;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return NULL;
+    }
+    hubInstance = hubGlobal->hubList;
 
     /* get parentHubNo's hub instance handle */
     while (hubInstance != NULL)
@@ -971,7 +1033,8 @@ static void USB_HostHubRemoteWakeupCallback(void *param, usb_host_transfer_t *tr
         }
         else
         {
-            usb_host_hub_instance_t *hubInstance4Device = USB_HostHubGetHubDeviceHandle(deviceInstance->hubNumber);
+            usb_host_hub_instance_t *hubInstance4Device =
+                USB_HostHubGetHubDeviceHandle(hostInstance, deviceInstance->hubNumber);
             if (NULL != hubInstance4Device)
             {
                 status = USB_HostSendHubRequest(
@@ -1045,6 +1108,11 @@ static usb_status_t USB_HostSendHubRequest(usb_device_handle deviceHandle,
 void USB_HostHubInterruptInCallback(void *param, uint8_t *data, uint32_t data_len, usb_status_t status)
 {
     usb_host_hub_instance_t *hubInstance = (usb_host_hub_instance_t *)param;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hubInstance->hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return;
+    }
 
     if (hubInstance->invalid == 1)
     {
@@ -1060,14 +1128,14 @@ void USB_HostHubInterruptInCallback(void *param, uint8_t *data, uint32_t data_le
         /* prime nexe interrupt transfer */
         if (hubInstance->controlTransfer == NULL)
         {
-            s_HubGlobal.hubProcess = NULL;
+            hubGlobal->hubProcess = NULL;
             hubInstance->portProcess = 0;
             USB_HostHubGetInterruptStatus(hubInstance);
         }
     }
     else
     {
-        USB_HostHubProcessData(hubInstance); /* process the interrupt data */
+        USB_HostHubProcessData(hubGlobal, hubInstance); /* process the interrupt data */
     }
 }
 
@@ -1076,6 +1144,7 @@ void USB_HostHubInterruptInCallback(void *param, uint8_t *data, uint32_t data_le
  *
  * This function should be called in the host callback function.
  *
+ * @param hostHandle             host handle.
  * @param deviceHandle           device handle.
  * @param configurationHandle attached device's configuration descriptor information.
  * @param event_code           callback event code, please reference to enumeration host_event_t.
@@ -1083,7 +1152,8 @@ void USB_HostHubInterruptInCallback(void *param, uint8_t *data, uint32_t data_le
  * @retval kStatus_USB_Success              The host is initialized successfully.
  * @retval kStatus_USB_NotSupported         The configuration don't contain hub interface.
  */
-usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
+usb_status_t USB_HostHubDeviceEvent(usb_host_handle hostHandle,
+                                    usb_device_handle deviceHandle,
                                     usb_host_configuration_handle configurationHandle,
                                     uint32_t eventCode)
 {
@@ -1097,6 +1167,11 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
     usb_host_hub_instance_t *prevInstance;
     uint32_t infoValue;
     usb_osa_status_t osaStatus;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return kStatus_USB_Error;
+    }
 
     switch (eventCode)
     {
@@ -1149,12 +1224,12 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
                 usb_echo("address=%d\r\n", infoValue);
 
                 /* initialize hub mutex */
-                if (s_HubGlobal.hubMutex == (usb_osa_mutex_handle)NULL)
+                if (hubGlobal->hubMutex == (usb_osa_mutex_handle)NULL)
                 {
-                    osaStatus = USB_OsaMutexCreate(&s_HubGlobal.hubMutex);
+                    osaStatus = USB_OsaMutexCreate(&hubGlobal->hubMutex);
                     if (osaStatus != kStatus_USB_OSA_Success)
                     {
-                        s_HubGlobal.hubMutex = NULL;
+                        hubGlobal->hubMutex = NULL;
 #ifdef HOST_ECHO
                         usb_echo("hub mutex error\r\n");
 #endif
@@ -1167,8 +1242,8 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
 
                 /* link hub instance to list */
                 USB_HostHubLock();
-                hubInstance->next = s_HubGlobal.hubList;
-                s_HubGlobal.hubList = hubInstance;
+                hubInstance->next = hubGlobal->hubList;
+                hubGlobal->hubList = hubInstance;
                 USB_HostHubUnlock();
 #if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
                 hubInstance->supportRemoteWakeup = 0U;
@@ -1199,11 +1274,11 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
 
             /* get device's hub instance handle */
             USB_HostHubLock();
-            prevInstance = s_HubGlobal.hubList;
+            prevInstance = hubGlobal->hubList;
             if (prevInstance->deviceHandle == deviceHandle)
             {
                 hubInstance = prevInstance;
-                s_HubGlobal.hubList = prevInstance->next;
+                hubGlobal->hubList = prevInstance->next;
             }
             else
             {
@@ -1223,9 +1298,9 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
 
             if (hubInstance != NULL)
             {
-                if (hubInstance == s_HubGlobal.hubProcess)
+                if (hubInstance == hubGlobal->hubProcess)
                 {
-                    s_HubGlobal.hubProcess = NULL;
+                    hubGlobal->hubProcess = NULL;
                 }
                 /* print hub information */
                 USB_HostHelperGetPeripheralInformation(hubInstance->deviceHandle, kUSB_HostGetDeviceLevel, &infoValue);
@@ -1251,12 +1326,12 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
             }
 
             /* destory hub mutex if there is no hub instance */
-            if (s_HubGlobal.hubList == NULL)
+            if (hubGlobal->hubList == NULL)
             {
-                if (s_HubGlobal.hubMutex != NULL)
+                if (hubGlobal->hubMutex != NULL)
                 {
-                    USB_OsaMutexDestroy(s_HubGlobal.hubMutex);
-                    s_HubGlobal.hubMutex = NULL;
+                    USB_OsaMutexDestroy(hubGlobal->hubMutex);
+                    hubGlobal->hubMutex = NULL;
                 }
             }
             break;
@@ -1276,13 +1351,18 @@ usb_status_t USB_HostHubDeviceEvent(usb_device_handle deviceHandle,
  *
  * @return kStatus_USB_Success or error codes.
  */
-usb_status_t USB_HostHubRemovePort(uint8_t hubNumber, uint8_t portNumber)
+usb_status_t USB_HostHubRemovePort(usb_host_handle hostHandle, uint8_t hubNumber, uint8_t portNumber)
 {
     usb_host_hub_instance_t *hubInstance;
     uint32_t infoValue;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return kStatus_USB_Error;
+    }
 
     /* get hub number's hub instance handle */
-    hubInstance = (usb_host_hub_instance_t *)s_HubGlobal.hubList;
+    hubInstance = (usb_host_hub_instance_t *)hubGlobal->hubList;
     while (hubInstance != NULL)
     {
         USB_HostHelperGetPeripheralInformation(hubInstance->deviceHandle, kUSB_HostGetDeviceAddress, &infoValue);
@@ -1314,11 +1394,17 @@ usb_status_t USB_HostHubRemovePort(uint8_t hubNumber, uint8_t portNumber)
  *
  * @return hub number.
  */
-uint32_t USB_HostHubGetHsHubNumber(uint8_t parentHubNo)
+uint32_t USB_HostHubGetHsHubNumber(usb_host_handle hostHandle, uint8_t parentHubNo)
 {
-    usb_host_hub_instance_t *hubInstance = s_HubGlobal.hubList;
+    usb_host_hub_instance_t *hubInstance;
     uint32_t deviceInfo;
     uint32_t hubNumber;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return kStatus_USB_Error;
+    }
+    hubInstance = hubGlobal->hubList;
 
     /* get parentHubNo's hub instance handle */
     while (hubInstance != NULL)
@@ -1355,11 +1441,17 @@ uint32_t USB_HostHubGetHsHubNumber(uint8_t parentHubNo)
  *
  * @return port number.
  */
-uint32_t USB_HostHubGetHsHubPort(uint8_t parentHubNo, uint8_t parentPortNo)
+uint32_t USB_HostHubGetHsHubPort(usb_host_handle hostHandle, uint8_t parentHubNo, uint8_t parentPortNo)
 {
-    usb_host_hub_instance_t *hubInstance = s_HubGlobal.hubList;
+    usb_host_hub_instance_t *hubInstance;
     uint32_t deviceInfo;
     uint32_t hubPort;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return kStatus_USB_Error;
+    }
+    hubInstance = hubGlobal->hubList;
 
     /* get parentHubNo's hub instance handle */
     while (hubInstance != NULL)
@@ -1394,10 +1486,16 @@ uint32_t USB_HostHubGetHsHubPort(uint8_t parentHubNo, uint8_t parentPortNo)
  *
  * @return think time value.
  */
-uint32_t USB_HostHubGetTotalThinkTime(uint8_t parentHubNo)
+uint32_t USB_HostHubGetTotalThinkTime(usb_host_handle hostHandle, uint8_t parentHubNo)
 {
-    usb_host_hub_instance_t *hubInstance = s_HubGlobal.hubList;
+    usb_host_hub_instance_t *hubInstance;
     uint32_t deviceAddress;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return kStatus_USB_Error;
+    }
+    hubInstance = hubGlobal->hubList;
 
     /* get parentHubNo's hub instance handle */
     while (hubInstance != NULL)
@@ -1428,8 +1526,14 @@ uint32_t USB_HostHubGetTotalThinkTime(uint8_t parentHubNo)
 usb_status_t USB_HostHubSuspendDevice(usb_host_handle hostHandle)
 {
     usb_host_instance_t *hostInstance;
-    usb_host_hub_instance_t *hubInstance = s_HubGlobal.hubList;
+    usb_host_hub_instance_t *hubInstance;
     usb_status_t status = kStatus_USB_Error;
+    usb_host_hub_global_t *hubGlobal = USB_HostHubGetHubList(hostHandle);
+    if (hubGlobal == NULL)
+    {
+        return kStatus_USB_Error;
+    }
+    hubInstance = hubGlobal->hubList;
 
     if (NULL == hostHandle)
     {
@@ -1480,7 +1584,8 @@ usb_status_t USB_HostHubSuspendDevice(usb_host_handle hostHandle)
         }
         else
         {
-            usb_host_hub_instance_t *hubInstance4Device = USB_HostHubGetHubDeviceHandle(deviceInstance->hubNumber);
+            usb_host_hub_instance_t *hubInstance4Device =
+                USB_HostHubGetHubDeviceHandle(hostHandle, deviceInstance->hubNumber);
             if (NULL != hubInstance4Device)
             {
                 status = USB_HostSendHubRequest(
@@ -1529,7 +1634,7 @@ usb_status_t USB_HostHubResumeDevice(usb_host_handle hostHandle)
     }
 
     status = USB_HostSendHubRequest(
-        USB_HostHubGetHubDeviceHandle(deviceInstance->hubNumber)->deviceHandle,
+        USB_HostHubGetHubDeviceHandle(hostHandle, deviceInstance->hubNumber)->deviceHandle,
         USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER,
         USB_REQUEST_STANDARD_CLEAR_FEATURE, PORT_SUSPEND, deviceInstance->portNumber, USB_HostClearHubRequestCallback,
         hostInstance);

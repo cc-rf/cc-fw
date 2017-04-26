@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -44,11 +44,6 @@
 /*! @brief HUB Control transcation retry times for remote wakeup*/
 #define USB_HOST_HUB_REMOTE_WAKEUP_TIMES (3U)
 #endif
-
-/*! @brief HUB lock */
-#define USB_HostHubLock() USB_OsaMutexLock(s_HubGlobal.hubMutex)
-/*! @brief HUB unlock */
-#define USB_HostHubUnlock() USB_OsaMutexUnlock(s_HubGlobal.hubMutex)
 
 /*! @brief HUB application global structure */
 typedef struct _usb_host_hub_global

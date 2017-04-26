@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -32,6 +32,7 @@
 #include "usb_osa.h"
 #include "stdlib.h"
 #include "fsl_device_registers.h"
+#include "fsl_common.h"
 
 /*******************************************************************************
  * Definitions
@@ -112,13 +113,13 @@ void USB_OsaMemoryFree(void *p)
 
 void USB_OsaEnterCritical(uint32_t *sr)
 {
-    *sr = __get_PRIMASK();
+    *sr = DisableGlobalIRQ();
     __ASM("CPSID I");
 }
 
 void USB_OsaExitCritical(uint32_t sr)
 {
-    __set_PRIMASK(sr);
+    EnableGlobalIRQ(sr);
 }
 
 usb_osa_status_t USB_OsaEventCreate(usb_osa_event_handle *handle, uint32_t flag)

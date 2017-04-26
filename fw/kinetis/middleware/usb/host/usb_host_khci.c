@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015 -2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
+ * Copyright 2016 - 2017 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -39,6 +39,23 @@
 /*******************************************************************************
  * Variables
  ******************************************************************************/
+#if defined(USB_STACK_USE_DEDICATED_RAM) && (USB_STACK_USE_DEDICATED_RAM > 0U)
+
+/* USB_STACK_USE_DEDICATED_RAM */
+#if defined(FSL_FEATURE_USB_KHCI_USB_RAM) && (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
+
+#if (USB_STACK_USE_DEDICATED_RAM == USB_STACK_DEDICATED_RAM_TYPE_BDT_GLOBAL)
+#if (FSL_FEATURE_USB_KHCI_USB_RAM > 512U)
+#else
+#error The dedicated RAM length is not more than 512 Bytes, the SOC does not support this case.
+#endif
+#endif /* USB_STACK_USE_DEDICATED_RAM */
+
+#else
+#error The SOC does not suppoort dedicated RAM case.
+#endif /* USB_STACK_USE_DEDICATED_RAM */
+
+#endif
 
 USB_RAM_ADDRESS_ALIGNMENT(512) static uint8_t bdt[512];
 
@@ -405,6 +422,7 @@ static void _USB_HostKhciGetRightTrRequest(usb_host_controller_handle handle, us
     usb_host_transfer_t *prevTtransfer;
     usb_khci_host_state_struct_t *usbHostPointer = (usb_khci_host_state_struct_t *)handle;
     uint32_t frame_number;
+    prevTtransfer = NULL;
 
     if (handle == NULL)
     {
@@ -455,7 +473,7 @@ static void _USB_HostKhciGetRightTrRequest(usb_host_controller_handle handle, us
         }
     }
     /* will get the first transfer from active list if no active transfer in async list */
-    if (usbHostPointer->asyncListAvtive)
+    if ((usbHostPointer->asyncListAvtive) && (NULL != usbHostPointer->asyncListPointer))
     {
         firstTransfer = tempTransfer = usbHostPointer->asyncListPointer;
         *transfer = firstTransfer;
@@ -1052,9 +1070,9 @@ static khci_tr_state_t _USB_HostKhciStartTranfer(usb_host_controller_handle hand
             buf, transfer->transferLength - transfer->transferSofar);
     }
 
-    transfer->transferResult = transferResult;
+    transfer->union1.transferResult = transferResult;
 
-    if (transfer->transferResult == 0U)
+    if (transfer->union1.transferResult == 0U)
     {
         usbHostPointer->trState = kKhci_TrTransmiting;
     }
@@ -1081,7 +1099,7 @@ static khci_tr_state_t _USB_HostKhciFinishTranfer(usb_host_controller_handle han
     static int32_t transferResult;
     usb_khci_host_state_struct_t *usbHostPointer = (usb_khci_host_state_struct_t *)handle;
 
-    transfer->transferResult = transferResult = _USB_HostKhciTransactionDone(usbHostPointer, transfer);
+    transfer->union1.transferResult = transferResult = _USB_HostKhciTransactionDone(usbHostPointer, transfer);
     if (transferResult >= 0)
     {
         if (transfer->transferPipe->pipeType == USB_ENDPOINT_CONTROL)
@@ -1133,10 +1151,10 @@ static khci_tr_state_t _USB_HostKhciFinishTranfer(usb_host_controller_handle han
             }
             else
             {
-                if ((_USB_HostKhciGetFrameCountSum(usbHostPointer) - transfer->frame) > transfer->nakTimeout)
+                if ((_USB_HostKhciGetFrameCountSum(usbHostPointer) - transfer->union2.frame) > transfer->nakTimeout)
                 {
                     usbHostPointer->trState = kKhci_TrTransmitDone;
-                    transfer->transferResult = USB_KHCI_ATOM_TR_BUS_TIMEOUT;
+                    transfer->union1.transferResult = USB_KHCI_ATOM_TR_BUS_TIMEOUT;
                 }
                 else
                 {
@@ -1285,7 +1303,7 @@ void _USB_HostKhciTransferStateMachine(usb_host_controller_handle controllerHand
                     transfer->transferPipe->deviceHandle)
                 {
                     transfer->retry = RETRY_TIME;
-                    transfer->frame = _USB_HostKhciGetFrameCountSum(usbHostPointer);
+                    transfer->union2.frame = _USB_HostKhciGetFrameCountSum(usbHostPointer);
 
                     _USB_HostKhciLinkTrRequestToList(controllerHandle, transfer);
                     USB_OsaEventSet(usbHostPointer->khciEventPointer, USB_KHCI_EVENT_MSG);
@@ -1323,7 +1341,8 @@ void _USB_HostKhciTransferStateMachine(usb_host_controller_handle controllerHand
                             {
                                 _USB_HostKhciTransactionDone(usbHostPointer, tempTransfer);
                                 _USB_HostKhciUnlinkTrRequestFromList(usbHostPointer, tempTransfer);
-                                _USB_HostKhciProcessTrCallback(usbHostPointer, tempTransfer, transfer->transferResult);
+                                _USB_HostKhciProcessTrCallback(usbHostPointer, tempTransfer,
+                                                               transfer->union1.transferResult);
                                 usbHostPointer->trState = kKhci_TrGetMsg;
                             }
                         }
@@ -1352,7 +1371,7 @@ void _USB_HostKhciTransferStateMachine(usb_host_controller_handle controllerHand
         case kKhci_TrTransmiting:
             if (transfer != NULL)
             {
-                if ((_USB_HostKhciGetFrameCountSum(usbHostPointer) - transfer->frame) > USB_TIMEOUT_OTHER)
+                if ((_USB_HostKhciGetFrameCountSum(usbHostPointer) - transfer->union2.frame) > USB_TIMEOUT_OTHER)
                 {
                     if ((transfer->transferPipe->pipeType == USB_ENDPOINT_CONTROL) ||
                         (transfer->transferPipe->pipeType == USB_ENDPOINT_BULK))
@@ -1360,7 +1379,7 @@ void _USB_HostKhciTransferStateMachine(usb_host_controller_handle controllerHand
                         /* clear current bdt status */
                         _USB_HostKhciTransactionDone(usbHostPointer, transfer);
                         usbHostPointer->trState = kKhci_TrTransmitDone;
-                        transfer->transferResult = USB_KHCI_ATOM_TR_BUS_TIMEOUT;
+                        transfer->union1.transferResult = USB_KHCI_ATOM_TR_BUS_TIMEOUT;
                         return;
                     }
                 }
@@ -1371,7 +1390,7 @@ void _USB_HostKhciTransferStateMachine(usb_host_controller_handle controllerHand
             if (transfer != NULL)
             {
                 _USB_HostKhciUnlinkTrRequestFromList(usbHostPointer, transfer);
-                _USB_HostKhciProcessTrCallback(usbHostPointer, transfer, transfer->transferResult);
+                _USB_HostKhciProcessTrCallback(usbHostPointer, transfer, transfer->union1.transferResult);
                 usbHostPointer->trState = kKhci_TrGetMsg;
                 if ((usbHostPointer->asyncListAvtive == 1U) || (usbHostPointer->periodicListAvtive == 1U))
                 {
@@ -1491,6 +1510,7 @@ usb_status_t USB_HostKhciCreate(uint8_t controllerId,
         *controllerHandle = NULL;
         return kStatus_USB_AllocFail;
     }
+    usbHostPointer->usbRegBase = (USB_Type *)usb_base_addrs[controllerId - kUSB_ControllerKhci0];
 
     /* Allocate the USB Host Pipe Descriptors */
     usbHostPointer->pipeDescriptorBasePointer = NULL;
@@ -1502,7 +1522,7 @@ usb_status_t USB_HostKhciCreate(uint8_t controllerId,
 #ifdef HOST_DEBUG_
         usb_echo("usbHostPointer->khciSwapBufPointer- memory allocation failed");
 #endif
-        USB_HostKhciDestory(controllerHandle);
+        USB_HostKhciDestory(usbHostPointer);
         return kStatus_USB_AllocFail;
     }
 
@@ -1513,7 +1533,7 @@ usb_status_t USB_HostKhciCreate(uint8_t controllerId,
 #ifdef HOST_ECHO
         usb_echo("khci mutex init fail\r\n");
 #endif
-        USB_HostKhciDestory(controllerHandle);
+        USB_HostKhciDestory(usbHostPointer);
         return kStatus_USB_Error;
     }
 
@@ -1523,11 +1543,10 @@ usb_status_t USB_HostKhciCreate(uint8_t controllerId,
 #ifdef HOST_ECHO
         usb_echo(" memalloc failed in usb_khci_init\n");
 #endif
-
+        USB_HostKhciDestory(usbHostPointer);
         return kStatus_USB_AllocFail;
     } /* Endif */
 
-    usbHostPointer->usbRegBase = (USB_Type *)usb_base_addrs[controllerId - kUSB_ControllerKhci0];
 
     usbHostPointer->asyncListAvtive = 0U;
     usbHostPointer->periodicListAvtive = 0U;
@@ -1812,7 +1831,7 @@ usb_status_t USB_HostKhciWritePipe(usb_host_controller_handle controllerHandle,
             transfer->nakTimeout = pipePointer->nakCount * NAK_RETRY_TIME;
         }
     }
-    transfer->frame = _USB_HostKhciGetFrameCountSum(usbHostPointer);
+    transfer->union2.frame = _USB_HostKhciGetFrameCountSum(usbHostPointer);
 
     _USB_HostKhciLinkTrRequestToList(controllerHandle, transfer);
 
@@ -1865,7 +1884,7 @@ usb_status_t USB_HostKhciReadpipe(usb_host_controller_handle controllerHandle,
         transfer->nakTimeout = pipePointer->nakCount * NAK_RETRY_TIME;
     }
     transfer->retry = RETRY_TIME;
-    transfer->frame = _USB_HostKhciGetFrameCountSum(usbHostPointer);
+    transfer->union2.frame = _USB_HostKhciGetFrameCountSum(usbHostPointer);
 
     _USB_HostKhciLinkTrRequestToList(controllerHandle, transfer);
     USB_OsaEventSet(usbHostPointer->khciEventPointer, USB_KHCI_EVENT_MSG);
@@ -2033,6 +2052,10 @@ usb_status_t USB_HostKciIoctl(usb_host_controller_handle controllerHandle, uint3
 
         case kUSB_HostGetFrameNumber:
             *((uint32_t *)ioctlParam) = _USB_HostKhciGetFrameCount(controllerHandle);
+            break;
+
+        case kUSB_HostUpdateControlEndpointAddress:
+            _USB_HostKhciDelay((usb_khci_host_state_struct_t *)controllerHandle, 2);
             break;
 
         default:

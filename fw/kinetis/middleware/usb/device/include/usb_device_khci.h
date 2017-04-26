@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -118,6 +118,16 @@ typedef struct _usb_device_khci_state_struct
     uint8_t otgStatus;
 #endif
 } usb_device_khci_state_struct_t;
+
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBDCD_COUNT) && (FSL_FEATURE_SOC_USBDCD_COUNT > 0U))
+typedef struct _usb_device_dcd_state_struct
+{
+    usb_device_struct_t *deviceHandle; /*!< Device handle used to identify the device object belongs to */
+    USBDCD_Type *dcdRegisterBase;      /*!< The base address of the dcd module */
+    uint8_t controllerId;              /*!< Controller ID */
+} usb_device_dcd_state_struct_t;
+#endif
 
 #if defined(__cplusplus)
 extern "C" {

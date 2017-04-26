@@ -101,12 +101,12 @@ class CloudChaser(Serf):
             self.stats.unlock()
 
         if self.handler is not None:
-            self.handler(node, peer, dest, rssi, lqi, data)
+            self.handler(self, node, peer, dest, rssi, lqi, data)
 
         # self.io.send(CloudChaser.NMAC_SEND_STRM, peer, data)
 
-        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
-        self.io.send(CloudChaser.NMAC_SEND_MESG, peer, data)
+        # data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
+        # self.io.send(CloudChaser.NMAC_SEND_MESG, peer, data)
 
 
 class Stats:
@@ -213,7 +213,6 @@ def send_frames(cc):
         # data = '\x3A' * 37
         data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
         cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x0000, data)
-        break
         # time.sleep(.010)
 
 

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -45,6 +45,23 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+#if defined(USB_STACK_USE_DEDICATED_RAM) && (USB_STACK_USE_DEDICATED_RAM > 0U)
+
+/* USB_STACK_USE_DEDICATED_RAM */
+#if defined(FSL_FEATURE_USB_KHCI_USB_RAM) && (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
+
+#if (USB_STACK_USE_DEDICATED_RAM == USB_STACK_DEDICATED_RAM_TYPE_BDT_GLOBAL)
+#if (FSL_FEATURE_USB_KHCI_USB_RAM > 512U)
+#else
+#error The dedicated RAM length is not more than 512 Bytes, the SOC does not support this case.
+#endif
+#endif /* USB_STACK_USE_DEDICATED_RAM */
+
+#else
+#error The SOC does not suppoort dedicated RAM case.
+#endif /* USB_STACK_USE_DEDICATED_RAM */
+
+#endif
 
 /*******************************************************************************
  * Prototypes
@@ -80,6 +97,13 @@ USB_BDT USB_RAM_ADDRESS_ALIGNMENT(512) static uint8_t s_UsbDeviceKhciBdtBuffer[U
 
 /* Apply for khci device state structure */
 USB_GLOBAL static usb_device_khci_state_struct_t s_UsbDeviceKhciState[USB_DEVICE_CONFIG_KHCI];
+
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBDCD_COUNT) && (FSL_FEATURE_SOC_USBDCD_COUNT > 0U))
+/* Apply for device dcd state structure */
+USB_GLOBAL static usb_device_dcd_state_struct_t s_UsbDeviceDcdState[USB_DEVICE_CONFIG_KHCI];
+#endif
+
 /* Apply for KHCI DMA aligned buffer when marco USB_DEVICE_CONFIG_KHCI_DMA_ALIGN enabled */
 USB_GLOBAL static uint32_t s_UsbDeviceKhciDmaAlignBuffer
     [USB_DEVICE_CONFIG_KHCI][((USB_DEVICE_CONFIG_KHCI_DMA_ALIGN_BUFFER_LENGTH - 1U) >> 2U) + 1U];
@@ -856,6 +880,11 @@ usb_status_t USB_DeviceKhciInit(uint8_t controllerId,
 {
     usb_device_khci_state_struct_t *khciState;
     uint32_t khci_base[] = USB_BASE_ADDRS;
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBDCD_COUNT) && (FSL_FEATURE_SOC_USBDCD_COUNT > 0U))
+    usb_device_dcd_state_struct_t *dcdState;
+    uint32_t dcd_base[] = USBDCD_BASE_ADDRS;
+#endif
 
     if (((controllerId - kUSB_ControllerKhci0) >= (uint8_t)USB_DEVICE_CONFIG_KHCI) ||
         ((controllerId - kUSB_ControllerKhci0) >= (sizeof(khci_base) / sizeof(uint32_t))))
@@ -901,6 +930,9 @@ usb_status_t USB_DeviceKhciInit(uint8_t controllerId,
         USB_KEEP_ALIVE_CTRL_WAKE_INT_EN_MASK | FSL_FEATURE_USB_KHCI_KEEP_ALIVE_MODE_CONTROL;
     /* wake on out and setup transaction */
     khciState->registerBase->KEEP_ALIVE_WKCTRL = 0x1U;
+#if defined(FSL_FEATURE_SOC_MCGLITE_COUNT) && (FSL_FEATURE_SOC_MCGLITE_COUNT > 0U)
+    MCG->MC |= MCG_MC_HIRCLPEN_MASK;
+#endif
     PMC->REGSC |= PMC_REGSC_BGEN_MASK | PMC_REGSC_VLPO_MASK;
 #endif
     /* Set KHCI device state to default value. */
@@ -908,6 +940,16 @@ usb_status_t USB_DeviceKhciInit(uint8_t controllerId,
 
     *khciHandle = khciState;
     khciState->deviceHandle = (usb_device_struct_t *)handle;
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBDCD_COUNT) && (FSL_FEATURE_SOC_USBDCD_COUNT > 0U))
+    dcdState = &s_UsbDeviceDcdState[controllerId - kUSB_ControllerKhci0];
+
+    dcdState->controllerId = controllerId;
+
+    dcdState->dcdRegisterBase = (USBDCD_Type *)dcd_base[controllerId - kUSB_ControllerKhci0];
+
+    dcdState->deviceHandle = (usb_device_struct_t *)handle;
+#endif
 
     return kStatus_USB_Success;
 }
@@ -1123,6 +1165,12 @@ usb_status_t USB_DeviceKhciControl(usb_device_controller_handle khciHandle, usb_
     usb_device_khci_state_struct_t *khciState = (usb_device_khci_state_struct_t *)khciHandle;
     uint16_t *temp16;
     uint8_t *temp8;
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBDCD_COUNT) && (FSL_FEATURE_SOC_USBDCD_COUNT > 0U))
+    usb_device_dcd_state_struct_t *dcdState;
+    dcdState = &s_UsbDeviceDcdState[khciState->controllerId - kUSB_ControllerKhci0];
+    usb_device_dcd_charging_time_t *deviceDcdTimingConfig = (usb_device_dcd_charging_time_t *)param;
+#endif
 #if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
     usb_device_struct_t *deviceHandle;
     uint64_t startTick;
@@ -1278,6 +1326,26 @@ usb_status_t USB_DeviceKhciControl(usb_device_controller_handle khciHandle, usb_
 #endif
         case kUSB_DeviceControlSetTestMode:
             break;
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBDCD_COUNT) && (FSL_FEATURE_SOC_USBDCD_COUNT > 0U))
+        case kUSB_DeviceControlDcdInitModule:
+            dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+            dcdState->dcdRegisterBase->TIMER0 = USBDCD_TIMER0_TSEQ_INIT(deviceDcdTimingConfig->dcdSeqInitTime);
+            dcdState->dcdRegisterBase->TIMER1 = USBDCD_TIMER1_TDCD_DBNC(deviceDcdTimingConfig->dcdDbncTime);
+            dcdState->dcdRegisterBase->TIMER1 |= USBDCD_TIMER1_TVDPSRC_ON(deviceDcdTimingConfig->dcdDpSrcOnTime);
+            dcdState->dcdRegisterBase->TIMER2_BC12 =
+                USBDCD_TIMER2_BC12_TWAIT_AFTER_PRD(deviceDcdTimingConfig->dcdTimeWaitAfterPrD);
+            dcdState->dcdRegisterBase->TIMER2_BC12 |=
+                USBDCD_TIMER2_BC12_TVDMSRC_ON(deviceDcdTimingConfig->dcdTimeDMSrcOn);
+            dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_IE_MASK;
+            dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_BC12_MASK;
+            dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_START_MASK;
+            break;
+        case kUSB_DeviceControlDcdDeinitModule:
+            dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+            break;
+#endif
+
         default:
             break;
     }
@@ -1404,4 +1472,97 @@ void USB_DeviceKhciIsrFunction(void *deviceHandle)
 #endif
 }
 
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBDCD_COUNT) && (FSL_FEATURE_SOC_USBDCD_COUNT > 0U))
+/*!
+ * @brief Handle the device DCD module interrupt.
+ *
+ * The function is used to handle the device DCD module interrupt.
+ *
+ * @param deviceHandle    The device handle got from USB_DeviceInit.
+ *
+ */
+void USB_DeviceDcdIsrFunction(void *deviceHandle)
+{
+    usb_device_struct_t *handle = (usb_device_struct_t *)deviceHandle;
+    usb_device_khci_state_struct_t *khciState;
+    usb_device_dcd_state_struct_t *dcdState;
+    uint32_t status;
+    uint32_t chargerType;
+    usb_device_callback_message_struct_t message;
+
+    if (NULL == deviceHandle)
+    {
+        return;
+    }
+
+    khciState = (usb_device_khci_state_struct_t *)(handle->controllerHandle);
+
+    dcdState = &s_UsbDeviceDcdState[khciState->controllerId - kUSB_ControllerKhci0];
+
+    /* Read the STATUS register in the interrupt routine. */
+    status = dcdState->dcdRegisterBase->STATUS;
+
+    /* Clear the interrupt flag bit. */
+    dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_IACK_MASK;
+
+    message.buffer = (uint8_t *)NULL;
+    message.length = 0U;
+    message.isSetup = 0U;
+
+    if (status & USBDCD_STATUS_ERR_MASK)
+    {
+        if (status & USBDCD_STATUS_TO_MASK)
+        {
+            dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+            message.code = kUSB_DeviceNotifyDcdTimeOut;
+            USB_DeviceNotificationTrigger(dcdState->deviceHandle, &message);
+        }
+        else
+        {
+            dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+            message.code = kUSB_DeviceNotifyDcdUnknownPortType;
+            USB_DeviceNotificationTrigger(dcdState->deviceHandle, &message);
+        }
+    }
+    else
+    {
+        switch (status & USBDCD_STATUS_SEQ_STAT_MASK)
+        {
+            case USBDCD_STATUS_SEQ_STAT(kUSB_DcdChargingPortDetectionCompleted):
+                chargerType = status & USBDCD_STATUS_SEQ_RES_MASK;
+                if (chargerType == USBDCD_STATUS_SEQ_RES(kUSB_DcdDetectionStandardHost))
+                {
+                    dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+                    message.code = kUSB_DeviceNotifySDPDetected;
+                    USB_DeviceNotificationTrigger(dcdState->deviceHandle, &message);
+                }
+                else if (chargerType == USBDCD_STATUS_SEQ_RES(kUSB_DcdDetectionChargingPort))
+                {
+                    message.code = kUSB_DeviceNotifyChargingPortDetected;
+                    USB_DeviceNotificationTrigger(dcdState->deviceHandle, &message);
+                }
+                break;
+            case USBDCD_STATUS_SEQ_STAT(kUSB_DcdChargerTypeDetectionCompleted):
+                chargerType = status & USBDCD_STATUS_SEQ_RES_MASK;
+                if (chargerType == USBDCD_STATUS_SEQ_RES(kUSB_DcdDetectionChargingPort))
+                {
+                    dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+                    message.code = kUSB_DeviceNotifyChargingHostDetected;
+                    USB_DeviceNotificationTrigger(dcdState->deviceHandle, &message);
+                }
+                else if (chargerType == USBDCD_STATUS_SEQ_RES(kUSB_DcdDetectionDedicatedCharger))
+                {
+                    dcdState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+                    message.code = kUSB_DeviceNotifyDedicatedChargerDetected;
+                    USB_DeviceNotificationTrigger(dcdState->deviceHandle, &message);
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+}
+#endif
 #endif /* USB_DEVICE_CONFIG_KHCI */

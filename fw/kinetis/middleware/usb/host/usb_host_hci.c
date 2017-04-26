@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -43,7 +43,7 @@
  ******************************************************************************/
 #if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
 
-extern uint32_t USB_HostHubGetTotalThinkTime(uint8_t parentHubNo);
+extern uint32_t USB_HostHubGetTotalThinkTime(usb_host_handle hostHandle, uint8_t parentHubNo);
 
 extern usb_status_t USB_HostHubSuspendDevice(usb_host_handle hostHandle);
 
@@ -73,9 +73,13 @@ static void USB_HostReleaseInstance(usb_host_instance_t *hostInstance);
 static void USB_HostGetControllerInterface(uint8_t controllerId,
                                            const usb_host_controller_interface_t **controllerTable);
 
-#if ((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI))
+
 #if ((defined USB_HOST_CONFIG_COMPLIANCE_TEST) && (USB_HOST_CONFIG_COMPLIANCE_TEST))
+#if ((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI))
 extern void USB_HostEhciTestModeInit(usb_device_handle devHandle);
+#endif /* USB_HOST_CONFIG_COMPLIANCE_TEST */
+#if ((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS))
+extern void USB_HostIp3516HsTestModeInit(usb_device_handle devHandle);
 #endif /* USB_HOST_CONFIG_COMPLIANCE_TEST */
 #endif /* USB_HOST_CONFIG_EHCI */
 
@@ -103,9 +107,26 @@ static const usb_host_controller_interface_t s_KhciInterface = \
 };
 #endif /* USB_HOST_CONFIG_KHCI */
 
-/*******************************************************************************
- * Code
- ******************************************************************************/
+#if ((defined USB_HOST_CONFIG_OHCI) && (USB_HOST_CONFIG_OHCI > 0U))
+#include "usb_host_ohci.h"
+static const usb_host_controller_interface_t s_OhciInterface = \
+{
+    USB_HostOhciCreate,    USB_HostOhciDestory,  USB_HostOhciOpenPipe, USB_HostOhciClosePipe,
+    USB_HostOhciWritePipe, USB_HostOhciReadPipe, USB_HostOhciIoctl,
+};
+#endif /* USB_HOST_CONFIG_OHCI */
+
+#if ((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS > 0U))
+#include "usb_host_ip3516hs.h"
+static const usb_host_controller_interface_t s_Ip3516HsInterface = \
+{
+    USB_HostIp3516HsCreate,    USB_HostIp3516HsDestory,  USB_HostIp3516HsOpenPipe, USB_HostIp3516HsClosePipe,
+    USB_HostIp3516HsWritePipe, USB_HostIp3516HsReadPipe, USB_HostIp3516HsIoctl,
+};
+#endif /* USB_HOST_CONFIG_IP3516HS */
+       /*******************************************************************************
+        * Code
+        ******************************************************************************/
 
 #if ((defined USB_HOST_CONFIG_COMPLIANCE_TEST) && (USB_HOST_CONFIG_COMPLIANCE_TEST))
 /*FUNCTION*----------------------------------------------------------------
@@ -119,7 +140,7 @@ static const usb_host_controller_interface_t s_KhciInterface = \
 *END*--------------------------------------------------------------------*/
 usb_status_t USB_HostTestModeInit(usb_device_handle deviceHandle)
 {
-#if ((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI))
+#if (((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI)) || ((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS)))
     usb_host_device_instance_t *deviceInstance = (usb_host_device_instance_t *)deviceHandle;
     usb_host_instance_t *hostInstance = (usb_host_instance_t *)deviceInstance->hostHandle;
 #endif
@@ -149,6 +170,11 @@ usb_status_t USB_HostTestModeInit(usb_device_handle deviceHandle)
         {
             USB_HostEhciTestModeInit(deviceHandle);
         }
+#elif ((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS))
+        if (hostInstance->controllerTable == &s_Ip3516HsInterface)
+        {
+            USB_HostIp3516HsTestModeInit(deviceHandle);
+        }   
 #endif
     }
 
@@ -198,11 +224,25 @@ static void USB_HostGetControllerInterface(uint8_t controllerId,
 #endif /* USB_HOST_CONFIG_KHCI */
 
 #if ((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI))
-    if (controllerId == kUSB_ControllerEhci0)
+    if ((controllerId == kUSB_ControllerEhci0) || (controllerId == kUSB_ControllerEhci1))
     {
         *controllerTable = &s_EhciInterface;
     }
 #endif /* USB_HOST_CONFIG_EHCI */
+
+#if ((defined USB_HOST_CONFIG_OHCI) && (USB_HOST_CONFIG_OHCI > 0U))
+    if (controllerId == kUSB_ControllerOhci0)
+    {
+        *controllerTable = &s_OhciInterface;
+    }
+#endif /* USB_HOST_CONFIG_OHCI */
+
+#if ((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS > 0U))
+    if (controllerId == kUSB_ControllerIp3516Hs0)
+    {
+        *controllerTable = &s_Ip3516HsInterface;
+    }
+#endif /* USB_HOST_CONFIG_IP3516HS */
 }
 
 usb_status_t USB_HostInit(uint8_t controllerId, usb_host_handle *hostHandle, host_callback_t callbackFn)
@@ -592,7 +632,7 @@ usb_status_t USB_HostHelperGetPeripheralInformation(usb_device_handle deviceHand
             break;
 
         case kUSB_HostGetHubThinkTime: /* device hub think time */
-            *infoValue = USB_HostHubGetTotalThinkTime(deviceInstance->hubNumber);
+            *infoValue = USB_HostHubGetTotalThinkTime(deviceInstance->hostHandle, deviceInstance->hubNumber);
             break;
 #else
         case kUSB_HostGetDeviceHubNumber:   /* device hub address */
@@ -881,7 +921,105 @@ usb_status_t USB_HostResumeDeviceResquest(usb_host_handle hostHandle, usb_device
 
     return status;
 }
+#if ((defined(USB_HOST_CONFIG_LPM_L1)) && (USB_HOST_CONFIG_LPM_L1 > 0U))
+/* Send BUS or specific device suepend request */
+usb_status_t USB_HostL1SleepDeviceResquest(usb_host_handle hostHandle,
+                                           usb_device_handle deviceHandle,
+                                           uint8_t sleepType)
+{
+    usb_host_instance_t *hostInstance;
+    usb_status_t status = kStatus_USB_Error;
+    usb_host_bus_control_t type = kUSB_HostBusL1Sleep;
 
+    if (hostHandle == NULL)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    hostInstance = (usb_host_instance_t *)hostHandle;
+
+    hostInstance->suspendedDevice = (void *)deviceHandle;
+
+    if (1U == sleepType)
+    {
+        /*#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))*/
+        /*To do, implete hub L1 suspend device*/
+        /*#else*/
+        status =
+            hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
+        /*#endif*/
+    }
+    else
+    {
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+/*To do, if device hub number is 0, need suspend the bus ,else suspend the corresponding device*/
+#endif
+        if (hostInstance->deviceList == deviceHandle)
+        {
+            status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl,
+                                                                    &type);
+        }
+    }
+    if (kStatus_USB_Error == status)
+    {
+        hostInstance->suspendedDevice = NULL;
+    }
+    return status;
+}
+/* Send BUS or specific device suepend request */
+usb_status_t USB_HostL1SleepDeviceResquestConfig(usb_host_handle hostHandle, uint8_t *lpmParam)
+{
+    usb_host_instance_t *hostInstance;
+    usb_status_t status = kStatus_USB_Error;
+
+    if (hostHandle == NULL)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    hostInstance = (usb_host_instance_t *)hostHandle;
+
+    status =
+        hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostL1Config, lpmParam);
+
+    return status;
+}
+
+/* Send BUS or specific device resume request */
+usb_status_t USB_HostL1ResumeDeviceResquest(usb_host_handle hostHandle,
+                                            usb_device_handle deviceHandle,
+                                            uint8_t sleepType)
+{
+    usb_host_instance_t *hostInstance;
+
+    usb_status_t status = kStatus_USB_Error;
+    usb_host_bus_control_t type = kUSB_HostBusL1Resume;
+
+    if (hostHandle == NULL)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    hostInstance = (usb_host_instance_t *)hostHandle;
+
+    if (1U == sleepType)
+    {
+        status =
+            hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
+    }
+    else
+    {
+#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
+/*To do, if device hub number is 0, need suspend the bus ,else suspend the corresponding device*/
+
+#endif
+        if (hostInstance->deviceList == deviceHandle)
+        {
+            status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl,
+                                                                    &type);
+        }
+    }
+
+    return status;
+}
+#endif
 /* Update HW tick(unit is ms) */
 usb_status_t USB_HostUpdateHwTick(usb_host_handle hostHandle, uint64_t tick)
 {

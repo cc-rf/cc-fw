@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 - 2017 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -44,6 +44,11 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+#if defined(USB_STACK_USE_DEDICATED_RAM) && (USB_STACK_USE_DEDICATED_RAM > 0U)
+
+#error The SOC does not suppoort dedicated RAM case.
+
+#endif
 
 /*******************************************************************************
  * Prototypes
@@ -78,13 +83,19 @@ extern usb_status_t USB_DeviceNotificationTrigger(void *handle, void *msg);
  ******************************************************************************/
 
 /* Apply for QH buffer, 2048-byte alignment */
-USB_RAM_ADDRESS_ALIGNMENT(2048) static usb_device_ehci_qh_struct_t s_UsbDeviceEhciQh[USB_DEVICE_CONFIG_EHCI][USB_DEVICE_CONFIG_ENDPOINTS * 2];
+USB_RAM_ADDRESS_ALIGNMENT(2048) static uint8_t qh_buffer[(USB_DEVICE_CONFIG_EHCI-1)*2048 + USB_DEVICE_CONFIG_ENDPOINTS * 2*sizeof(usb_device_ehci_qh_struct_t)];
 
 /* Apply for DTD buffer, 32-byte alignment */
 USB_RAM_ADDRESS_ALIGNMENT(32) static usb_device_ehci_dtd_struct_t s_UsbDeviceEhciDtd[USB_DEVICE_CONFIG_EHCI][USB_DEVICE_CONFIG_EHCI_MAX_DTD];
 
 /* Apply for ehci device state structure */
 static usb_device_ehci_state_struct_t g_UsbDeviceEhciSate[USB_DEVICE_CONFIG_EHCI];
+
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBHSDCD_COUNT) && (FSL_FEATURE_SOC_USBHSDCD_COUNT > 0U))
+/* Apply for device dcd state structure */
+static usb_device_dcd_state_struct_t s_UsbDeviceDcdHSState[USB_DEVICE_CONFIG_EHCI];
+#endif
 
 /*******************************************************************************
  * Code
@@ -123,7 +134,7 @@ static void USB_DeviceEhciSetDefaultState(usb_device_ehci_state_struct_t *ehciSt
     ehciState->registerBase->USBMODE |= USBHS_USBMODE_SLOM_MASK;
 
 /* Set the endian by using CPU's endian */
-#if (ENDIANNESS == BIG_ENDIAN)
+#if (ENDIANNESS == USB_BIG_ENDIAN)
     ehciState->registerBase->USBMODE |= USBHS_USBMODE_ES_MASK;
 #else
     ehciState->registerBase->USBMODE &= ~USBHS_USBMODE_ES_MASK;
@@ -748,6 +759,7 @@ static void USB_DeviceEhciInterruptPortChange(usb_device_ehci_state_struct_t *eh
 static void USB_DeviceEhciInterruptReset(usb_device_ehci_state_struct_t *ehciState)
 {
     uint32_t status = 0U;
+    uint32_t timeout = 0U;
 
     /* Clear the setup flag */
     status = ehciState->registerBase->EPSETUPSR;
@@ -761,7 +773,12 @@ static void USB_DeviceEhciInterruptReset(usb_device_ehci_state_struct_t *ehciSta
         /* Flush the pending transfers */
         ehciState->registerBase->EPFLUSH = USBHS_EPFLUSH_FERB_MASK | USBHS_EPFLUSH_FETB_MASK;
     } while (ehciState->registerBase->EPPRIME & (USBHS_EPPRIME_PERB_MASK | USBHS_EPPRIME_PETB_MASK));
-
+    while (ehciState->registerBase->PORTSC1 & USBHS_PORTSC1_PR_MASK)
+    {
+        timeout++;
+        if (timeout > 10000000)
+            break;
+    }
     /* Whether is the port reset. If yes, set the isResetting flag. Or, notify the up layer. */
     if (ehciState->registerBase->PORTSC1 & USBHS_PORTSC1_PR_MASK)
     {
@@ -1005,7 +1022,16 @@ usb_status_t USB_DeviceEhciInit(uint8_t controllerId,
     usb_device_ehci_state_struct_t *ehciState;
     uint32_t ehci_base[] = USBHS_BASE_ADDRS;
 #if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
-    uint32_t ehciPhyBase[] = USBPHY_BASE_ADDRS;
+#if ((defined FSL_FEATURE_SOC_CCM_ANALOG_COUNT))
+    uint32_t usbphy_base[] = {USBPHY1_BASE, USBPHY2_BASE};
+#else
+    uint32_t usbphy_base[] = USBPHY_BASE_ADDRS;
+#endif
+#endif
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBHSDCD_COUNT) && (FSL_FEATURE_SOC_USBHSDCD_COUNT > 0U))
+    usb_device_dcd_state_struct_t *dcdHSState;
+    uint32_t dcd_base[] = USBHSDCD_BASE_ADDRS;
 #endif
 
     if ((controllerId < kUSB_ControllerEhci0) ||
@@ -1018,12 +1044,13 @@ usb_status_t USB_DeviceEhciInit(uint8_t controllerId,
     ehciState = &g_UsbDeviceEhciSate[controllerId - kUSB_ControllerEhci0];
 
     ehciState->dtd = s_UsbDeviceEhciDtd[controllerId - kUSB_ControllerEhci0];
-    ehciState->qh = s_UsbDeviceEhciQh[controllerId - kUSB_ControllerEhci0];
+    ehciState->qh = (usb_device_ehci_qh_struct_t *)&qh_buffer[(controllerId - kUSB_ControllerEhci0) * 2048];
+
     ehciState->controllerId = controllerId;
 
     ehciState->registerBase = (USBHS_Type *)ehci_base[controllerId - kUSB_ControllerEhci0];
 #if (defined(USB_DEVICE_CONFIG_LOW_POWER_MODE) && (USB_DEVICE_CONFIG_LOW_POWER_MODE > 0U))
-    ehciState->registerPhyBase = (USBPHY_Type *)ehciPhyBase[controllerId - kUSB_ControllerEhci0];
+    ehciState->registerPhyBase = (USBPHY_Type *)usbphy_base[controllerId - kUSB_ControllerEhci0];
 #endif
 
     /* Get the HW's endpoint count */
@@ -1043,6 +1070,16 @@ usb_status_t USB_DeviceEhciInit(uint8_t controllerId,
     /* Set the EHCI to default status. */
     USB_DeviceEhciSetDefaultState(ehciState);
     *ehciHandle = (usb_device_controller_handle)ehciState;
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBHSDCD_COUNT) && (FSL_FEATURE_SOC_USBHSDCD_COUNT > 0U))
+    dcdHSState = &s_UsbDeviceDcdHSState[controllerId - kUSB_ControllerEhci0];
+
+    dcdHSState->controllerId = controllerId;
+
+    dcdHSState->dcdRegisterBase = (USBHSDCD_Type *)dcd_base[controllerId - kUSB_ControllerEhci0];
+
+    dcdHSState->deviceHandle = (usb_device_struct_t *)handle;
+#endif
 
     return kStatus_USB_Success;
 }
@@ -1256,8 +1293,15 @@ usb_status_t USB_DeviceEhciControl(usb_device_controller_handle ehciHandle, usb_
     usb_status_t error = kStatus_USB_Error;
     uint16_t *temp16;
     uint8_t *temp8;
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBHSDCD_COUNT) && (FSL_FEATURE_SOC_USBHSDCD_COUNT > 0U))
+    usb_device_dcd_state_struct_t *dcdHSState;
+    dcdHSState =
+        &s_UsbDeviceDcdHSState[ehciState->controllerId - kUSB_ControllerEhci0]; /*The hard code should be replaced*/
+    usb_device_dcd_charging_time_t *deviceDcdTimingConfig = (usb_device_dcd_charging_time_t *)param;
+#endif
 #if ((defined(USB_DEVICE_CONFIG_REMOTE_WAKEUP)) && (USB_DEVICE_CONFIG_REMOTE_WAKEUP > 0U))
-    usb_device_struct_t *deviceHandle = (usb_device_struct_t *)ehciState->deviceHandle;
+    usb_device_struct_t *deviceHandle;
     uint64_t startTick;
 #endif
 
@@ -1411,7 +1455,7 @@ usb_status_t USB_DeviceEhciControl(usb_device_controller_handle ehciHandle, usb_
             break;
         case kUSB_DeviceControlSetOtgStatus:
             break;
-#if (defined(USB_DEVICE_CONFIG_EHCI_TEST_MODE) && (USB_DEVICE_CONFIG_EHCI_TEST_MODE > 0U))
+#if (defined(USB_DEVICE_CONFIG_USB20_TEST_MODE) && (USB_DEVICE_CONFIG_USB20_TEST_MODE > 0U))
         case kUSB_DeviceControlSetTestMode:
             if (param)
             {
@@ -1421,6 +1465,37 @@ usb_status_t USB_DeviceEhciControl(usb_device_controller_handle ehciHandle, usb_
             }
             break;
 #endif
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBHSDCD_COUNT) && (FSL_FEATURE_SOC_USBHSDCD_COUNT > 0U))
+        case kUSB_DeviceControlGetDeviceAttachStatus:
+            if (ehciState->registerBase->OTGSC & USBHS_OTGSC_BSV_MASK)
+            {
+                error = kStatus_USB_EHCIAttached;
+            }
+            else
+            {
+                error = kStatus_USB_EHCIDetached;
+            }
+            break;
+
+        case kUSB_DeviceControlDcdInitModule:
+            dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+            dcdHSState->dcdRegisterBase->TIMER0 = USBDCD_TIMER0_TSEQ_INIT(deviceDcdTimingConfig->dcdSeqInitTime);
+            dcdHSState->dcdRegisterBase->TIMER1 = USBDCD_TIMER1_TDCD_DBNC(deviceDcdTimingConfig->dcdDbncTime);
+            dcdHSState->dcdRegisterBase->TIMER1 |= USBDCD_TIMER1_TVDPSRC_ON(deviceDcdTimingConfig->dcdDpSrcOnTime);
+            dcdHSState->dcdRegisterBase->TIMER2_BC12 =
+                USBDCD_TIMER2_BC12_TWAIT_AFTER_PRD(deviceDcdTimingConfig->dcdTimeWaitAfterPrD);
+            dcdHSState->dcdRegisterBase->TIMER2_BC12 |=
+                USBDCD_TIMER2_BC12_TVDMSRC_ON(deviceDcdTimingConfig->dcdTimeDMSrcOn);
+            dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_IE_MASK;
+            dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_BC12_MASK;
+            dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_START_MASK;
+            break;
+        case kUSB_DeviceControlDcdDeinitModule:
+            dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+            break;
+#endif
+
         default:
             break;
     }
@@ -1499,9 +1574,7 @@ void USB_DeviceEhciIsrFunction(void *deviceHandle)
     if (status & USBHS_USBSTS_UEI_MASK)
     {
         /* Error interrupt */
-        // phillip: disable faulty copy paste crap
-#warning need to do something different here eventually
-        //USB_DeviceEhciInterruptError(ehciState);
+        USB_DeviceEhciInterruptError(ehciState);
     }
 #endif /* USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING */
 
@@ -1537,5 +1610,89 @@ void USB_DeviceEhciIsrFunction(void *deviceHandle)
         USB_DeviceEhciInterruptSof(ehciState);
     }
 }
+
+#if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
+    (defined(FSL_FEATURE_SOC_USBHSDCD_COUNT) && (FSL_FEATURE_SOC_USBHSDCD_COUNT > 0U))
+void USB_DeviceDcdHSIsrFunction(void *deviceHandle)
+{
+    usb_device_struct_t *handle = (usb_device_struct_t *)deviceHandle;
+    usb_device_ehci_state_struct_t *ehciState;
+    usb_device_dcd_state_struct_t *dcdHSState;
+    uint32_t status;
+    uint32_t chargerType;
+    usb_device_callback_message_struct_t message;
+
+    if (NULL == deviceHandle)
+    {
+        return;
+    }
+
+    ehciState = (usb_device_ehci_state_struct_t *)(handle->controllerHandle);
+
+    dcdHSState = &s_UsbDeviceDcdHSState[ehciState->controllerId - kUSB_ControllerEhci0];
+
+    status = dcdHSState->dcdRegisterBase->STATUS;
+
+    dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_IACK_MASK;
+
+    message.buffer = (uint8_t *)NULL;
+    message.length = 0U;
+    message.isSetup = 0U;
+
+    if (status & USBDCD_STATUS_ERR_MASK)
+    {
+        if (status & USBDCD_STATUS_TO_MASK)
+        {
+            dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+            message.code = kUSB_DeviceNotifyDcdTimeOut;
+            USB_DeviceNotificationTrigger(dcdHSState->deviceHandle, &message);
+        }
+        else
+        {
+            dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+            message.code = kUSB_DeviceNotifyDcdUnknownPortType;
+            USB_DeviceNotificationTrigger(dcdHSState->deviceHandle, &message);
+        }
+    }
+    else
+    {
+        switch (status & USBDCD_STATUS_SEQ_STAT_MASK)
+        {
+            case USBDCD_STATUS_SEQ_STAT(kUSB_DcdChargingPortDetectionCompleted):
+                chargerType = status & USBDCD_STATUS_SEQ_RES_MASK;
+                if (chargerType == USBDCD_STATUS_SEQ_RES(kUSB_DcdDetectionStandardHost))
+                {
+                    dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+                    message.code = kUSB_DeviceNotifySDPDetected;
+                    USB_DeviceNotificationTrigger(dcdHSState->deviceHandle, &message);
+                }
+                else if (chargerType == USBDCD_STATUS_SEQ_RES(kUSB_DcdDetectionChargingPort))
+                {
+                    message.code = kUSB_DeviceNotifyChargingPortDetected;
+                    USB_DeviceNotificationTrigger(dcdHSState->deviceHandle, &message);
+                }
+                break;
+            case USBDCD_STATUS_SEQ_STAT(kUSB_DcdChargerTypeDetectionCompleted):
+                chargerType = status & USBDCD_STATUS_SEQ_RES_MASK;
+                if (chargerType == USBDCD_STATUS_SEQ_RES(kUSB_DcdDetectionChargingPort))
+                {
+                    dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+                    message.code = kUSB_DeviceNotifyChargingHostDetected;
+                    USB_DeviceNotificationTrigger(dcdHSState->deviceHandle, &message);
+                }
+                else if (chargerType == USBDCD_STATUS_SEQ_RES(kUSB_DcdDetectionDedicatedCharger))
+                {
+                    dcdHSState->dcdRegisterBase->CONTROL |= USBDCD_CONTROL_SR_MASK;
+                    message.code = kUSB_DeviceNotifyDedicatedChargerDetected;
+                    USB_DeviceNotificationTrigger(dcdHSState->deviceHandle, &message);
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+}
+#endif
 
 #endif /* USB_DEVICE_CONFIG_EHCI */

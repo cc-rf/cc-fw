@@ -15,6 +15,7 @@ add_library(
         class/usb_host_msd.c
         class/usb_host_msd_ufi.c
         class/usb_host_phdc.c
+        class/usb_host_printer.c
 )
 
 target_include_directories(

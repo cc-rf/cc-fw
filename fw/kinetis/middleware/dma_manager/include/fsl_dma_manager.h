@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright (c) 2015-2016, Freescale Semiconductor, Inc.
+ * Copyright 2016-2017 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -55,13 +55,31 @@
 /*! @brief DMA manager status. */
 enum _dma_manager_status
 {
-    kStatus_DMAMGR_ChannelOccupied = MAKE_STATUS(kStatusGroup_DMAMGR, 0),       /*!< Channel has been occupied */
-    kStatus_DMAMGR_ChannelNotUsed = MAKE_STATUS(kStatusGroup_DMAMGR, 1),        /*!< Channel has not been used */
-    kStatus_DMAMGR_NoFreeChannel = MAKE_STATUS(kStatusGroup_DMAMGR, 2),         /*!< All channels have been occupied */
-    kStatus_DMAMGR_ChannelNotMatchSource = MAKE_STATUS(kStatusGroup_DMAMGR, 3), /*!< Channels do not match the
-                                                                                     request source */
+    kStatus_DMAMGR_ChannelOccupied = MAKE_STATUS(kStatusGroup_DMAMGR, 0), /*!< Channel has been occupied */
+    kStatus_DMAMGR_ChannelNotUsed = MAKE_STATUS(kStatusGroup_DMAMGR, 1),  /*!< Channel has not been used */
+    kStatus_DMAMGR_NoFreeChannel = MAKE_STATUS(kStatusGroup_DMAMGR, 2),   /*!< All channels have been occupied */
 };
 
+/*!
+ * @brief dmamanager handle typedef.
+ *
+ * @note The contents of this structure are private and subject to change.
+ *
+ * This dma manager handle structure is used to store the parameters transfered by users.And users shall not free the
+ * memory before calling DMAMGR_Deinit, also shall not modify the contents of the memory.
+ */
+typedef struct _dmamanager_handle
+{
+    void *dma_base;               /*!< Peripheral DMA instance. */
+                                  //    DMAMUX_Type *dmamux_base;     /*!< Peripheral DMAMUX instance. */
+    uint32_t channelNum;          /*!< Channel numbers for the DMA instance which need to be managed by dma manager. */
+    uint32_t startChannel;        /*!< The start channel that can be managed by dma manager,users need to transfer it
+                                     with a certain number or NULL. */
+    bool s_DMAMGR_Channels[64];   /*!< The s_DMAMGR_Channels is used to store dma manager state. */
+    uint32_t DmamuxInstanceStart; /*!< The DmamuxInstance is used to calculate the DMAMUX Instance according to the DMA
+                                     Instance. */
+    uint32_t multiple; /*!< The multiple is used to calculate the multiple between DMAMUX count and DMA count. */
+} dmamanager_handle_t;
 /*******************************************************************************
  * API
  ******************************************************************************/
@@ -77,18 +95,34 @@ extern "C" {
 /*!
  * @brief Initializes the DMA manager.
  *
- * This function initializes the DMA manager, ungates all DMAMUX clocks, and
+ * This function initializes the DMA manager, ungates the DMAMUX clocks, and
  * initializes the eDMA or DMA peripherals.
+ * @param dmamanager_handle DMA manager handle pointer, this structure is maintained by dma manager internal,users only
+ need to transfer the structure to the
+                            function. And users shall not free the memory before calling DMAMGR_Deinit, also shall not
+ modify the contents of the memory.
+ * @param dma_base Peripheral DMA instance base pointer.
+ * @param dmamux_base Peripheral DMAMUX instance base pointer.
+ * @param channelNum Channel numbers for the DMA instance which need to be managed by dma manager.
+ * @param startChannel The start channel that can be managed by dma manager.
  */
-void DMAMGR_Init(void);
+void DMAMGR_Init(dmamanager_handle_t *dmamanager_handle,
+                 DMA_Type *dma_base,
+                 uint32_t channelNum,
+                 uint32_t startChannel);
 
 /*!
  * @brief Deinitializes the DMA manager.
  *
- * This function deinitializes the DMA manager, disables all DMAMUX channels,
- * gates all DMAMUX clocks, and deinitializes the eDMA or DMA peripherals.
+ * This function deinitializes the DMA manager, disables the DMAMUX channels,
+ * gates the DMAMUX clocks, and deinitializes the eDMA or DMA peripherals.
+ *
+ * @param dmamanager_handle DMA manager handle pointer, this structure is maintained by dma manager internal,users only
+ need to transfer the structure to the
+                            function. And users shall not free the memory before calling DMAMGR_Deinit, also shall not
+ modify the contents of the memory.
  */
-void DMAMGR_Deinit(void);
+void DMAMGR_Deinit(dmamanager_handle_t *dmamanager_handle);
 
 /* @} */
 /*!
@@ -100,32 +134,56 @@ void DMAMGR_Deinit(void);
  * @brief Requests a DMA channel.
  *
  * This function requests a DMA channel which is not occupied. The two channels to allocate the mechanism are dynamic
- * and static channels. For the dynamic allocation mechanism (virtualChannel = DMAMGR_DYNAMIC_ALLOCATE), DMAMGR  allocates a DMA
- * channel according to the given request source and then configures it. For static allocation mechanism, DMAMGR
+ * and static channels. For the dynamic allocation mechanism (channe = DMAMGR_DYNAMIC_ALLOCATE), DMAMGR  allocates a DMA
+ * channel according to the given request source and startChannel and then configures it. For static allocation
+ mechanism, DMAMGR
  * configures the given channel according to the given request source and channel number.
  *
- * @param requestSource DMA channel request source number. See the soc.h.
- * @param virtualChannel The channel number users want to occupy. If using the dynamic channel allocate mechanism, set the
- *                       virtualChannel equal to DMAMGR_DYNAMIC_ALLOCATE.
+ * @param dmamanager_handle DMA manager handle pointer, this structure is maintained by dma manager internal,users only
+ need to transfer the structure to the
+                            function. And users shall not free the memory before calling DMAMGR_Deinit, also shall not
+ modify the contents of the memory.
+ * @param requestSource DMA channel request source number. See the soc.h, see the enum dma_request_source_t
+ * @param channel The channel number users want to occupy. If using the dynamic channel allocate mechanism, set the
+ *                       channel equal to DMAMGR_DYNAMIC_ALLOCATE.
  * @param handle DMA or eDMA handle pointer.
  * @retval kStatus_Success In a dynamic/static channel allocation mechanism, allocate the DMAMUX channel successfully.
  * @retval kStatus_DMAMGR_NoFreeChannel In a dynamic channel allocation mechanism, all DMAMUX channels are occupied.
- * @retval kStatus_DMAMGR_ChannelNotMatchSource In a static channel allocation mechanism, the given channel does not match
-                                                the given request.
  * @retval kStatus_DMAMGR_ChannelOccupied In a static channel allocation mechanism, the given channel is occupied.
  */
-status_t DMAMGR_RequestChannel(dma_request_source_t requestSource, uint8_t virtualChannel, void *handle);
+status_t DMAMGR_RequestChannel(dmamanager_handle_t *dmamanager_handle,
+                               uint32_t requestSource,
+                               uint32_t channel,
+                               void *handle);
 
 /*!
  * @brief Releases a DMA channel.
  *
  * This function releases an occupied DMA channel.
  *
+ * @param dmamanager_handle DMA manager handle pointer, this structure is maintained by dma manager internal,users only
+ need to transfer the structure to the
+                            function. And users shall not free the memory before calling DMAMGR_Deinit, also shall not
+ modify the contents of the memory.
  * @param handle DMA or eDMA handle pointer.
  * @retval kStatus_Success Releases the given channel successfully.
  * @retval kStatus_DMAMGR_ChannelNotUsed The given channel to be released had not been used before.
  */
-status_t DMAMGR_ReleaseChannel(void *handle);
+status_t DMAMGR_ReleaseChannel(dmamanager_handle_t *dmamanager_handle, void *handle);
+
+/*!
+ * @brief Get a DMA channel status.
+ *
+ * This function get a DMA channel status. Return 0 indicates the channel has not been used, return 1 indicates the
+ channel has been occupied.
+ *
+ * @param dmamanager_handle DMA manager handle pointer, this structure is maintained by dma manager internal,users only
+ need to transfer the structure to the
+                            function. And users shall not free the memory before calling DMAMGR_Deinit, also shall not
+ modify the contents of the memory.
+ * @param channel The channel number that users want get its status.
+*/
+bool DMAMGR_IsChannelOccupied(dmamanager_handle_t *dmamanager_handle, uint32_t channel);
 
 /* @} */
 

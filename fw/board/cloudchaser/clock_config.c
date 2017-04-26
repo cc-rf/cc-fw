@@ -206,6 +206,8 @@ void BOARD_InitOsc0(void)
     /* Passing the XTAL0 frequency to clock driver. */
     CLOCK_SetXtal0Freq(BOARD_XTAL0_CLK_HZ);
 
+    #if defined(BOARD_XTAL32K_CLK_HZ) && BOARD_XTAL32K_CLK_HZ > 0
     /* phillip: also set this one */
     CLOCK_SetXtal32Freq(BOARD_XTAL32K_CLK_HZ);
+    #endif
 }

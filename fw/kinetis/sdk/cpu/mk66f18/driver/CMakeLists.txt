@@ -7,9 +7,9 @@ add_library(
         fsl_enet.c
         fsl_flexcan.c
         fsl_lmem_cache.c
-        fsl_mpu.c
         fsl_sdhc.c
         fsl_sdramc.c
+        fsl_sysmpu.c
         fsl_tpm.c
         fsl_tsi_v4.c
 )

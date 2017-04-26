@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -49,6 +49,7 @@
 #define USB_HOST_UFI_BLOCK_DATA_VALID_LENGTH (10U)
 #define USB_HOST_UFI_LOGICAL_UNIT_POSITION (5U)
 #define USB_HOST_UFI_CBW_LENGTH (31U)
+#define USB_HOST_UFI_CSW_LENGTH (13U)
 #define USB_HOST_UFI_MODE_SENSE_PAGE_CONTROL_SHIFT (6U)
 #define USB_HOST_UFI_MODE_SENSE_PAGE_CODE_SHIFT (0U)
 #define USB_HOST_UFI_START_STOP_UNIT_LOEJ_SHIFT (1U)
@@ -469,7 +470,7 @@ extern usb_status_t USB_HostMsdReadCapacity(usb_host_class_handle classHandle,
 /*!
  * @brief Mass storage test unit ready.
  *
- * This function implements the UFI TEST UNIT READY command and 
+ * This function implements the UFI TEST UNIT READY command and
  * checks if the UFI device is ready.
  *
  * @param[in] classHandle    The class MSD handle.

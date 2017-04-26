@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -44,7 +44,7 @@
 
 #define USB_OSA_FREERTOS_EVENT_COUNT (2U)
 #define USB_OSA_FREERTOS_SEM_COUNT (1U)
-#define USB_OSA_FREERTOS_MUTEX_COUNT (1U)
+#define USB_OSA_FREERTOS_MUTEX_COUNT (3U)
 #define USB_OSA_FREERTOS_MSGQ_COUNT (1U)
 #define USB_OSA_FREERTOS_MSG_COUNT (8U)
 #define USB_OSA_FREERTOS_MSG_SIZE (4U)
@@ -134,7 +134,11 @@ void USB_OsaMemoryFree(void *p)
 }
 void USB_OsaEnterCritical(uint8_t *sr)
 {
+#if defined(__GIC_PRIO_BITS)
+    if ((__get_CPSR() & CPSR_M_Msk) == 0x13)
+#else
     if (__get_IPSR())
+#endif
     {
         *sr = portSET_INTERRUPT_MASK_FROM_ISR();
     }
@@ -146,7 +150,11 @@ void USB_OsaEnterCritical(uint8_t *sr)
 
 void USB_OsaExitCritical(uint8_t sr)
 {
+#if defined(__GIC_PRIO_BITS)
+    if ((__get_CPSR() & CPSR_M_Msk) == 0x13)
+#else
     if (__get_IPSR())
+#endif
     {
         portCLEAR_INTERRUPT_MASK_FROM_ISR(sr);
     }
@@ -241,7 +249,11 @@ usb_osa_status_t USB_OsaEventSet(usb_osa_event_handle handle, uint32_t bitMask)
     portBASE_TYPE taskToWake = pdFALSE;
     if (handle)
     {
+#if defined(__GIC_PRIO_BITS)
+        if ((__get_CPSR() & CPSR_M_Msk) == 0x13)
+#else
         if (__get_IPSR())
+#endif
         {
             if (pdPASS == xEventGroupSetBitsFromISR(event->handle, (EventBits_t)bitMask, &taskToWake))
             {
@@ -308,7 +320,11 @@ usb_osa_status_t USB_OsaEventCheck(usb_osa_event_handle handle, uint32_t bitMask
 
     if (handle)
     {
+#if defined(__GIC_PRIO_BITS)
+        if ((__get_CPSR() & CPSR_M_Msk) == 0x13)
+#else
         if (__get_IPSR())
+#endif
         {
             bits = xEventGroupGetBitsFromISR(event->handle);
         }
@@ -336,7 +352,11 @@ usb_osa_status_t USB_OsaEventClear(usb_osa_event_handle handle, uint32_t bitMask
 
     if (handle)
     {
+#if defined(__GIC_PRIO_BITS)
+        if ((__get_CPSR() & CPSR_M_Msk) == 0x13)
+#else
         if (__get_IPSR())
+#endif
         {
             xEventGroupClearBitsFromISR(event->handle, (EventBits_t)bitMask);
         }
@@ -439,7 +459,11 @@ usb_osa_status_t USB_OsaSemPost(usb_osa_sem_handle handle)
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
     sem = (xSemaphoreHandle)osaSem->handle;
 #endif
+#if defined(__GIC_PRIO_BITS)
+    if ((__get_CPSR() & CPSR_M_Msk) == 0x13)
+#else
     if (__get_IPSR())
+#endif
     {
         if (pdPASS == xSemaphoreGiveFromISR(sem, &taskToWake))
         {
@@ -494,7 +518,7 @@ usb_osa_status_t USB_OsaSemWait(usb_osa_sem_handle handle, uint32_t timeout)
 usb_osa_status_t USB_OsaMutexCreate(usb_osa_mutex_handle *handle)
 {
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
-    usb_osa_sem_struct_t *mutex;
+    usb_osa_sem_struct_t *mutex = NULL;
     USB_OSA_SR_ALLOC();
 #endif
     if (!handle)
@@ -692,7 +716,11 @@ usb_osa_status_t USB_OsaMsgqSend(usb_osa_msgq_handle handle, void *msg)
     msgq = osaMsgq->handle;
 #endif
 
+#if defined(__GIC_PRIO_BITS)
+    if ((__get_CPSR() & CPSR_M_Msk) == 0x13)
+#else
     if (__get_IPSR())
+#endif
     {
         if (pdPASS == xQueueSendToBackFromISR(msgq, msg, &taskToWake))
         {

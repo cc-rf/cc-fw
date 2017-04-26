@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -31,6 +31,39 @@
 #include "usb.h"
 #include "fsl_device_registers.h"
 
+void *USB_EhciPhyGetBase(uint8_t controllerId)
+{
+    void *usbPhyBase = NULL;
+#if ((defined FSL_FEATURE_SOC_USBPHY_COUNT) && (FSL_FEATURE_SOC_USBPHY_COUNT > 0U))
+    uint32_t instance;
+    uint32_t newinstance = 0;
+    uint32_t usbphy_base_temp[] = USBPHY_BASE_ADDRS;
+    uint32_t usbphy_base[] = USBPHY_BASE_ADDRS;
+
+    if (controllerId < kUSB_ControllerEhci0)
+    {
+        return NULL;
+    }
+
+    controllerId = controllerId - kUSB_ControllerEhci0;
+
+    for (instance = 0; instance < (sizeof(usbphy_base_temp) / sizeof(usbphy_base_temp[0])); instance++)
+    {
+        if (usbphy_base_temp[instance])
+        {
+            usbphy_base[newinstance++] = usbphy_base_temp[instance];
+        }
+    }
+    if (controllerId > newinstance)
+    {
+        return NULL;
+    }
+
+    usbPhyBase = (void *)usbphy_base[controllerId];
+#endif
+    return usbPhyBase;
+}
+
 /*!
  * @brief ehci phy initialization.
  *
@@ -46,18 +79,26 @@
 uint32_t USB_EhciPhyInit(uint8_t controllerId, uint32_t freq)
 {
 #if ((defined FSL_FEATURE_SOC_USBPHY_COUNT) && (FSL_FEATURE_SOC_USBPHY_COUNT > 0U))
-    USBPHY->TRIM_OVERRIDE_EN = 0x001fU; /* override IFR value */
+    USBPHY_Type *usbPhyBase;
 
-    USBPHY->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL2_MASK; /* support LS device. */
-    USBPHY->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL3_MASK; /* support external FS Hub with LS device connected. */
+    usbPhyBase = (USBPHY_Type *)USB_EhciPhyGetBase(controllerId);
+    if (NULL == usbPhyBase)
+    {
+        return kStatus_USB_Error;
+    }
+#if ((!(defined FSL_FEATURE_SOC_CCM_ANALOG_COUNT)) && (!(defined FSL_FEATURE_SOC_ANATOP_COUNT)))
+
+    usbPhyBase->TRIM_OVERRIDE_EN = 0x001fU; /* override IFR value */
+#endif
+    usbPhyBase->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL2_MASK; /* support LS device. */
+    usbPhyBase->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL3_MASK; /* support external FS Hub with LS device connected. */
     /* PWD register provides overall control of the PHY power state */
-    USBPHY->PWD = 0U;
+    usbPhyBase->PWD = 0U;
 
     /* Decode to trim the nominal 17.78mA current source for the High Speed TX drivers on USB_DP and USB_DM. */
-    USBPHY->TX = ((USBPHY->TX & (~USBPHY_TX_D_CAL_MASK)) | USBPHY_TX_D_CAL(0xcU));
+    usbPhyBase->TX = ((usbPhyBase->TX & (~USBPHY_TX_D_CAL_MASK)) | USBPHY_TX_D_CAL(0xcU));
 #endif
 
-    // phillip: enable nonstandard resistive plug detection?//USBPHY->CTRL |= USBPHY_CTRL_ENDEVPLUGINDET_MASK;
     return kStatus_USB_Success;
 }
 
@@ -76,30 +117,40 @@ uint32_t USB_EhciPhyInit(uint8_t controllerId, uint32_t freq)
 uint32_t USB_EhciLowPowerPhyInit(uint8_t controllerId, uint32_t freq)
 {
 #if ((defined FSL_FEATURE_SOC_USBPHY_COUNT) && (FSL_FEATURE_SOC_USBPHY_COUNT > 0U))
-    USBPHY->TRIM_OVERRIDE_EN = 0x001fU; /* override IFR value */
+    USBPHY_Type *usbPhyBase;
 
-    USBPHY->CTRL |=
-        USBPHY_CTRL_AUTORESUME_EN_MASK | USBPHY_CTRL_ENAUTOCLR_CLKGATE_MASK | USBPHY_CTRL_ENAUTOCLR_PHY_PWD_MASK;
-    USBPHY->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL2_MASK; /* support LS device. */
-    USBPHY->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL3_MASK; /* support external FS Hub with LS device connected. */
+    usbPhyBase = (USBPHY_Type *)USB_EhciPhyGetBase(controllerId);
+    if (NULL == usbPhyBase)
+    {
+        return kStatus_USB_Error;
+    }
+
+#if ((!(defined FSL_FEATURE_SOC_CCM_ANALOG_COUNT)) && (!(defined FSL_FEATURE_SOC_ANATOP_COUNT)))
+    usbPhyBase->TRIM_OVERRIDE_EN = 0x001fU; /* override IFR value */
+
+    usbPhyBase->CTRL |= USBPHY_CTRL_AUTORESUME_EN_MASK;
+#endif
+    usbPhyBase->CTRL |= USBPHY_CTRL_ENAUTOCLR_CLKGATE_MASK | USBPHY_CTRL_ENAUTOCLR_PHY_PWD_MASK;
+    usbPhyBase->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL2_MASK; /* support LS device. */
+    usbPhyBase->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL3_MASK; /* support external FS Hub with LS device connected. */
     /* PWD register provides overall control of the PHY power state */
-    USBPHY->PWD = 0U;
-
+    usbPhyBase->PWD = 0U;
+#if ((!(defined FSL_FEATURE_SOC_CCM_ANALOG_COUNT)) && (!(defined FSL_FEATURE_SOC_ANATOP_COUNT)))
     /* now the 480MHz USB clock is up, then configure fractional divider after PLL with PFD
      * pfd clock = 480MHz*18/N, where N=18~35
      * Please note that USB1PFDCLK has to be less than 180MHz for RUN or HSRUN mode
      */
-    USBPHY->ANACTRL |= USBPHY_ANACTRL_PFD_FRAC(24);   /* N=24 */
-    USBPHY->ANACTRL |= USBPHY_ANACTRL_PFD_CLK_SEL(1); /* div by 4 */
+    usbPhyBase->ANACTRL |= USBPHY_ANACTRL_PFD_FRAC(24);   /* N=24 */
+    usbPhyBase->ANACTRL |= USBPHY_ANACTRL_PFD_CLK_SEL(1); /* div by 4 */
 
-    USBPHY->ANACTRL &= ~USBPHY_ANACTRL_DEV_PULLDOWN_MASK;
-    USBPHY->ANACTRL &= ~USBPHY_ANACTRL_PFD_CLKGATE_MASK;
-    while (!(USBPHY->ANACTRL & USBPHY_ANACTRL_PFD_STABLE_MASK))
+    usbPhyBase->ANACTRL &= ~USBPHY_ANACTRL_DEV_PULLDOWN_MASK;
+    usbPhyBase->ANACTRL &= ~USBPHY_ANACTRL_PFD_CLKGATE_MASK;
+    while (!(usbPhyBase->ANACTRL & USBPHY_ANACTRL_PFD_STABLE_MASK))
     {
     }
-
+#endif
     /* Decode to trim the nominal 17.78mA current source for the High Speed TX drivers on USB_DP and USB_DM. */
-    USBPHY->TX = ((USBPHY->TX & (~USBPHY_TX_D_CAL_MASK)) | USBPHY_TX_D_CAL(0xcU));
+    usbPhyBase->TX = ((usbPhyBase->TX & (~USBPHY_TX_D_CAL_MASK)) | USBPHY_TX_D_CAL(0xcU));
 #endif
 
     return kStatus_USB_Success;
@@ -115,9 +166,18 @@ uint32_t USB_EhciLowPowerPhyInit(uint8_t controllerId, uint32_t freq)
 void USB_EhciPhyDeinit(uint8_t controllerId)
 {
 #if ((defined FSL_FEATURE_SOC_USBPHY_COUNT) && (FSL_FEATURE_SOC_USBPHY_COUNT > 0U))
-    USBPHY->PLL_SIC &= ~USBPHY_PLL_SIC_PLL_POWER_MASK;       /* power down PLL */
-    USBPHY->PLL_SIC &= ~USBPHY_PLL_SIC_PLL_EN_USB_CLKS_MASK; /* disable USB clock output from USB PHY PLL */
-    USBPHY->CTRL |= USBPHY_CTRL_CLKGATE_MASK;                /* set to 1U to gate clocks */
+    USBPHY_Type *usbPhyBase;
+
+    usbPhyBase = (USBPHY_Type *)USB_EhciPhyGetBase(controllerId);
+    if (NULL == usbPhyBase)
+    {
+        return;
+    }
+#if ((!(defined FSL_FEATURE_SOC_CCM_ANALOG_COUNT)) && (!(defined FSL_FEATURE_SOC_ANATOP_COUNT)))
+    usbPhyBase->PLL_SIC &= ~USBPHY_PLL_SIC_PLL_POWER_MASK;       /* power down PLL */
+    usbPhyBase->PLL_SIC &= ~USBPHY_PLL_SIC_PLL_EN_USB_CLKS_MASK; /* disable USB clock output from USB PHY PLL */
+#endif
+    usbPhyBase->CTRL |= USBPHY_CTRL_CLKGATE_MASK; /* set to 1U to gate clocks */
 #endif
 }
 
@@ -134,13 +194,21 @@ void USB_EhciPhyDeinit(uint8_t controllerId)
 void USB_EhcihostPhyDisconnectDetectCmd(uint8_t controllerId, uint8_t enable)
 {
 #if ((defined FSL_FEATURE_SOC_USBPHY_COUNT) && (FSL_FEATURE_SOC_USBPHY_COUNT > 0U))
+    USBPHY_Type *usbPhyBase;
+
+    usbPhyBase = (USBPHY_Type *)USB_EhciPhyGetBase(controllerId);
+    if (NULL == usbPhyBase)
+    {
+        return;
+    }
+
     if (enable)
     {
-        USBPHY->CTRL |= USBPHY_CTRL_ENHOSTDISCONDETECT_MASK;
+        usbPhyBase->CTRL |= USBPHY_CTRL_ENHOSTDISCONDETECT_MASK;
     }
     else
     {
-        USBPHY->CTRL &= (~USBPHY_CTRL_ENHOSTDISCONDETECT_MASK);
+        usbPhyBase->CTRL &= (~USBPHY_CTRL_ENHOSTDISCONDETECT_MASK);
     }
 #endif
 }

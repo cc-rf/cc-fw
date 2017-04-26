@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -75,6 +75,13 @@ typedef enum _usb_host_event
     kUSB_HostEventNotResumed,   /*!< Resume failed */
     kUSB_HostEventDetectResume, /*!< Detect resume signal */
     kUSB_HostEventResumed,      /*!< Resume successful */
+    kUSB_HostEventL1Sleeped,    /*!< L1 Sleep successful,state transition was successful (ACK) */
+    kUSB_HostEventL1SleepNYET,  /*!< Device was unable to enter the L1 state at this time (NYET)  */
+    kUSB_HostEventL1SleepNotSupport,  /*!< Device does not support the L1 state (STALL)  */
+    kUSB_HostEventL1SleepError,  /*!< Device failed to respond or an error occurred  */
+    kUSB_HostEventL1NotResumed,   /*!< Resume failed */
+    kUSB_HostEventL1DetectResume, /*!< Detect resume signal */
+    kUSB_HostEventL1Resumed,      /*!< Resume successful */
 #endif
 } usb_host_event_t;
 
@@ -192,11 +199,7 @@ typedef struct _usb_host_pipe
 /*! @brief USB host transfer structure */
 typedef struct _usb_host_transfer
 {
-    struct _usb_host_transfer *next; /*!< The next transfer structure*/
-#if USB_HOST_CONFIG_EHCI
-    uint32_t ehciUnitHead; /*!< QTD/ITD/SITD head for this transfer*/
-    uint32_t ehciUnitTail; /*!< QTD/ITD/SITD tail for this transfer*/
-#endif
+    struct _usb_host_transfer *next;           /*!< The next transfer structure*/
     uint8_t *transferBuffer;                   /*!< Transfer data buffer*/
     uint32_t transferLength;                   /*!< Transfer data length*/
     uint32_t transferSofar;                    /*!< Length transferred so far*/
@@ -206,11 +209,21 @@ typedef struct _usb_host_transfer
     usb_setup_struct_t setupPacket;            /*!< Set up packet buffer*/
     uint8_t direction;                         /*!< Transfer direction; it's values are USB_OUT or USB_IN*/
     uint8_t setupStatus;                       /*!< Set up the transfer status*/
+    union
+    {
+        uint32_t unitHead;      /*!< xTD head for this transfer*/
+        int32_t transferResult; /*!< KHCI transfer result */
+    } union1;
+
+    union
+    {
+        uint32_t unitTail; /*!<xTD tail for this transfer*/
+        uint32_t frame;    /*!< KHCI transfer frame number */
+    } union2;
+
 #if USB_HOST_CONFIG_KHCI
-    int32_t transferResult; /*!< KHCI transfer result */
-    uint32_t frame;         /*!< KHCI transfer frame number */
-    uint16_t nakTimeout;    /*!< KHCI transfer NAK timeout */
-    uint16_t retry;         /*!< KHCI transfer retry */
+    uint16_t nakTimeout; /*!< KHCI transfer NAK timeout */
+    uint16_t retry;      /*!< KHCI transfer retry */
 #endif
 } usb_host_transfer_t;
 
@@ -354,6 +367,28 @@ extern void USB_HostKhciTaskFunction(void *hostHandle);
 extern void USB_HostEhciTaskFunction(void *hostHandle);
 
 /*!
+ * @brief OHCI task function.
+ *
+ * The function is used to handle the OHCI controller message.
+ * In the bare metal environment, this function should be called periodically in the main function.
+ * In the RTOS environment, this function should be used as a function entry to create a task.
+ *
+ * @param[in] hostHandle The host handle.
+ */
+extern void USB_HostOhciTaskFunction(void *hostHandle);
+
+/*!
+ * @brief IP3516HS task function.
+ *
+ * The function is used to handle the IP3516HS controller message.
+ * In the bare metal environment, this function should be called periodically in the main function.
+ * In the RTOS environment, this function should be used as a function entry to create a task.
+ *
+ * @param[in] hostHandle The host handle.
+ */
+extern void USB_HostIp3516HsTaskFunction(void *hostHandle);
+
+/*!
  * @brief Device KHCI ISR function.
  *
  * The function is the KHCI interrupt service routine.
@@ -370,6 +405,25 @@ extern void USB_HostKhciIsrFunction(void *hostHandle);
  * @param[in] hostHandle The host handle.
  */
 extern void USB_HostEhciIsrFunction(void *hostHandle);
+
+/*!
+ * @brief Device OHCI ISR function.
+ *
+ * The function is the OHCI interrupt service routine.
+ *
+ * @param[in] hostHandle The host handle.
+ */
+extern void USB_HostOhciIsrFunction(void *hostHandle);
+
+/*!
+ * @brief Device IP3516HS ISR function.
+ *
+ * The function is the IP3516HS interrupt service routine.
+ *
+ * @param[in] hostHandle The host handle.
+ */
+extern void USB_HostIp3516HsIsrFunction(void *hostHandle);
+
 /*! @}*/
 
 /*!
@@ -600,7 +654,51 @@ extern usb_status_t USB_HostSuspendDeviceResquest(usb_host_handle hostHandle, us
  *                                          Or, the request is invalid.
  */
 extern usb_status_t USB_HostResumeDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle);
+#if ((defined(USB_HOST_CONFIG_LPM_L1)) && (USB_HOST_CONFIG_LPM_L1 > 0U))
+/*!
+ * @brief Send a bus or device suspend request.
+ *
+ * This function is used to send a bus or device suspend request.
+ *
+ * @param[in] hostHandle     The host handle.
+ * @param[in] deviceHandle      The device handle.
+ *@param[in] sleeptype      Bus suspend or single device suspend.
+ *
+ * @retval kStatus_USB_Success              Request successfully.
+ * @retval kStatus_USB_InvalidHandle        The hostHandle is a NULL pointer. Or the controller handle is invalid.
+ * @retval kStatus_USB_Error                There is no idle transfer.
+ *                                          Or, the deviceHandle is invalid.
+ *                                          Or, the request is invalid.
+ */
+extern usb_status_t USB_HostL1SleepDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle, uint8_t sleeptype);
 
+/*!
+ * @brief Send a bus or device resume request.
+ *
+ * This function is used to send a bus or device resume request.
+ *
+ * @param[in] hostHandle     The host handle.
+ * @param[in] deviceHandle      The device handle.
+ * *@param[in] sleeptype      Bus suspend or single device suspend.
+ *
+ * @retval kStatus_USB_Success              Request successfully.
+ * @retval kStatus_USB_InvalidHandle        The hostHandle is a NULL pointer. Or the controller handle is invalid.
+ * @retval kStatus_USB_Error                There is no idle transfer.
+ *                                          Or, the deviceHandle is invalid.
+ *                                          Or, the request is invalid.
+ */
+extern usb_status_t USB_HostL1ResumeDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle, uint8_t sleepType);
+/*!
+ * @brief Update the lpm param.
+ *
+ * The function is used to configuure the lpm token.
+ *
+ * @param[in] hostHandle The host handle.
+ * @param[in] lpmParam HIRD vaule and whether enable remotewakeup.
+ *
+ */
+extern usb_status_t USB_HostL1SleepDeviceResquestConfig(usb_host_handle hostHandle, uint8_t *lpmParam);
+#endif
 /*!
  * @brief Update the hardware tick.
  *

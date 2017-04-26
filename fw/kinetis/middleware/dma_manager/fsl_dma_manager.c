@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright (c) 2015-2016, Freescale Semiconductor, Inc.
+ * Copyright 2016-2017 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -33,26 +33,14 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-
-/*! @brief Macro to get the DMAMUX physical channel indicator from the virtual channel indicator. */
-#define VIRTUAL_CHN_TO_DMAMUX_CHN(chn) (chn % FSL_FEATURE_DMAMUX_MODULE_CHANNEL)
-
-/*! @brief Macro to get the dma physical module indicator from the virtual channel indicator. */
-#define VIRTUAL_CHN_TO_DMAMUX_INSTANCE(chn) (chn / FSL_FEATURE_DMAMUX_MODULE_CHANNEL)
-
 /*******************************************************************************
  * Variables
  ******************************************************************************/
-
-/* Phillip: only init once (TODO: Add the init for this somewhere globally so it happens once automatically?) */
-static bool s_DMAMGR_Initialized = false;
-
-/*! @brief Variable to store dma manager state. */
-static uint32_t s_DMAMGR_Channels;
+/*! @brief Array to map DMA instance number to base pointer. */
+static DMA_Type *const s_dmaBases[] = DMA_BASE_PTRS;
 
 /*! @brief Array to map DMAMUX instance number to base pointer. */
-static DMAMUX_Type *const s_dmamuxBase[] = DMAMUX_BASE_PTRS;
-
+static DMAMUX_Type *const s_dmamuxBases[] = DMAMUX_BASE_PTRS;
 /*******************************************************************************
  * Prototypes
  ******************************************************************************/
@@ -61,81 +49,126 @@ static DMAMUX_Type *const s_dmamuxBase[] = DMAMUX_BASE_PTRS;
  * Code
  ******************************************************************************/
 
-void DMAMGR_Init(void)
+static uint32_t DMA_GetInstance(DMA_Type *base)
 {
-    if (s_DMAMGR_Initialized)
-        return;
+    uint32_t DmaInstance;
+#if defined(FSL_FEATURE_SOC_DMA_COUNT) && FSL_FEATURE_SOC_DMA_COUNT > 0U
+    uint32_t count = FSL_FEATURE_SOC_DMA_COUNT;
+#endif /* FSL_FEATURE_SOC_DMA_COUNT */
 
-    s_DMAMGR_Initialized = true;
+#if defined(FSL_FEATURE_SOC_EDMA_COUNT) && FSL_FEATURE_SOC_EDMA_COUNT > 0U
+    uint32_t count = FSL_FEATURE_SOC_EDMA_COUNT;
+#endif /* FSL_FEATURE_SOC_DMA_COUNT */
 
-    uint32_t i;
-
-    /* Reset the dma manager channels */
-    s_DMAMGR_Channels = 0;
-    /* Initialize DMAMUX */
-    for (i = 0; i < FSL_FEATURE_SOC_DMAMUX_COUNT; i++)
+    /* Find the instance index from base address mappings. */
+    for (DmaInstance = 0; DmaInstance < count; DmaInstance++)
     {
-        DMAMUX_Init(s_dmamuxBase[i]);
+        if (s_dmaBases[DmaInstance] == base)
+        {
+            break;
+        }
     }
+
+    assert(DmaInstance < count);
+    return DmaInstance;
+}
+
+void DMAMGR_Init(dmamanager_handle_t *dmamanager_handle, DMA_Type *dma_base, uint32_t channelNum, uint32_t startChannel)
+{
+    assert(dmamanager_handle != NULL);
+    assert(dma_base != NULL);
+
+    uint32_t i = 0U;
+    dmamanager_handle->startChannel = startChannel;
+    dmamanager_handle->channelNum = channelNum;
+    dmamanager_handle->dma_base = dma_base;
+    memset(dmamanager_handle->s_DMAMGR_Channels, false, sizeof(dmamanager_handle->s_DMAMGR_Channels));
+
+/* Initialize DMAMUX. */
+#if defined(FSL_FEATURE_SOC_DMA_COUNT) && FSL_FEATURE_SOC_DMA_COUNT > 0U
+    dmamanager_handle->multiple = FSL_FEATURE_SOC_DMAMUX_COUNT / FSL_FEATURE_SOC_DMA_COUNT;
+#endif /* FSL_FEATURE_SOC_DMA_COUNT */
+
+#if defined(FSL_FEATURE_SOC_EDMA_COUNT) && FSL_FEATURE_SOC_EDMA_COUNT > 0U
+    dmamanager_handle->multiple = FSL_FEATURE_SOC_DMAMUX_COUNT / FSL_FEATURE_SOC_EDMA_COUNT;
+#endif /* FSL_FEATURE_SOC_DMA_COUNT */
+    if (dmamanager_handle->multiple < 1U)
+    {
+        dmamanager_handle->multiple = 1U;
+    }
+    dmamanager_handle->DmamuxInstanceStart = dmamanager_handle->multiple * DMA_GetInstance(dmamanager_handle->dma_base);
+    for (i = dmamanager_handle->DmamuxInstanceStart;
+         i < dmamanager_handle->DmamuxInstanceStart + dmamanager_handle->multiple; i++)
+    {
+        DMAMUX_Init(s_dmamuxBases[i]);
+    }
+
 /* Initialize DMA or EDMA */
 #if defined(FSL_FEATURE_SOC_DMA_COUNT) && FSL_FEATURE_SOC_DMA_COUNT > 0U
-    DMA_Init(DMA0);
+    DMA_Init(dmamanager_handle->dma_base);
 #endif /* FSL_FEATURE_SOC_DMA_COUNT */
 
 #if defined(FSL_FEATURE_SOC_EDMA_COUNT) && FSL_FEATURE_SOC_EDMA_COUNT > 0U
     edma_config_t config;
 
     EDMA_GetDefaultConfig(&config);
-    EDMA_Init(DMA0, &config);
+    EDMA_Init(dmamanager_handle->dma_base, &config);
 #endif /* FSL_FEATURE_SOC_EDMA_COUNT */
 }
 
-void DMAMGR_Deinit(void)
+void DMAMGR_Deinit(dmamanager_handle_t *dmamanager_handle)
 {
     uint32_t i;
     uint32_t j;
-
-    /* Deinitialize DMAMUX */
-    for (i = 0; i < FSL_FEATURE_SOC_DMAMUX_COUNT; i++)
+    for (i = dmamanager_handle->DmamuxInstanceStart;
+         i < dmamanager_handle->DmamuxInstanceStart + dmamanager_handle->multiple; i++)
     {
-        for (j = 0; j < FSL_FEATURE_DMAMUX_MODULE_CHANNEL; j++)
+        for (j = 0; j < dmamanager_handle->channelNum; j++)
         {
-            DMAMUX_DisableChannel(s_dmamuxBase[i], j);
+            DMAMUX_DisableChannel(s_dmamuxBases[i], j);
         }
-        DMAMUX_Deinit(s_dmamuxBase[i]);
+        DMAMUX_Deinit(s_dmamuxBases[i]);
     }
+
 /* Deinitialize DMA or EDMA */
 #if defined(FSL_FEATURE_SOC_DMA_COUNT) && FSL_FEATURE_SOC_DMA_COUNT > 0U
-    DMA_Deinit(DMA0);
+    DMA_Deinit(dmamanager_handle->dma_base);
 #endif /* FSL_FEATURE_SOC_DMA_COUNT */
 
 #if defined(FSL_FEATURE_SOC_EDMA_COUNT) && FSL_FEATURE_SOC_EDMA_COUNT > 0U
-    EDMA_Deinit(DMA0);
+    EDMA_Deinit(dmamanager_handle->dma_base);
 #endif /* FSL_FEATURE_SOC_EDMA_COUNT */
 }
 
-status_t DMAMGR_RequestChannel(dma_request_source_t requestSource, uint8_t virtualChannel, void *handle)
+status_t DMAMGR_RequestChannel(dmamanager_handle_t *dmamanager_handle,
+                               uint32_t requestSource,
+                               uint32_t channel,
+                               void *handle)
 {
     assert(handle != NULL);
+    assert(dmamanager_handle != NULL);
 
     status_t retval;
     uint32_t primask;
+    uint32_t DmamuxInstance;
 
     /* Dynamic channel allocate mechanism */
-    if (virtualChannel == DMAMGR_DYNAMIC_ALLOCATE)
+    if (channel == DMAMGR_DYNAMIC_ALLOCATE)
     {
-#if defined(FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT) && FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT > 0U
+#if defined(FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT) && FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT > 1U
         /*
             For chip like MKV56/MKV58, it has only 1 DMAMUX(32 channels), but 2 source groups(16 channels per
            group).
         */
-        uint32_t dmamux_module_channel = FSL_FEATURE_DMAMUX_DMAMUX_CHANNELS / FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT;
+        uint32_t dmamux_channelNum = dmamanager_handle->channelNum / FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT;
+        dmamanager_handle->channelNum = dmamux_channelNum;
 #else
-        uint32_t dmamux_module_channel = FSL_FEATURE_DMAMUX_MODULE_CHANNEL;
+        uint32_t dmamux_channelNum = 0U;
 #endif /* FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT */
 
-        uint32_t i = 0;
-        uint32_t j = 0;
+        uint32_t i = 0U;
+        uint32_t j = 0U;
+        uint32_t startChannel = 0U;
         uint32_t map = ((uint32_t)requestSource) >> 8U;
         bool channel_found = false;
 
@@ -144,31 +177,32 @@ status_t DMAMGR_RequestChannel(dma_request_source_t requestSource, uint8_t virtu
             if (map & (1U << i))
             {
                 map &= ~(0x1U << i);
-                for (j = i * dmamux_module_channel; j < (i + 1) * dmamux_module_channel; j++)
+                startChannel = dmamanager_handle->startChannel + i * dmamux_channelNum;
+                for (j = startChannel; j < dmamanager_handle->channelNum + startChannel; j++)
                 {
                     primask = DisableGlobalIRQ();
-                    if ((s_DMAMGR_Channels & (1U << j)) == 0U)
+                    if (dmamanager_handle->s_DMAMGR_Channels[j] == false)
                     {
-                        /*
-                            DMA and EDMA shall be only 1 instance, but DMAMUX may has 1 or 2
-                            instances, so the channel number in DMA or EDMA must be converted
-                            to channel number in DMAMUX.
-                        */
-                        uint32_t dmamux_instance = VIRTUAL_CHN_TO_DMAMUX_INSTANCE(j);
-                        uint32_t dmamux_channel = VIRTUAL_CHN_TO_DMAMUX_CHN(j);
-
-                        s_DMAMGR_Channels |= (1U << j);
+                        dmamanager_handle->s_DMAMGR_Channels[j] = true;
                         EnableGlobalIRQ(primask);
                         /* Configure DMAMUX channel */
-                        DMAMUX_SetSource(s_dmamuxBase[dmamux_instance], dmamux_channel, (uint8_t)requestSource);
-                        DMAMUX_EnableChannel(s_dmamuxBase[dmamux_instance], dmamux_channel);
+                        DmamuxInstance =
+                            dmamanager_handle->DmamuxInstanceStart +
+                            j * dmamanager_handle->multiple / (dmamanager_handle->channelNum + startChannel);
+                        DMAMUX_SetSource(
+                            s_dmamuxBases[DmamuxInstance],
+                            j % ((dmamanager_handle->channelNum + startChannel) / dmamanager_handle->multiple),
+                            (uint8_t)requestSource);
+                        DMAMUX_EnableChannel(
+                            s_dmamuxBases[DmamuxInstance],
+                            j % ((dmamanager_handle->channelNum + startChannel) / dmamanager_handle->multiple));
 /* Creat DMA or EDMA handle */
 #if defined(FSL_FEATURE_SOC_DMA_COUNT) && FSL_FEATURE_SOC_DMA_COUNT > 0U
-                        DMA_CreateHandle((dma_handle_t *)handle, DMA0, j);
+                        DMA_CreateHandle((dma_handle_t *)handle, dmamanager_handle->dma_base, j);
 #endif /* FSL_FEATURE_SOC_DMA_COUNT */
 
 #if defined(FSL_FEATURE_SOC_EDMA_COUNT) && FSL_FEATURE_SOC_EDMA_COUNT > 0U
-                        EDMA_CreateHandle((edma_handle_t *)handle, DMA0, j);
+                        EDMA_CreateHandle((edma_handle_t *)handle, dmamanager_handle->dma_base, j);
 #endif /* FSL_FEATURE_SOC_EDMA_COUNT */
 
                         channel_found = true;
@@ -197,51 +231,44 @@ status_t DMAMGR_RequestChannel(dma_request_source_t requestSource, uint8_t virtu
     }
     else /* Static channel allocate mechanism */
     {
-        uint32_t channel = virtualChannel;
-        uint32_t dmamux_instance = VIRTUAL_CHN_TO_DMAMUX_INSTANCE(channel);
-        uint32_t dmamux_channel = VIRTUAL_CHN_TO_DMAMUX_CHN(channel);
-        uint32_t map = ((uint32_t)requestSource) >> 8U;
-
-        /* Check if channel match the request source. */
-        if ((map != 0x1U << dmamux_instance) && (map != 0x2U << dmamux_instance))
+        primask = DisableGlobalIRQ();
+        if ((dmamanager_handle->s_DMAMGR_Channels[channel] != 0U))
         {
-            retval = kStatus_DMAMGR_ChannelNotMatchSource;
+            EnableGlobalIRQ(primask);
+            retval = kStatus_DMAMGR_ChannelOccupied;
         }
         else
         {
-            primask = DisableGlobalIRQ();
-            if ((s_DMAMGR_Channels & (1U << channel)) != 0U)
-            {
-                EnableGlobalIRQ(primask);
-                retval = kStatus_DMAMGR_ChannelOccupied;
-            }
-            else
-            {
-                s_DMAMGR_Channels |= (1U << channel);
-                EnableGlobalIRQ(primask);
-                /* Configure DMAMUX channel */
-                DMAMUX_SetSource(s_dmamuxBase[dmamux_instance], dmamux_channel, (uint8_t)requestSource);
-                DMAMUX_EnableChannel(s_dmamuxBase[dmamux_instance], dmamux_channel);
+            dmamanager_handle->s_DMAMGR_Channels[channel] = 1U;
+            EnableGlobalIRQ(primask);
+            /* Configure DMAMUX channel */
+            DmamuxInstance = dmamanager_handle->DmamuxInstanceStart +
+                             channel * dmamanager_handle->multiple / dmamanager_handle->channelNum;
+            DMAMUX_SetSource(s_dmamuxBases[DmamuxInstance],
+                             channel % (dmamanager_handle->channelNum / dmamanager_handle->multiple),
+                             (uint32_t)requestSource);
+            DMAMUX_EnableChannel(s_dmamuxBases[DmamuxInstance],
+                                 channel % (dmamanager_handle->channelNum / dmamanager_handle->multiple));
 /* Creat DMA or EDMA handle */
 #if defined(FSL_FEATURE_SOC_DMA_COUNT) && FSL_FEATURE_SOC_DMA_COUNT > 0U
-                DMA_CreateHandle((dma_handle_t *)handle, DMA0, channel);
+            DMA_CreateHandle((dma_handle_t *)handle, dmamanager_handle->dma_base, channel);
 #endif /* FSL_FEATURE_SOC_DMA_COUNT */
 
 #if defined(FSL_FEATURE_SOC_EDMA_COUNT) && FSL_FEATURE_SOC_EDMA_COUNT > 0U
-                EDMA_CreateHandle((edma_handle_t *)handle, DMA0, channel);
+            EDMA_CreateHandle((edma_handle_t *)handle, dmamanager_handle->dma_base, channel);
 #endif /* FSL_FEATURE_SOC_EDMA_COUNT */
 
-                retval = kStatus_Success;
-            }
+            retval = kStatus_Success;
         }
     }
 
     return retval;
 }
 
-status_t DMAMGR_ReleaseChannel(void *handle)
+status_t DMAMGR_ReleaseChannel(dmamanager_handle_t *dmamanager_handle, void *handle)
 {
     assert(handle != NULL);
+    uint32_t DmamuxInstance;
 
 #if defined(FSL_FEATURE_SOC_DMA_COUNT) && FSL_FEATURE_SOC_DMA_COUNT > 0U
     uint32_t channel = ((dma_handle_t *)handle)->channel;
@@ -251,16 +278,21 @@ status_t DMAMGR_ReleaseChannel(void *handle)
     uint32_t channel = ((edma_handle_t *)handle)->channel;
 #endif /* FSL_FEATURE_SOC_EDMA_COUNT */
 
-    uint32_t dmamux_instance = VIRTUAL_CHN_TO_DMAMUX_INSTANCE(channel);
-    uint32_t dmamux_channel = VIRTUAL_CHN_TO_DMAMUX_CHN(channel);
-
     /* Check if channel is used */
-    if ((s_DMAMGR_Channels & (1U << channel)) == 0U)
+    if ((dmamanager_handle->s_DMAMGR_Channels[channel] == 0U))
     {
         return kStatus_DMAMGR_ChannelNotUsed;
     }
-    s_DMAMGR_Channels &= ~(1U << channel);
-    DMAMUX_DisableChannel(s_dmamuxBase[dmamux_instance], dmamux_channel);
+    dmamanager_handle->s_DMAMGR_Channels[channel] = 0;
+    DmamuxInstance =
+        dmamanager_handle->DmamuxInstanceStart + channel * dmamanager_handle->multiple / dmamanager_handle->channelNum;
+    DMAMUX_DisableChannel(s_dmamuxBases[DmamuxInstance],
+                          channel % (dmamanager_handle->channelNum / dmamanager_handle->multiple));
 
     return kStatus_Success;
+}
+
+bool DMAMGR_IsChannelOccupied(dmamanager_handle_t *dmamanager_handle, uint32_t channel)
+{
+    return dmamanager_handle->s_DMAMGR_Channels[channel];
 }

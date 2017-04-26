@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
+ * Copyright 2016 NXP
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -12,7 +12,7 @@
  *   list of conditions and the following disclaimer in the documentation and/or
  *   other materials provided with the distribution.
  *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
+ * o Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
@@ -53,6 +53,9 @@ typedef enum _usb_host_controller_control
     kUSB_HostGetFrameNumber,               /*!< Get frame number code */
     kUSB_HostUpdateControlEndpointAddress, /*!< Update control endpoint address */
     kUSB_HostUpdateControlPacketSize,      /*!< Update control endpoint maximum  packet size */
+    kUSB_HostPortAttachDisable,            /*!< Disable the port attach event */
+    kUSB_HostPortAttachEnable,             /*!< Enable the port attach event */
+    kUSB_HostL1Config,                     /*!< L1 suspend Bus control code */         
 } usb_host_controller_control_t;
 
 /*! @brief USB host controller bus control code */
@@ -64,6 +67,9 @@ typedef enum _usb_host_bus_control
     kUSB_HostBusDisableAttach, /*!< Disable attach */
     kUSB_HostBusSuspend,       /*!< Suspend BUS */
     kUSB_HostBusResume,        /*!< Resume BUS */
+    kUSB_HostBusL1SuspendInit, /*!< L1 Suspend BUS */
+    kUSB_HostBusL1Sleep,     /*!< L1 Suspend BUS */
+    kUSB_HostBusL1Resume,      /*!< L1 Resume BUS */
 } usb_host_bus_control_t;
 
 /*! @brief USB host controller interface structure */
@@ -112,6 +118,7 @@ typedef struct _usb_host_instance
 #if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
     void *suspendedDevice;    /*!< Suspended device handle*/
     volatile uint64_t hwTick; /*!< Current hw tick(ms)*/
+    uint8_t sleepType;     /*!< L1 LPM device handle*/
 #endif
     uint8_t addressBitMap[16]; /*!< Used for address allocation. The first bit is the address 1, second bit is the
                                   address 2*/
