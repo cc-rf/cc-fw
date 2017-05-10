@@ -8,7 +8,7 @@
 #include <semphr.h>
 #include <task.h>
 
-//#define CC_SPI_DMA
+#define CC_SPI_DMA
 //#define CC_SPI_LOCK
 //#define CC_SPI_NOTIFY   (1u<<29)
 
@@ -22,6 +22,7 @@ static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, statu
 
 static struct {
     #ifdef CC_SPI_DMA
+    dmamanager_handle_t *dmam_handle;
     dspi_master_edma_handle_t edma_handle;
     edma_handle_t rx_handle;
     edma_handle_t tx_handle;
@@ -70,10 +71,8 @@ void cc_spi_init(cc_dev_t dev)
 
     #ifdef CC_SPI_DMA
 
-        dma_request_source_t dreq_rx, dreq_tx;
+        dma_request_source_t dreq_rx = kDmaRequestMux0Disable, dreq_tx = kDmaRequestMux0Disable;
         status_t status;
-
-        DMAMGR_Init();
 
         if      (cfg->spi == SPI0) { dreq_rx = kDmaRequestMux0SPI0Rx; dreq_tx = kDmaRequestMux0SPI0Tx; }
         else if (cfg->spi == SPI1) { dreq_rx = kDmaRequestMux0SPI1Rx; dreq_tx = kDmaRequestMux0SPI1Tx; }
@@ -88,32 +87,28 @@ void cc_spi_init(cc_dev_t dev)
             else if (cfg->spi == SPI5) { dreq_rx = kDmaRequestMux0SPI5Rx; dreq_tx = kDmaRequestMux0SPI5Tx; }
         #endif
 
-        /*
-        status = DMAMGR_RequestChannel(dreq_rx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].tx_handle);
+        spi[dev].dmam_handle = DMAMGR_Handle();
+
+        status = DMAMGR_RequestChannel(spi[dev].dmam_handle, dreq_rx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].rx_handle);
         assert(status == kStatus_Success);
 
-        // What to do here? The examples don't configure DMAMUX for intermediary...
-        //status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].im_handle);
-        //assert(status == kStatus_Success);
-        //DMAMUX_DisableChannel(DMAMUX0, spi[dev].im_handle.channel); // ?
-        EDMA_CreateHandle(&spi[dev].im_handle, DMA0, 21+dev);
-
-        status = DMAMGR_RequestChannel(dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].rx_handle);
+        status = DMAMGR_RequestChannel(spi[dev].dmam_handle, kDmaRequestMux0Disable, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].im_handle);
         assert(status == kStatus_Success);
-         */
 
-        DMAMUX_SetSource(DMAMUX0, (dev*3u)+0u, dreq_rx);
+        status = DMAMGR_RequestChannel(spi[dev].dmam_handle, dreq_tx, DMAMGR_DYNAMIC_ALLOCATE, &spi[dev].tx_handle);
+        assert(status == kStatus_Success);
+
+        /*DMAMUX_SetSource(DMAMUX0, (dev*3u)+0u, dreq_rx);
         DMAMUX_EnableChannel(DMAMUX0, (dev*3u)+0u);
         DMAMUX_SetSource(DMAMUX0, (dev*3u)+1u, dreq_tx);
         DMAMUX_EnableChannel(DMAMUX0, (dev*3u)+1u);
 
         EDMA_CreateHandle(&spi[dev].rx_handle, DMA0, (dev*3u)+0u);
         EDMA_CreateHandle(&spi[dev].im_handle, DMA0, (dev*3u)+2u);
-        EDMA_CreateHandle(&spi[dev].tx_handle, DMA0, (dev*3u)+1u);
+        EDMA_CreateHandle(&spi[dev].tx_handle, DMA0, (dev*3u)+1u);*/
 
-        NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
-        NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
-        //NVIC_SetPriority(((IRQn_Type [])DMA_CHN_IRQS)[spi[dev].im_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+        NVIC_SetPriority(((IRQn_Type [][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][spi[dev].tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+        NVIC_SetPriority(((IRQn_Type [][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][spi[dev].rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
 
         DSPI_MasterTransferCreateHandleEDMA(
                 cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *) spi[dev].sem,

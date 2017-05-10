@@ -59,8 +59,8 @@ void BOARD_InitPins(void)
     LED_ABCD_INIT(D, LOGIC_LED_OFF);
 
     /* UART0 */
-    PORT_SetPinMux(PORTA, 14u, kPORT_MuxAlt3);      // UART_HDR #5      UART0_TX
-    PORT_SetPinMux(PORTA, 15u, kPORT_MuxAlt3);      // UART_HDR #3      UART0_RX
+    PORT_SetPinMux(PORTA, 14u, kPORT_MuxAlt3);      // UART_HDR #3      UART0_TX
+    PORT_SetPinMux(PORTA, 15u, kPORT_MuxAlt3);      // UART_HDR #5      UART0_RX
     PORT_SetPinMux(PORTA, 16u, kPORT_MuxAsGpio);    // UART_HDR #4      ** uflag1 pwr
     PORT_SetPinMux(PORTA, 17u, kPORT_MuxAsGpio);    // UART_HDR #6      ** uflag1 input
     //PORT_SetPinMux(PORTA, 16u, kPORT_MuxAlt3);      // UART_HDR #4      UART0_RTS_b

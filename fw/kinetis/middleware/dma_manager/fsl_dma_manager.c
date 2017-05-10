@@ -30,6 +30,19 @@
 
 #include "fsl_dma_manager.h"
 
+dmamanager_handle_t dmaManagerHandle;
+bool dmaManagerHandleValid = false;
+
+dmamanager_handle_t *const DMAMGR_Handle(void)
+{
+    if (!dmaManagerHandleValid) {
+        DMAMGR_Init(&dmaManagerHandle, DMA0, FSL_FEATURE_DMAMUX_DMAMUX_CHANNELS, 0);
+        dmaManagerHandleValid = true;
+    }
+
+    return &dmaManagerHandle;
+}
+
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -161,7 +174,8 @@ status_t DMAMGR_RequestChannel(dmamanager_handle_t *dmamanager_handle,
            group).
         */
         uint32_t dmamux_channelNum = dmamanager_handle->channelNum / FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT;
-        dmamanager_handle->channelNum = dmamux_channelNum;
+        // phillip: this seems stupid
+        //dmamanager_handle->channelNum = dmamux_channelNum;
 #else
         uint32_t dmamux_channelNum = 0U;
 #endif /* FSL_FEATURE_EDMA_CHANNEL_GROUP_COUNT */

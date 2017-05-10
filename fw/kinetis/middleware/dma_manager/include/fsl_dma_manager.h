@@ -40,6 +40,7 @@
 #include "fsl_edma.h"
 #endif /* FSL_FEATURE_SOC_EDMA_COUNT */
 
+
 /*!
  * @addtogroup dmamgr
  * @{
@@ -186,6 +187,8 @@ status_t DMAMGR_ReleaseChannel(dmamanager_handle_t *dmamanager_handle, void *han
 bool DMAMGR_IsChannelOccupied(dmamanager_handle_t *dmamanager_handle, uint32_t channel);
 
 /* @} */
+
+dmamanager_handle_t *const DMAMGR_Handle(void);
 
 #if defined(__cplusplus)
 }
