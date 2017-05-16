@@ -38,7 +38,7 @@
 /*******************************************************************************
 * Definitions
 ******************************************************************************/
-#define USB_DEVICE_CONFIG_CDC_ACM_MAX_INSTANCE (1)   /*!< The maximum number of CDC device instance. */
+#define USB_DEVICE_CONFIG_CDC_ACM_MAX_INSTANCE (3)   /*!< The maximum number of CDC device instance. */
 #define USB_DEVICE_CONFIG_CDC_COMM_CLASS_CODE (0x02) /*!< The CDC communication class code. */
 #define USB_DEVICE_CONFIG_CDC_DATA_CLASS_CODE (0x0A) /*!< The CDC data class code. */
 

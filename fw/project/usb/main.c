@@ -33,6 +33,7 @@
 #include <uhdcd.h>
 #include <sclk.h>
 #include <fsl_flash.h>
+#include <composite.h>
 
 #define PFLAG_PORT          PORTB
 #define PFLAG_GPIO          GPIOB
@@ -60,7 +61,7 @@ static void main_task(void *param);
 
 static void uart_relay_run(void);
 
-static void usb_recv(size_t size, u8 *data);
+static void usb_recv(u8 port, size_t size, u8 *data);
 
 //static SemaphoreHandle_t write_sem = NULL;
 
@@ -297,8 +298,8 @@ static void main_task(void *param)
     //user_flash_init();
 
 
-    if (!vcom_init(usb_recv)) {
-        itm_puts(0, "vcom: init fail\r\n");
+    if (!usb_composite_init(usb_recv)) {
+        itm_puts(0, "usb: init fail\r\n");
         goto _end;
     }
 
@@ -873,50 +874,53 @@ static size_t usb_in_size = 0;
 static u8 usb_in_data[USB_IN_DATA_MAX];
 static u8 usb_in_decode_data[USB_IN_DATA_MAX+1];
 
-static void usb_recv(size_t size, u8 *data)
+static void usb_recv(u8 port, size_t size, u8 *data)
 {
-    //itm_printf(0, "usb: (recv) size=%lu data=0x%p\r\n", size, (void *)data);
+    if (!port) {
+        //itm_printf(0, "usb: (recv) size=%lu data=0x%p\r\n", size, (void *)data);
 
-    if (!size || !data) return;
+        if (!size || !data) return;
 
-    if (uflag1_set()) {
-        uart_relay_send(size, data);
-        return;
-    }
+        if (uflag1_set()) {
+            uart_relay_send(size, data);
+            return;
+        }
 
-    size_t i, frame_size;
+        size_t i, frame_size;
 
-    for (i = 0; i < size; ++i) {
-        if (!data[i]) break;
-    }
+        for (i = 0; i < size; ++i) {
+            if (!data[i]) break;
+        }
 
-    if ((usb_in_size + size) > USB_IN_DATA_MAX) {
-        printf("(usb) input buffer overflow: buffered=%u in=%u overage=%u\r\n", usb_in_size, size, (usb_in_size + size) - USB_IN_DATA_MAX);
-        usb_in_size = 0;
-    }
+        if ((usb_in_size + size) > USB_IN_DATA_MAX) {
+            printf("(usb) input buffer overflow: buffered=%u in=%u overage=%u\r\n", usb_in_size, size,
+                   (usb_in_size + size) - USB_IN_DATA_MAX);
+            usb_in_size = 0;
+        }
 
-    memcpy(&usb_in_data[usb_in_size], data, i);
-    usb_in_size += i;
+        memcpy(&usb_in_data[usb_in_size], data, i);
+        usb_in_size += i;
 
-    if (i == size)
-        return;
+        if (i == size)
+            return;
 
-    frame_size = i;
+        frame_size = i;
 
-    // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
-    // max decode length: size
+        // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
+        // max decode length: size
 
-    size_t decoded_size = cobs_decode(usb_in_data, frame_size, usb_in_decode_data);
+        size_t decoded_size = cobs_decode(usb_in_data, frame_size, usb_in_decode_data);
 
-    usb_in_size = size - (i + 1);
+        usb_in_size = size - (i + 1);
 
-    if (usb_in_size) {
-        memcpy(usb_in_data, &data[i+1], usb_in_size);
-    }
+        if (usb_in_size) {
+            memcpy(usb_in_data, &data[i + 1], usb_in_size);
+        }
 
-    if (decoded_size) {
-        usb_in_decode_data[decoded_size] = 0;
-        frame_recv(decoded_size, usb_in_decode_data);
+        if (decoded_size) {
+            usb_in_decode_data[decoded_size] = 0;
+            frame_recv(decoded_size, usb_in_decode_data);
+        }
     }
 }
 

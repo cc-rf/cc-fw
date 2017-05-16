@@ -43,9 +43,9 @@
 
 #include <cc/common.h>
 
-typedef void (* usb_rx_cb_t)(size_t size, u8 *data);
+typedef void (* vcom_rx_t)(u8 port, size_t size, u8 *data);
 
-bool vcom_init(usb_rx_cb_t rx_cb);
+bool vcom_init(vcom_rx_t rx_cb);
 
 void usb_write(u8 *buf, size_t len);
 void usb_write_direct(u8 *buf, size_t len);
@@ -56,11 +56,11 @@ void usb_write_direct(u8 *buf, size_t len);
 ******************************************************************************/
 #if defined(USB_DEVICE_CONFIG_EHCI) && (USB_DEVICE_CONFIG_EHCI > 0)
 #define CONTROLLER_ID kUSB_ControllerEhci0
-#define DATA_BUFF_SIZE HS_CDC_VCOM_BULK_OUT_PACKET_SIZE
+#define DATA_BUFF_SIZE HS_CDC_VCOM0_BULK_OUT_PACKET_SIZE
 #endif
 #if defined(USB_DEVICE_CONFIG_KHCI) && (USB_DEVICE_CONFIG_KHCI > 0)
 #define CONTROLLER_ID kUSB_ControllerKhci0
-#define DATA_BUFF_SIZE FS_CDC_VCOM_BULK_OUT_PACKET_SIZE
+#define DATA_BUFF_SIZE FS_CDC_VCOM0_BULK_OUT_PACKET_SIZE
 
 #endif
 #if defined(USB_DEVICE_CONFIG_LPCIP3511FS) && (USB_DEVICE_CONFIG_LPCIP3511FS > 0U)
