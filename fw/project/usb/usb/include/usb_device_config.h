@@ -126,7 +126,7 @@
 #define USB_DEVICE_CONFIG_EHCI_MAX_DTD (16U)
 /*! @brief Whether handle the USB EHCI bus error. */
 
-#define USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING (0U/*1U*/)
+#define USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING (/*0U*/1U)
 
 /*! @brief Whether the EHCI ID pin detect feature enabled. */
 #define USB_DEVICE_CONFIG_EHCI_ID_PIN_DETECT (0U)
@@ -153,7 +153,7 @@
 #endif
 
 /*! @brief Whether the device detached feature is enabled or not. */
-#define USB_DEVICE_CONFIG_DETACH_ENABLE (/*0U*/1U)
+#define USB_DEVICE_CONFIG_DETACH_ENABLE (0U/*1U*/)
 
 /* @} */
 

@@ -397,6 +397,8 @@ static void main_task(void *param)
 
     printf("\r\nCloud Chaser %08lX%08lX@%02X.%04X\r\n\r\n", sim_uid.ML, sim_uid.L, cell, addr);
 
+    //vTaskDelay(portMAX_DELAY);
+
     if (nmac_init(cell, addr, boss, handle_rx)) {
 
         if (uflag1_set()) {
@@ -526,7 +528,6 @@ static void sync_hook(u32 chan)
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi);
 
-extern bool usb_attached(void);
 
 static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi)
 {
@@ -549,10 +550,11 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
             //itm_printf(0, "uart: rf rx %u byte(s)\r\n", size);
             uart_write(uart, uart_pkt->data, size);
 
-            if (usb_attached()) {
+            // TODO: Find a suitable code for passthrough data
+            /*if (usb_attached(0)) {
                 u8 *buf = malloc(size); assert(buf);
-                usb_write_direct(buf, size);
-            }
+                usb_write_direct(0, buf, size);
+            }*/
 
             return;
         }
@@ -666,14 +668,14 @@ typedef struct __packed {
 } code_relay_t;
 */
 
-static void write_code_status(code_status_t *code_status)
+static void write_code_status(u8 port, code_status_t *code_status)
 {
     u8 *frame;
     size_t size = frame_encode(CODE_ID_STATUS, sizeof(code_status_t), (u8 *)code_status, &frame);
 
     if (frame) {
         //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
-        usb_write_direct(frame, size);
+        usb_write_direct(port, frame, size);
         //free(frame);
     }
 }
@@ -702,13 +704,13 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
 
     if (frame) {
         //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
-        usb_write_direct(frame, size);
+        usb_write_direct(0, frame, size);
         //itm_printf(0, "<itm> recv: frame size=%lu <wrote>\n", size);
         //free(frame);
     }
 }
 
-static void handle_code_reset(size_t size, u8 *data)
+static void handle_code_reset(u8 port, size_t size, u8 *data)
 {
     if (size == sizeof(u32) && *(u32 *)data == RESET_MAGIC) {
         printf("<reset>\r\n");
@@ -719,7 +721,7 @@ static void handle_code_reset(size_t size, u8 *data)
     }
 }
 
-static void handle_code_status(size_t size, u8 *data)
+static void handle_code_status(u8 port, size_t size, u8 *data)
 {
     (void)size;
     (void)data;
@@ -741,10 +743,10 @@ static void handle_code_status(size_t size, u8 *data)
             .send_bytes = send_bytes
     };
 
-    write_code_status(&code_status);
+    write_code_status(port, &code_status);
 }
 
-static void handle_code_echo(size_t size, u8 *data)
+static void handle_code_echo(u8 port, size_t size, u8 *data)
 {
     //itm_printf(0, "<itm> echo: \"%s\"\n", data);
     if (data[size - 1] != '\n')
@@ -753,7 +755,7 @@ static void handle_code_echo(size_t size, u8 *data)
         printf("(remote) %s", data);
 }
 
-static void handle_code_send(size_t size, u8 *data)
+static void handle_code_send(u8 port, size_t size, u8 *data)
 {
     assert(size >= sizeof(code_send_t)); assert(data);
 
@@ -808,7 +810,7 @@ typedef struct __packed {
 } serf_t;
 
 
-static void frame_recv(size_t size, u8 *data)
+static void frame_recv(u8 port, size_t size, u8 *data)
 {
     serf_t *const frame = (serf_t *)data;
 
@@ -822,16 +824,16 @@ static void frame_recv(size_t size, u8 *data)
 
     switch (frame->code) {
         case CODE_ID_ECHO:
-            return handle_code_echo(size, frame->data);
+            return handle_code_echo(port, size, frame->data);
 
         case CODE_ID_SEND:
-            return handle_code_send(size, frame->data);
+            return handle_code_send(port, size, frame->data);
 
         case CODE_ID_STATUS:
-            return handle_code_status(size, frame->data);
+            return handle_code_status(port, size, frame->data);
 
         case CODE_ID_RESET:
-            return handle_code_reset(size, frame->data);
+            return handle_code_reset(port, size, frame->data);
 
         default:
             printf("(frame) unknown code: size=%u code=0x%02x\r\n", size, frame->code);
@@ -870,57 +872,55 @@ size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame)
 
 #define USB_IN_DATA_MAX     (MAC_PKT_SIZE_MAX + 64)
 
-static size_t usb_in_size = 0;
-static u8 usb_in_data[USB_IN_DATA_MAX];
-static u8 usb_in_decode_data[USB_IN_DATA_MAX+1];
+static size_t usb_in_size[USB_CDC_INSTANCE_COUNT] = {0};
+static u8 usb_in_data[USB_CDC_INSTANCE_COUNT][USB_IN_DATA_MAX];
+static u8 usb_in_decode_data[USB_CDC_INSTANCE_COUNT][USB_IN_DATA_MAX+1];
 
 static void usb_recv(u8 port, size_t size, u8 *data)
 {
-    if (!port) {
-        //itm_printf(0, "usb: (recv) size=%lu data=0x%p\r\n", size, (void *)data);
+    itm_printf(0, "usb[%i] rx: size=%lu\r\n", port, size);
 
-        if (!size || !data) return;
+    if (!size || !data) return;
 
-        if (uflag1_set()) {
-            uart_relay_send(size, data);
-            return;
-        }
+    if (uflag1_set()) {
+        uart_relay_send(size, data);
+        return;
+    }
 
-        size_t i, frame_size;
+    size_t i, frame_size;
 
-        for (i = 0; i < size; ++i) {
-            if (!data[i]) break;
-        }
+    for (i = 0; i < size; ++i) {
+        if (!data[i]) break;
+    }
 
-        if ((usb_in_size + size) > USB_IN_DATA_MAX) {
-            printf("(usb) input buffer overflow: buffered=%u in=%u overage=%u\r\n", usb_in_size, size,
-                   (usb_in_size + size) - USB_IN_DATA_MAX);
-            usb_in_size = 0;
-        }
+    if ((usb_in_size[port] + size) > USB_IN_DATA_MAX) {
+        printf("(usb[%i]) input buffer overflow: buffered=%u in=%u overage=%u\r\n", port, usb_in_size[port], size,
+               (usb_in_size[port] + size) - USB_IN_DATA_MAX);
+        usb_in_size[port] = 0;
+    }
 
-        memcpy(&usb_in_data[usb_in_size], data, i);
-        usb_in_size += i;
+    memcpy(&usb_in_data[port][usb_in_size[port]], data, i);
+    usb_in_size[port] += i;
 
-        if (i == size)
-            return;
+    if (i == size)
+        return;
 
-        frame_size = i;
+    frame_size = i;
 
-        // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
-        // max decode length: size
+    // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
+    // max decode length: size
 
-        size_t decoded_size = cobs_decode(usb_in_data, frame_size, usb_in_decode_data);
+    size_t decoded_size = cobs_decode(usb_in_data[port], frame_size, usb_in_decode_data[port]);
 
-        usb_in_size = size - (i + 1);
+    usb_in_size[port] = size - (i + 1);
 
-        if (usb_in_size) {
-            memcpy(usb_in_data, &data[i + 1], usb_in_size);
-        }
+    if (usb_in_size[port]) {
+        memcpy(usb_in_data[port], &data[i + 1], usb_in_size[port]);
+    }
 
-        if (decoded_size) {
-            usb_in_decode_data[decoded_size] = 0;
-            frame_recv(decoded_size, usb_in_decode_data);
-        }
+    if (decoded_size) {
+        usb_in_decode_data[port][decoded_size] = 0;
+        frame_recv(port, decoded_size, usb_in_decode_data[port]);
     }
 }
 
@@ -951,7 +951,7 @@ int _write(int handle, char *buffer, int size)
     }*/
 
     itm_write(0, (const u8 *)buffer, (size_t)size);
-    usb_write((u8 *)buffer, (size_t)size);
+    //usb_write(0, (u8 *)buffer, (size_t)size);
 
     /*if (!is_interrupt) xSemaphoreGive(write_sem);
     else {

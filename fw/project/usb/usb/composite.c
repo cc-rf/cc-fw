@@ -332,7 +332,7 @@ void USB_DeviceApplicationInit(void)
 #endif /* FSL_FEATURE_USB_KHCI_USB_RAM_BASE_ADDRESS */
 #endif /* FSL_FEATURE_USB_KHCI_USB_RAM */
 
-    g_composite.speed = USB_SPEED_FULL;
+    g_composite.speed = USB_SPEED_HIGH;
     g_composite.attach = 0;
     for (int i = 0; i < USB_CDC_INSTANCE_COUNT; ++i) g_composite.cdcVcom[i].cdcAcmHandle = (class_handle_t)NULL;
     g_composite.deviceHandle = NULL;

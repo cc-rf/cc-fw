@@ -43,7 +43,7 @@
 
 /* cdc virtual com information */
 /* Define endpoint for communication class */
-usb_device_endpoint_struct_t g_cdcVcomCicEndpoints[USB_CDC_INSTANCE_COUNT][USB_CDC_VCOM_CIC_ENDPOINT_COUNT] = {
+static usb_device_endpoint_struct_t g_cdcVcomCicEndpoints[USB_CDC_INSTANCE_COUNT][USB_CDC_VCOM_CIC_ENDPOINT_COUNT] = {
         {{
                  (USB_CDC_VCOM0_CIC_INTERRUPT_IN_ENDPOINT) | (USB_IN << 7U), USB_ENDPOINT_INTERRUPT,
                 HS_CDC_VCOM0_BULK_IN_PACKET_SIZE,
@@ -89,7 +89,7 @@ usb_device_endpoint_struct_t g_cdcVcomDicEndpoints[USB_CDC_INSTANCE_COUNT][USB_C
 };
 
 /* Define interface for communication class */
-usb_device_interface_struct_t g_cdcVcomCicInterface[USB_CDC_INSTANCE_COUNT] = {
+static usb_device_interface_struct_t g_cdcVcomCicInterface[USB_CDC_INSTANCE_COUNT] = {
         {
             0,
             {
@@ -115,7 +115,7 @@ usb_device_interface_struct_t g_cdcVcomCicInterface[USB_CDC_INSTANCE_COUNT] = {
 };
 
 /* Define interface for data class */
-usb_device_interface_struct_t g_cdcVcomDicInterface[USB_CDC_INSTANCE_COUNT] = {
+static usb_device_interface_struct_t g_cdcVcomDicInterface[USB_CDC_INSTANCE_COUNT] = {
         {
             0,
             {
@@ -141,7 +141,7 @@ usb_device_interface_struct_t g_cdcVcomDicInterface[USB_CDC_INSTANCE_COUNT] = {
 };
 
 /* Define interfaces for virtual com */
-usb_device_interfaces_struct_t g_cdcVcomInterfaces[USB_CDC_INSTANCE_COUNT][USB_CDC_VCOM_INTERFACE_COUNT] = {
+static usb_device_interfaces_struct_t g_cdcVcomInterfaces[USB_CDC_INSTANCE_COUNT][USB_CDC_VCOM_INTERFACE_COUNT] = {
         {{USB_CDC_VCOM_CIC_CLASS, USB_CDC_VCOM_CIC_SUBCLASS, USB_CDC_VCOM_CIC_PROTOCOL, USB_CDC_VCOM0_CIC_INTERFACE_INDEX,
                 &g_cdcVcomCicInterface[0], sizeof(g_cdcVcomCicInterface[0]) / sizeof(usb_device_interfaces_struct_t)},
         {USB_CDC_VCOM_DIC_CLASS, USB_CDC_VCOM_DIC_SUBCLASS, USB_CDC_VCOM_DIC_PROTOCOL, USB_CDC_VCOM0_DIC_INTERFACE_INDEX,
@@ -161,7 +161,7 @@ usb_device_interfaces_struct_t g_cdcVcomInterfaces[USB_CDC_INSTANCE_COUNT][USB_C
 };
 
 /* Define configurations for virtual com */
-usb_device_interface_list_t g_UsbDeviceCdcVcomInterfaceList[USB_CDC_INSTANCE_COUNT][USB_DEVICE_CONFIGURATION_COUNT] = {
+static usb_device_interface_list_t g_UsbDeviceCdcVcomInterfaceList[USB_CDC_INSTANCE_COUNT][USB_DEVICE_CONFIGURATION_COUNT] = {
         {{
                 USB_CDC_VCOM_INTERFACE_COUNT, &g_cdcVcomInterfaces[0][0],
         }},
@@ -189,7 +189,7 @@ usb_device_class_struct_t g_UsbDeviceCdcVcomConfig[USB_CDC_INSTANCE_COUNT] = {
 };
 
 /* Define device descriptor */
-uint8_t g_UsbDeviceDescriptor[USB_DESCRIPTOR_LENGTH_DEVICE] = {
+static uint8_t g_UsbDeviceDescriptor[USB_DESCRIPTOR_LENGTH_DEVICE] = {
         /* Size of this descriptor in bytes */
         USB_DESCRIPTOR_LENGTH_DEVICE,
         /* DEVICE Descriptor Type */
@@ -225,7 +225,7 @@ uint8_t g_UsbDeviceDescriptor[USB_DESCRIPTOR_LENGTH_DEVICE] = {
 };
 
 /* Define configuration descriptor */
-uint8_t g_UsbDeviceConfigurationDescriptor[/*USB_DESCRIPTOR_LENGTH_CONFIGURATION_ALL*/] = {
+static uint8_t g_UsbDeviceConfigurationDescriptor[USB_DESCRIPTOR_LENGTH_CONFIGURATION_ALL] = {
         /* Configuration Descriptor Size*/
         USB_DESCRIPTOR_LENGTH_CONFIGURE,
         /* CONFIGURATION Descriptor Type */
@@ -279,7 +279,7 @@ uint8_t g_UsbDeviceConfigurationDescriptor[/*USB_DESCRIPTOR_LENGTH_CONFIGURATION
         USB_CDC_CALL_MANAGEMENT_FUNC_DESC,
         0x01, /*Bit 0: Whether device handle call management itself 1, Bit 1: Whether device can send/receive call
              management information over a Data Class Interface 0 */
-        0x01, /* Indicates multiplexed commands are handled via data interface */
+        USB_CDC_VCOM0_DIC_INTERFACE_INDEX, /* Indicates multiplexed commands are handled via data interface */
 
         USB_DESCRIPTOR_LENGTH_CDC_ABSTRACT,   /* Size of this descriptor in bytes */
         USB_DESCRIPTOR_TYPE_CDC_CS_INTERFACE, /* CS_INTERFACE Descriptor Type */
@@ -290,8 +290,9 @@ uint8_t g_UsbDeviceConfigurationDescriptor[/*USB_DESCRIPTOR_LENGTH_CONFIGURATION
 
         USB_DESCRIPTOR_LENGTH_CDC_UNION_FUNC, /* Size of this descriptor in bytes */
         USB_DESCRIPTOR_TYPE_CDC_CS_INTERFACE, /* CS_INTERFACE Descriptor Type */
-        USB_CDC_UNION_FUNC_DESC, USB_CDC_VCOM0_CIC_INTERFACE_INDEX,        /* The interface number of the Communications or Data Class interface  */
-        USB_CDC_VCOM0_DIC_INTERFACE_INDEX,                                 /* Interface number of subordinate interface in the Union  */
+        USB_CDC_UNION_FUNC_DESC,
+        USB_CDC_VCOM0_CIC_INTERFACE_INDEX,    /* The interface number of the Communications or Data Class interface  */
+        USB_CDC_VCOM0_DIC_INTERFACE_INDEX,    /* Interface number of subordinate interface in the Union  */
 
         /*Notification Endpoint descriptor */
         USB_DESCRIPTOR_LENGTH_ENDPOINT, USB_DESCRIPTOR_TYPE_ENDPOINT,
@@ -348,7 +349,7 @@ uint8_t g_UsbDeviceConfigurationDescriptor[/*USB_DESCRIPTOR_LENGTH_CONFIGURATION
         USB_CDC_CALL_MANAGEMENT_FUNC_DESC,
         0x01, /*Bit 0: Whether device handle call management itself 1, Bit 1: Whether device can send/receive call
              management information over a Data Class Interface 0 */
-        0x01, /* Indicates multiplexed commands are handled via data interface */
+        USB_CDC_VCOM1_DIC_INTERFACE_INDEX, /* Indicates multiplexed commands are handled via data interface */
 
         USB_DESCRIPTOR_LENGTH_CDC_ABSTRACT,   /* Size of this descriptor in bytes */
         USB_DESCRIPTOR_TYPE_CDC_CS_INTERFACE, /* CS_INTERFACE Descriptor Type */
@@ -359,8 +360,9 @@ uint8_t g_UsbDeviceConfigurationDescriptor[/*USB_DESCRIPTOR_LENGTH_CONFIGURATION
 
         USB_DESCRIPTOR_LENGTH_CDC_UNION_FUNC, /* Size of this descriptor in bytes */
         USB_DESCRIPTOR_TYPE_CDC_CS_INTERFACE, /* CS_INTERFACE Descriptor Type */
-        USB_CDC_UNION_FUNC_DESC, USB_CDC_VCOM1_CIC_INTERFACE_INDEX, /* The interface number of the Communications or Data Class interface  */
-        USB_CDC_VCOM1_DIC_INTERFACE_INDEX,                                 /* Interface number of subordinate interface in the Union  */
+        USB_CDC_UNION_FUNC_DESC,
+        USB_CDC_VCOM1_CIC_INTERFACE_INDEX,    /* The interface number of the Communications or Data Class interface  */
+        USB_CDC_VCOM1_DIC_INTERFACE_INDEX,    /* Interface number of subordinate interface in the Union  */
 
         /*Notification Endpoint descriptor */
         USB_DESCRIPTOR_LENGTH_ENDPOINT, USB_DESCRIPTOR_TYPE_ENDPOINT,
@@ -419,7 +421,7 @@ uint8_t g_UsbDeviceConfigurationDescriptor[/*USB_DESCRIPTOR_LENGTH_CONFIGURATION
         USB_CDC_CALL_MANAGEMENT_FUNC_DESC,
         0x01, /*Bit 0: Whether device handle call management itself 1, Bit 1: Whether device can send/receive call
              management information over a Data Class Interface 0 */
-        0x01, /* Indicates multiplexed commands are handled via data interface */
+        USB_CDC_VCOM2_DIC_INTERFACE_INDEX, /* Indicates multiplexed commands are handled via data interface */
 
         USB_DESCRIPTOR_LENGTH_CDC_ABSTRACT,   /* Size of this descriptor in bytes */
         USB_DESCRIPTOR_TYPE_CDC_CS_INTERFACE, /* CS_INTERFACE Descriptor Type */
@@ -459,10 +461,12 @@ uint8_t g_UsbDeviceConfigurationDescriptor[/*USB_DESCRIPTOR_LENGTH_CONFIGURATION
 };
 
 /* Define string descriptor */
-uint8_t g_UsbDeviceString0[USB_DESCRIPTOR_LENGTH_STRING0] = {sizeof(g_UsbDeviceString0), USB_DESCRIPTOR_TYPE_STRING,
-                                                             0x09, 0x04};
+static uint8_t g_UsbDeviceString0[USB_DESCRIPTOR_LENGTH_STRING0] = {
+        sizeof(g_UsbDeviceString0), USB_DESCRIPTOR_TYPE_STRING,
+        0x09, 0x04
+};
 
-uint8_t g_UsbDeviceString1[USB_DESCRIPTOR_LENGTH_STRING1] = {
+static uint8_t g_UsbDeviceString1[USB_DESCRIPTOR_LENGTH_STRING1] = {
         sizeof(g_UsbDeviceString1),
         USB_DESCRIPTOR_TYPE_STRING,
         'I',
@@ -485,127 +489,138 @@ uint8_t g_UsbDeviceString1[USB_DESCRIPTOR_LENGTH_STRING1] = {
         0x00U,
 };
 
-uint8_t g_UsbDeviceString2[USB_DESCRIPTOR_LENGTH_STRING2] = {sizeof(g_UsbDeviceString2),
-                                                             USB_DESCRIPTOR_TYPE_STRING,
-                                                             'C',
-                                                             0,
-                                                             'l',
-                                                             0,
-                                                             'o',
-                                                             0,
-                                                             'u',
-                                                             0,
-                                                             'd',
-                                                             0,
-                                                             ' ',
-                                                             0,
-                                                             'C',
-                                                             0,
-                                                             'h',
-                                                             0,
-                                                             'a',
-                                                             0,
-                                                             's',
-                                                             0,
-                                                             'e',
-                                                             0,
-                                                             'r',
-                                                             0,
-                                                             ' ',
-                                                             0,
-                                                             '2',
-                                                             0,
-                                                             '.',
-                                                             0,
-                                                             '0',
-                                                             0};
+static uint8_t g_UsbDeviceString2[USB_DESCRIPTOR_LENGTH_STRING2] = {
+        sizeof(g_UsbDeviceString2),
+        USB_DESCRIPTOR_TYPE_STRING,
+        'C',
+        0,
+        'l',
+        0,
+        'o',
+        0,
+        'u',
+        0,
+        'd',
+        0,
+        ' ',
+        0,
+        'C',
+        0,
+        'h',
+        0,
+        'a',
+        0,
+        's',
+        0,
+        'e',
+        0,
+        'r',
+        0,
+        ' ',
+        0,
+        '2',
+        0,
+        '.',
+        0,
+        '0',
+        0
+};
 
-uint8_t g_UsbDeviceString3[USB_DESCRIPTOR_LENGTH_STRING3] = {sizeof(g_UsbDeviceString3),
-                                                             USB_DESCRIPTOR_TYPE_STRING,
-                                                             '0',
-                                                             0x00U,
-                                                             '1',
-                                                             0x00U,
-                                                             '2',
-                                                             0x00U,
-                                                             '3',
-                                                             0x00U,
-                                                             '4',
-                                                             0x00U,
-                                                             '5',
-                                                             0x00U,
-                                                             '6',
-                                                             0x00U,
-                                                             '7',
-                                                             0x00U,
-                                                             '8',
-                                                             0x00U,
-                                                             '9',
-                                                             0x00U,
-                                                             'A',
-                                                             0x00U,
-                                                             'B',
-                                                             0x00U,
-                                                             'C',
-                                                             0x00U,
-                                                             'D',
-                                                             0x00U,
-                                                             'E',
-                                                             0x00U,
-                                                             'F',
-                                                             0x00U};
+static uint8_t g_UsbDeviceString3[USB_DESCRIPTOR_LENGTH_STRING3] = {
+        sizeof(g_UsbDeviceString3),
+        USB_DESCRIPTOR_TYPE_STRING,
+        '0',
+        0x00U,
+        '1',
+        0x00U,
+        '2',
+        0x00U,
+        '3',
+        0x00U,
+        '4',
+        0x00U,
+        '5',
+        0x00U,
+        '6',
+        0x00U,
+        '7',
+        0x00U,
+        '8',
+        0x00U,
+        '9',
+        0x00U,
+        'A',
+        0x00U,
+        'B',
+        0x00U,
+        'C',
+        0x00U,
+        'D',
+        0x00U,
+        'E',
+        0x00U,
+        'F',
+        0x00U
+};
 
-uint8_t g_UsbDeviceString4[USB_DESCRIPTOR_LENGTH_STRING4] = {sizeof(g_UsbDeviceString4),
-                                                             USB_DESCRIPTOR_TYPE_STRING,
-                                                             'M',
-                                                             0,
-                                                             'C',
-                                                             0,
-                                                             'U',
-                                                             0,
-                                                             ' ',
-                                                             0,
-                                                             'R',
-                                                             0,
-                                                             'A',
-                                                             0,
-                                                             'M',
-                                                             0,
-                                                             ' ',
-                                                             0,
-                                                             'D',
-                                                             0,
-                                                             'I',
-                                                             0,
-                                                             'S',
-                                                             0,
-                                                             'K',
-                                                             0,
-                                                             ' ',
-                                                             0,
-                                                             'D',
-                                                             0,
-                                                             'E',
-                                                             0,
-                                                             'M',
-                                                             0,
-                                                             'O',
-                                                             0};
+static uint8_t g_UsbDeviceString4[USB_DESCRIPTOR_LENGTH_STRING4] = {
+        sizeof(g_UsbDeviceString4),
+        USB_DESCRIPTOR_TYPE_STRING,
+        'M',
+        0,
+        'C',
+        0,
+        'U',
+        0,
+        ' ',
+        0,
+        'R',
+        0,
+        'A',
+        0,
+        'M',
+        0,
+        ' ',
+        0,
+        'D',
+        0,
+        'I',
+        0,
+        'S',
+        0,
+        'K',
+        0,
+        ' ',
+        0,
+        'D',
+        0,
+        'E',
+        0,
+        'M',
+        0,
+        'O',
+        0
+};
 
 /* Define string descriptor size */
-uint32_t g_UsbDeviceStringDescriptorLength[USB_DEVICE_STRING_COUNT] = {
-        sizeof(g_UsbDeviceString0), sizeof(g_UsbDeviceString1), sizeof(g_UsbDeviceString2), sizeof(g_UsbDeviceString3),
-        sizeof(g_UsbDeviceString4)};
+static uint32_t g_UsbDeviceStringDescriptorLength[USB_DEVICE_STRING_COUNT] = {
+        sizeof(g_UsbDeviceString0), sizeof(g_UsbDeviceString1),
+        sizeof(g_UsbDeviceString2), sizeof(g_UsbDeviceString3),
+        sizeof(g_UsbDeviceString4)
+};
 
-uint8_t *g_UsbDeviceStringDescriptorArray[USB_DEVICE_STRING_COUNT] = {
-        g_UsbDeviceString0, g_UsbDeviceString1, g_UsbDeviceString2, g_UsbDeviceString3, g_UsbDeviceString4};
+static uint8_t *g_UsbDeviceStringDescriptorArray[USB_DEVICE_STRING_COUNT] = {
+        g_UsbDeviceString0, g_UsbDeviceString1, g_UsbDeviceString2,
+        g_UsbDeviceString3, g_UsbDeviceString4
+};
 
-usb_language_t g_UsbDeviceLanguage[USB_DEVICE_LANGUAGE_COUNT] = {{
-                                                                         g_UsbDeviceStringDescriptorArray, g_UsbDeviceStringDescriptorLength, (uint16_t)0x0409,
-                                                                 }};
+static usb_language_t g_UsbDeviceLanguage[USB_DEVICE_LANGUAGE_COUNT] = {
+        {g_UsbDeviceStringDescriptorArray, g_UsbDeviceStringDescriptorLength, (uint16_t)0x0409},
+};
 
-usb_language_list_t g_UsbDeviceLanguageList = {
-        g_UsbDeviceString0, sizeof(g_UsbDeviceString0), g_UsbDeviceLanguage, USB_DEVICE_LANGUAGE_COUNT,
+static usb_language_list_t g_UsbDeviceLanguageList = {
+        g_UsbDeviceString0, sizeof(g_UsbDeviceString0),
+        g_UsbDeviceLanguage, USB_DEVICE_LANGUAGE_COUNT,
 };
 
 /*******************************************************************************
@@ -717,6 +732,7 @@ usb_status_t USB_DeviceSetSpeed(usb_device_handle handle, uint8_t speed)
 {
     usb_descriptor_union_t *ptr1;
     usb_descriptor_union_t *ptr2;
+    const uint8_t hs = speed == USB_SPEED_HIGH ? (uint8_t)1 : (uint8_t)0;
 
     ptr1 = (usb_descriptor_union_t *)(&g_UsbDeviceConfigurationDescriptor[0]);
     ptr2 = (usb_descriptor_union_t *)(&g_UsbDeviceConfigurationDescriptor[USB_DESCRIPTOR_LENGTH_CONFIGURATION_ALL - 1]);
@@ -725,130 +741,118 @@ usb_status_t USB_DeviceSetSpeed(usb_device_handle handle, uint8_t speed)
     {
         if (ptr1->common.bDescriptorType == USB_DESCRIPTOR_TYPE_ENDPOINT)
         {
-            if (USB_SPEED_HIGH == speed)
-            {
-                if (USB_CDC_VCOM0_CIC_INTERRUPT_IN_ENDPOINT ==
-                    (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
+            uint8_t ep = (uint8_t)(ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
+            
+            if (ep == USB_CDC_VCOM0_CIC_INTERRUPT_IN_ENDPOINT) {
+                if (hs) {
                     ptr1->endpoint.bInterval = HS_CDC_VCOM0_INTERRUPT_IN_INTERVAL;
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM0_INTERRUPT_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM0_DIC_BULK_IN_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM0_BULK_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM0_BULK_OUT_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                }
-                #if USB_CDC_INSTANCE_COUNT > 1
-                else
-                if (USB_CDC_VCOM1_CIC_INTERRUPT_IN_ENDPOINT ==
-                    (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    ptr1->endpoint.bInterval = HS_CDC_VCOM1_INTERRUPT_IN_INTERVAL;
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM1_INTERRUPT_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM1_DIC_BULK_IN_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM1_BULK_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM1_BULK_OUT_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                }
-                #endif
-                #if USB_CDC_INSTANCE_COUNT > 2
-                else
-                if (USB_CDC_VCOM2_CIC_INTERRUPT_IN_ENDPOINT ==
-                    (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    ptr1->endpoint.bInterval = HS_CDC_VCOM2_INTERRUPT_IN_INTERVAL;
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM2_INTERRUPT_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM2_DIC_BULK_IN_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM2_BULK_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM2_BULK_OUT_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                }
-                #endif
-            }
-            else
-            {
-                if (USB_CDC_VCOM0_CIC_INTERRUPT_IN_ENDPOINT ==
-                    (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
+                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM0_INTERRUPT_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize);
+                } else {
                     ptr1->endpoint.bInterval = FS_CDC_VCOM0_INTERRUPT_IN_INTERVAL;
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM0_INTERRUPT_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM0_DIC_BULK_IN_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM0_BULK_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM0_BULK_OUT_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
+                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM0_INTERRUPT_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize);
                 }
-                #if USB_CDC_INSTANCE_COUNT > 1
-                else
-                if (USB_CDC_VCOM1_CIC_INTERRUPT_IN_ENDPOINT ==
-                    (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    ptr1->endpoint.bInterval = FS_CDC_VCOM1_INTERRUPT_IN_INTERVAL;
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM1_INTERRUPT_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM1_DIC_BULK_IN_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM1_BULK_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM1_BULK_OUT_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                }
-                #endif
-                #if USB_CDC_INSTANCE_COUNT > 2
-                else
-                if (USB_CDC_VCOM2_CIC_INTERRUPT_IN_ENDPOINT ==
-                    (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    ptr1->endpoint.bInterval = FS_CDC_VCOM2_INTERRUPT_IN_INTERVAL;
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM2_INTERRUPT_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM2_DIC_BULK_IN_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM2_BULK_IN_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                } else if (USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT ==
-                           (ptr1->endpoint.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK)) {
-                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM2_BULK_OUT_PACKET_SIZE,
-                                                       ptr1->endpoint.wMaxPacketSize);
-                }
-                #endif
-
             }
+
+            if (ep == USB_CDC_VCOM0_DIC_BULK_IN_ENDPOINT) {
+                if (hs) { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM0_BULK_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+                else    { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM0_BULK_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+            }
+
+            if (ep == USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT) {
+                if (hs) { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM0_BULK_OUT_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+                else    { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM0_BULK_OUT_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+            }
+
+            #if USB_CDC_INSTANCE_COUNT > 1
+
+            if (ep == USB_CDC_VCOM1_CIC_INTERRUPT_IN_ENDPOINT) {
+                if (hs) {
+                    ptr1->endpoint.bInterval = HS_CDC_VCOM1_INTERRUPT_IN_INTERVAL;
+                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM1_INTERRUPT_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize);
+                } else {
+                    ptr1->endpoint.bInterval = FS_CDC_VCOM1_INTERRUPT_IN_INTERVAL;
+                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM1_INTERRUPT_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize);
+                }
+            }
+
+            if (ep == USB_CDC_VCOM1_DIC_BULK_IN_ENDPOINT) {
+                if (hs) { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM1_BULK_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+                else    { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM1_BULK_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+            }
+
+            if (ep == USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT) {
+                if (hs) { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM1_BULK_OUT_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+                else    { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM1_BULK_OUT_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+            }
+
+            #endif
+
+            #if USB_CDC_INSTANCE_COUNT > 2
+
+            if (ep == USB_CDC_VCOM2_CIC_INTERRUPT_IN_ENDPOINT) {
+                if (hs) {
+                    ptr1->endpoint.bInterval = HS_CDC_VCOM2_INTERRUPT_IN_INTERVAL;
+                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM2_INTERRUPT_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize);
+                } else {
+                    ptr1->endpoint.bInterval = FS_CDC_VCOM2_INTERRUPT_IN_INTERVAL;
+                    USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM2_INTERRUPT_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize);
+                }
+            }
+
+            if (ep == USB_CDC_VCOM2_DIC_BULK_IN_ENDPOINT) {
+                if (hs) { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM2_BULK_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+                else    { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM2_BULK_IN_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+            }
+
+            if (ep == USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT) {
+                if (hs) { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM2_BULK_OUT_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+                else    { USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM2_BULK_OUT_PACKET_SIZE, ptr1->endpoint.wMaxPacketSize); }
+            }
+
+            #endif
+        
         }
+
         ptr1 = (usb_descriptor_union_t *)((uint8_t *)ptr1 + ptr1->common.bLength);
     }
 
     for (int i = 0; i < USB_CDC_VCOM_CIC_ENDPOINT_COUNT; i++) {
-        if (USB_SPEED_HIGH == speed) {
+        if (hs) {
             g_cdcVcomCicEndpoints[0][i].maxPacketSize = HS_CDC_VCOM0_INTERRUPT_IN_PACKET_SIZE;
+            #if USB_CDC_INSTANCE_COUNT > 1
             g_cdcVcomCicEndpoints[1][i].maxPacketSize = HS_CDC_VCOM1_INTERRUPT_IN_PACKET_SIZE;
+            #endif
+            #if USB_CDC_INSTANCE_COUNT > 2
+            g_cdcVcomCicEndpoints[2][i].maxPacketSize = HS_CDC_VCOM2_INTERRUPT_IN_PACKET_SIZE;
+            #endif
         } else {
             g_cdcVcomCicEndpoints[0][i].maxPacketSize = FS_CDC_VCOM0_INTERRUPT_IN_PACKET_SIZE;
+            #if USB_CDC_INSTANCE_COUNT > 1
             g_cdcVcomCicEndpoints[1][i].maxPacketSize = FS_CDC_VCOM1_INTERRUPT_IN_PACKET_SIZE;
+            #endif
+            #if USB_CDC_INSTANCE_COUNT > 2
+            g_cdcVcomCicEndpoints[2][i].maxPacketSize = FS_CDC_VCOM2_INTERRUPT_IN_PACKET_SIZE;
+            #endif
         }
     }
 
     for (int i = 0; i < USB_CDC_VCOM_DIC_ENDPOINT_COUNT; i++) {
-        if (USB_SPEED_HIGH == speed) {
+        if (hs) {
             g_cdcVcomDicEndpoints[0][i].maxPacketSize = HS_CDC_VCOM0_BULK_IN_PACKET_SIZE;
+            #if USB_CDC_INSTANCE_COUNT > 1
             g_cdcVcomDicEndpoints[1][i].maxPacketSize = HS_CDC_VCOM1_BULK_IN_PACKET_SIZE;
+            #endif
+            #if USB_CDC_INSTANCE_COUNT > 2
+            g_cdcVcomDicEndpoints[2][i].maxPacketSize = HS_CDC_VCOM2_BULK_IN_PACKET_SIZE;
+            #endif
         } else {
             g_cdcVcomDicEndpoints[0][i].maxPacketSize = FS_CDC_VCOM0_BULK_IN_PACKET_SIZE;
+            #if USB_CDC_INSTANCE_COUNT > 1
             g_cdcVcomDicEndpoints[1][i].maxPacketSize = FS_CDC_VCOM1_BULK_IN_PACKET_SIZE;
+            #endif
+            #if USB_CDC_INSTANCE_COUNT > 2
+            g_cdcVcomDicEndpoints[2][i].maxPacketSize = FS_CDC_VCOM2_BULK_IN_PACKET_SIZE;
+            #endif
         }
     }
 
