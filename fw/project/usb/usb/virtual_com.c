@@ -42,7 +42,7 @@
 
 
 
-#define USB_VCOM_TASK_STACK_SIZE            (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
+#define USB_VCOM_TASK_STACK_SIZE            (TASK_STACK_SIZE_DEFAULT / sizeof(StackType_t))
 #define USB_VCOM_RX_TASK_STACK_SIZE         (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
 #define USB_VCOM_TX_QUEUE_LEN               4
 #define USB_VCOM_RX_QUEUE_LEN               4
@@ -152,8 +152,6 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 
     usb_cdc_acm_info_t *acmInfo = &usb_vcom[instance].acm;
 
-    itm_printf(0, "usb[%i] ev=%lu\r\n", instance, event);
-
     switch (event)
     {
         case kUSB_DeviceCdcEventSendResponse:
@@ -164,7 +162,6 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                  ** meaning that we want to inform the host that we do not have any additional
                  ** data, so it can flush the output.
                  */
-                itm_printf(0, "usb[%i] flush\r\n", instance);
                 ep = ((u8 []){USB_CDC_VCOM0_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_IN_ENDPOINT})[instance];
                 error = USB_DeviceCdcAcmSend(handle, ep, NULL, 0);
             }
@@ -172,8 +169,6 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
             {
                 if ((epCbParam->buffer != NULL) || ((epCbParam->buffer == NULL) && (epCbParam->length == 0)))
                 {
-                    itm_printf(0, "usb[%i] tx done, sched rx\r\n", instance);
-
                     ep = ((u8 []){USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT})[instance];
                     error = USB_DeviceCdcAcmRecv(handle, ep, usb_vcom[instance].rx_buf, g_cdcVcomDicEndpoints[instance][0].maxPacketSize);
 
@@ -357,14 +352,12 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
             len = (uint32_t)(NOTIF_PACKET_SIZE + UART_BITMAP_SIZE);
             if (0 == ((usb_device_cdc_acm_struct_t *)handle)->hasSentState)
             {
-                itm_printf(0, "usb[%i] send line state notif\r\n", instance);
                 ep = ((u8 []){USB_CDC_VCOM0_CIC_INTERRUPT_IN_ENDPOINT, USB_CDC_VCOM1_CIC_INTERRUPT_IN_ENDPOINT, USB_CDC_VCOM2_CIC_INTERRUPT_IN_ENDPOINT})[instance];
                 error = USB_DeviceCdcAcmSend(handle, ep, acmInfo->serialStateBuf, len);
                 if (kStatus_USB_Success != error)
                 {
                     usb_echo("kUSB_DeviceCdcEventSetControlLineState error!");
                 }
-                itm_printf(0, "usb[%i] sent line state notif\r\n", instance);
                 ((usb_device_cdc_acm_struct_t *)handle)->hasSentState = 1;
             }
 
@@ -383,7 +376,6 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                 if (1 == g_deviceComposite->cdcVcom[instance].attach)
                 {
                     g_deviceComposite->cdcVcom[instance].startTransactions = 1;
-                    itm_printf(0, "usb[%i] dte activate\r\n", instance);
                 }
             }
             else
@@ -392,8 +384,6 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                 if (1 == g_deviceComposite->cdcVcom[instance].attach)
                 {
                     g_deviceComposite->cdcVcom[instance].startTransactions = 0;
-                    itm_printf(0, "usb[%i] dte deactivate\r\n", instance);
-                    //usb_vcom[instance].receiving = false;
                 }
             }
         }
@@ -550,7 +540,7 @@ usb_status_t USB_DeviceCdcVcomSetConfigure(class_handle_t handle, uint8_t config
 
         const u8 ep = ((u8[]){USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT})[instance];
 
-        itm_printf(0, "usb: attach com #%i\r\n", instance);
+        //itm_printf(0, "usb: attach com #%i\r\n", instance);
 
         g_deviceComposite->cdcVcom[instance].attach = 1;
         /* Schedule buffer for receive */

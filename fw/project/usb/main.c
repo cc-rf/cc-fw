@@ -878,7 +878,7 @@ static u8 usb_in_decode_data[USB_CDC_INSTANCE_COUNT][USB_IN_DATA_MAX+1];
 
 static void usb_recv(u8 port, size_t size, u8 *data)
 {
-    itm_printf(0, "usb[%i] rx: size=%lu\r\n", port, size);
+    //itm_printf(0, "usb[%i] rx: size=%lu\r\n", port, size);
 
     if (!size || !data) return;
 

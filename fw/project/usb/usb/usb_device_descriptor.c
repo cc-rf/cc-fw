@@ -119,7 +119,7 @@ static usb_device_interface_struct_t g_cdcVcomDicInterface[USB_CDC_INSTANCE_COUN
         {
             0,
             {
-                USB_CDC_VCOM_DIC_ENDPOINT_COUNT, &g_cdcVcomDicEndpoints[1][0],
+                USB_CDC_VCOM_DIC_ENDPOINT_COUNT, &g_cdcVcomDicEndpoints[0][0],
             },
         },
     #if USB_CDC_INSTANCE_COUNT > 1

@@ -205,7 +205,7 @@ usb_device_class_config_struct_t g_compositeDevice[USB_CDC_INSTANCE_COUNT] = {
 
 /* USB device class configuration information */
 usb_device_class_config_list_struct_t g_compositeDeviceConfigList = {
-    g_compositeDevice, USB_DeviceCallback, 2,
+    g_compositeDevice, USB_DeviceCallback, USB_CDC_INSTANCE_COUNT,
 };
 
 /*!
