@@ -30,7 +30,7 @@ extern pit_t pit_hop;
 #define NMAC_PEER_MAX       10
 
 #define NMAC_PEND_MAX       1
-#define NMAC_PEND_TIME      5
+#define NMAC_PEND_TIME      7
 #define NMAC_PEND_RETRY     3
 
 #define NMAC_TXQ_COUNT      3 // This should eventually reflect the number of threads waiting on messages
@@ -93,9 +93,9 @@ typedef struct __packed {
 typedef struct __packed {
     u16 addr;
     u8 seqn;
-    u32 ack_prev_rem;
-    chan_t ack_prev_chan;
-    u8 ack_prev_seqn;
+    //u32 ack_prev_rem;
+    //chan_t ack_prev_chan;
+    //u8 ack_prev_seqn;
 
 } nmac_peer_t;
 
@@ -112,7 +112,7 @@ typedef struct __packed {
 static bool send(u16 dest, u8 flag, u16 size, u8 data[]);
 static void tx_task(void *param);
 static void rx_task(void *param);
-static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
+static bool handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
 
 
 static struct {
@@ -141,7 +141,7 @@ static struct {
     nmac_pend_t pend[NMAC_PEND_MAX];
     nmac_peer_t peer[NMAC_PEER_MAX];
 
-} nmac = {NULL};
+} nmac;
 
 static u16 mac_addr = 0;
 static u8 mac_seqn = 0;
@@ -164,22 +164,19 @@ static nmac_peer_t *peer_get_or_add(u16 addr)
     if (pp) {
         pp->addr = addr;
         pp->seqn = 0;
-        pp->ack_prev_rem = UINT32_MAX;
-        pp->ack_prev_chan = (chan_t) -1;
-        pp->ack_prev_seqn = 0;
+        //pp->ack_prev_rem = UINT32_MAX;
+        //pp->ack_prev_chan = (chan_t) -1;
+        //pp->ack_prev_seqn = 0;
         return pp;
     }
 
     return NULL;
 }
 
-static bool mstr;
-
 bool nmac_init(u8 cell, u16 addr, bool sync_master, mac_recv_t rx)
 {
     mac_addr = addr;
     nmac.rx = rx;
-    mstr = sync_master;
 
     nmac.txq = xQueueCreateStatic(NMAC_TXQ_SIZE, sizeof(nmac.txq_buf[0]), (u8 *)nmac.txq_buf, &nmac.txq_static);
     nmac.rxq = xQueueCreateStatic(NMAC_RXQ_SIZE, sizeof(nmac.rxq_buf[0]), (u8 *)nmac.rxq_buf, &nmac.rxq_static);
@@ -238,7 +235,8 @@ static bool send_packet(nmac_static_pkt_t *pkt)
     const u8 pkt_len = sizeof(nmac_pkt_t) + pkt->size;
     const bool imm = pkt->flag & MAC_FLAG_PKT_IMM;
     const bool needs_ack = pkt->flag & MAC_FLAG_ACK_REQ;
-    const u8 nphy_flag = (u8)(imm ? PHY_PKT_FLAG_IMMEDIATE : 0);
+    const u8 nphy_flag = (u8)((imm ? PHY_PKT_FLAG_IMMEDIATE : 0) | PHY_PKT_FLAG_BLOCK);
+
     nmac_pend_t *pend = NULL;
     u8 pend_idx;
     u8 retry = NMAC_PEND_RETRY;
@@ -273,20 +271,52 @@ static bool send_packet(nmac_static_pkt_t *pkt)
         }
     }
 
-    const sclk_t start = sclk_time();
+    sclk_t sent;
+    u32 rem, rem2;
 
 _retry_tx:
-    nphy_tx(nphy_flag, (u8 *)pkt, pkt_len);
-    nmac_debug_pkt(
-            "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t %s",
-            pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, SCLK_MSEC(sclk_time()),
-            pkt->flag & MAC_FLAG_ACK_REQ ? "TX-ACK-REQ" : (pkt->flag & MAC_FLAG_ACK_RSP ? "TX-ACK-RSP" : "TX")
-    );
+
+    sent = sclk_time();
+    rem = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
+
+    if (!nphy_tx(nphy_flag, (u8 *)pkt, pkt_len)) {
+
+        if (--retry) {
+            nmac_warn("retry 0x%02X/%u [tx fail]", pkt->seqn, pkt->size);
+            goto _retry_tx;
+
+        } else {
+            nmac_warn("drop 0x%02X/%u [tx fail]", pkt->seqn, pkt->size);
+
+            // TODO: Better cleanup/return flow
+
+            if (needs_ack) {
+                if (!xQueueSend(nmac.pendq, &pend_idx, 0)) {
+                    nmac_debug("(critical) unable to return pend sem to resource queue");
+                    assert(false);
+                }
+
+                xSemaphoreGive(pend->mtx);
+            }
+
+            return false;
+        }
+
+    } else {
+        rem2 = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
+        sent = sclk_time() - sent;
+
+        nmac_debug_pkt(
+                "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t %s",
+                pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, SCLK_MSEC(sent),
+                pkt->flag & MAC_FLAG_ACK_REQ ? "TX-ACK-REQ" : (pkt->flag & MAC_FLAG_ACK_RSP ? "TX-ACK-RSP" : "TX")
+        );
+    }
 
     if (needs_ack) {
         xSemaphoreGive(pend->mtx);
 
-        const u32 tx_time = NMAC_PEND_TIME + (1000 + 2 * nphy_delay(pkt->size + (u8)MAC_PKT_OVERHEAD)) / 1000;
+        const u32 tx_time = (NMAC_PEND_TIME /** (NMAC_PEND_RETRY - retry + 1)*/) + (2 * nphy_delay(pkt->size + (u8)MAC_PKT_OVERHEAD)) / 1000;
 
         if (!xSemaphoreTake(pend->sem, pdMS_TO_TICKS(tx_time))) {
 
@@ -303,12 +333,11 @@ _retry_tx:
 
                     if (!(pkt->flag & MAC_FLAG_ACK_RQR)) {
                         pkt->flag |= MAC_FLAG_ACK_RQR;
+                        //pkt->flag |= MAC_FLAG_PKT_IMM; // retries are urgent
                     }
 
-                    nmac_debug("retry:  seq=%03lu chan=%02u rem=%05lu len=%03lu elapsed=%02lu",
-                               (u32)pkt->seqn, chan_cur,
-                               (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u),
-                               (u32)pkt->size, sclk_time() - start
+                    nmac_debug("retry: chan=%u seq=%03lu rem0=%lu rem1=%lu send=%lu",
+                               chan_cur, (u32)pkt->seqn, rem, rem2, (u32)sent
                     );
 
                     goto _retry_tx;
@@ -324,6 +353,10 @@ _retry_tx:
                 assert(false);
             }
         }
+
+        /*if (retry != NMAC_PEND_RETRY) {
+            itm_printf(0, "retry %u\n", NMAC_PEND_RETRY - retry);
+        }*/
 
         pend->pkt = NULL;
 
@@ -387,12 +420,13 @@ static void rx_task(void *param __unused)
     }
 }
 
-static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
+static bool handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 {
     nmac_pkt_t *const pkt = (nmac_pkt_t *)data;
+    bool unblock = false;
 
     if (size != sizeof(nmac_pkt_t) + pkt->size) {
-        nmac_debug("(rx) bad length: len=%u != size=%u + sizeof(nmac_pkt_t)=%u", size, pkt->size, sizeof(nmac_pkt_t));
+        nmac_debug("(rx) bad length: len=%u != size=%u + base=%u", size, pkt->size, sizeof(nmac_pkt_t));
 
     } else {
         nmac_debug_pkt(
@@ -405,15 +439,19 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
             nmac_debug_v("(rx) drop: addr mismatch");
             
         } else {
+            if (pkt->dest == mac_addr) {
+                unblock = true;
+            }
+
             nmac_peer_t *const peer = peer_get_or_add(pkt->addr);
 
             if (peer) {
                 if (pkt->flag & MAC_FLAG_ACK_REQ) {
-                    const u32 remaining = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
+                    //const u32 remaining = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
 
                     send(pkt->addr, MAC_FLAG_PKT_BLK | MAC_FLAG_PKT_IMM | MAC_FLAG_ACK_RSP, sizeof(pkt->seqn), &pkt->seqn);
 
-                    if (pkt->flag & MAC_FLAG_ACK_RQR) {
+                    /*if (pkt->flag & MAC_FLAG_ACK_RQR) {
                         nmac_debug(
                                 "rqr-tx: seq=%03lu chan=%02u seq_prev=%03lu chan_prev=%02u rem=%05lu rem_prev=%05lu",
                                 (u32)pkt->seqn, chan_cur, (u32)peer->ack_prev_seqn,
@@ -423,7 +461,7 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 
                     peer->ack_prev_rem = remaining;
                     peer->ack_prev_chan = chan_cur;
-                    peer->ack_prev_seqn = pkt->seqn;
+                    peer->ack_prev_seqn = pkt->seqn;*/
                 }
 
                 if (pkt->flag & MAC_FLAG_ACK_RSP) {
@@ -442,10 +480,11 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 
                             if (pend && seqn == pend->seqn && (!pend->dest || pkt->addr == pend->dest)) {
                                 if (!(pend->flag & MAC_FLAG_ACK_RSP)) {
+
                                     pend->flag |= MAC_FLAG_ACK_RSP;
 
                                     if ((pend->flag & MAC_FLAG_ACK_RQR)) {
-                                        nmac_debug("rqr-rx: seq=%03lu chan=%02u rem=%05lu",
+                                        nmac_debug_v("rqr-rx: seq=%03lu chan=%02u rem=%05lu",
                                                    (u32)seqn, chan_cur,
                                                    (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u)
                                         );
@@ -454,10 +493,8 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                                     xSemaphoreGive(nmac.pend[i].mtx);
                                     xSemaphoreGive(nmac.pend[i].sem);
                                 } else {
-                                    nmac_debug("rqr-dp: seq=%03lu chan=%02u rem=%05lu",
-                                               (u32)seqn, chan_cur,
-                                               (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u)
-                                    );
+
+                                    itm_puts(0, "ack-dup\n");
                                     xSemaphoreGive(nmac.pend[i].mtx);
                                 }
 
@@ -469,10 +506,7 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
                     }
 
                     if (i == NMAC_PEND_MAX) {
-                        nmac_debug("rqr-lt: seq=%03lu chan=%02u rem=%05lu",
-                                   (u32)seqn, chan_cur,
-                                   (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u)
-                        );
+                        itm_puts(0, "ack-late\n");
                     }
 
                 } else {
@@ -491,7 +525,7 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 
                         if (recv.size) memcpy(recv.data, pkt->data, recv.size);
 
-                        if (!xQueueSend(nmac.rxq, &recv, 0/*pdMS_TO_TICKS(3)*/)) {
+                        if (!xQueueSend(nmac.rxq, &recv, 0)) {
                             nmac_debug("(rx) queue failed");
                         }
                     }
@@ -501,4 +535,6 @@ static void handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
             }
         }
     }
+
+    return unblock;
 }

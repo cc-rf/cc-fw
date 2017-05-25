@@ -32,7 +32,7 @@ target_link_libraries(
         PUBLIC util_uart
         PUBLIC libcc
         PUBLIC mcuc
-        "-Xlinker -defsym=__heap_size__=0x4000"
+        "-Xlinker -defsym=__heap_size__=0x10000"
         "-Xlinker -defsym=__stack_size__=0x500"
 )
 

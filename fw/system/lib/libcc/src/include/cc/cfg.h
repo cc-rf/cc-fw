@@ -118,6 +118,7 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  * AGC_CFG0: 0x0B->0x4F. Hysteresis 2dB->4dB. RSSI valid cnt 5->9. The RSSI count further improved measurement accuracy.
  * AGC_CFG1: 0x0C->0x12->0x08->0x1D->0x1E->0x27->0x1E. AGC settle/64->settle/40. AGC win/32->win/16,settle/24->64/80->64/96->128/127->64/80. 64/80 improves RSSI measurement accuracy.
  * PREAMBLE_CFG1: 0x18->0x20. Preamble size 4->6 bytes. To help with synchronization and support greter packet-to-packet size variation.
+ * DEVIATION_M/DEV_E: 0x48/0x0D->0x9A/0x0C. Deviation 100kHz->62.5kHz. I forgot that this is MSK when the rate is 250kbps (NOT 200!).
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -125,7 +126,6 @@ static inline bool cc_cfg_regs(cc_dev_t dev, const struct cc_cfg_reg regs[], u32
  *
  * 2017-02-25: TI DN005 Gives some insight on deviation selection and DC filter impact. http://www.ti.com/lit/an/swra122c/swra122c.pdf
  */
-
 static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC3,             0x5A},
         {CC1200_SYNC2,             0x0F},
@@ -133,8 +133,8 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_SYNC0,             0x66},
         {CC1200_SYNC_CFG1,         0xAA},
         {CC1200_SYNC_CFG0,         0x33},
-        {CC1200_DEVIATION_M,       0x48},
-        {CC1200_MODCFG_DEV_E,      0x0D},
+        {CC1200_DEVIATION_M,       0x9A},
+        {CC1200_MODCFG_DEV_E,      0x0C},
         {CC1200_DCFILT_CFG,        0x5D},
         {CC1200_PREAMBLE_CFG1,     0x20},
         {CC1200_PREAMBLE_CFG0,     0x8F},
@@ -183,6 +183,78 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_XOSC1,             0x03},
 };
 
+
+/**
+ * Standard medium-fast medium range configuration.
+ *
+ * Deviation        150 kHz
+ * Modulation       4-GFSK
+ * Symbol Rate      250 ksps
+ *
+ * Notes:
+ *
+ * 2017-05-20: Copied above config using old notes to revive a 4GFSK setup.
+ * DEVIATION_M/DEV_E: 0xEB/0x2D->0x0A/0x2E->0x0A/0x26. dev 150kHz->162.5kHz, 4-GFSK->FSK
+ * DEVIATION_M/DEV_E: ->0x9A/0x25. dev ->125kHz.
+ *
+ * Currently this still sucks.
+ */
+static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
+        {CC1200_SYNC3,             0x5A},
+        {CC1200_SYNC2,             0x0F},
+        {CC1200_SYNC1,             0xBE},
+        {CC1200_SYNC0,             0x66},
+        {CC1200_SYNC_CFG1,         0xAA},
+        {CC1200_SYNC_CFG0,         0x33},
+        {CC1200_DEVIATION_M,       0x9A},
+        {CC1200_MODCFG_DEV_E,      0x25},
+        {CC1200_DCFILT_CFG,        0x5D},
+        {CC1200_PREAMBLE_CFG1,     0x20},
+        {CC1200_PREAMBLE_CFG0,     0x8F},
+        {CC1200_IQIC,              0x80},
+        {CC1200_CHAN_BW,           0x03},
+        {CC1200_MDMCFG1,           0x42},
+        {CC1200_MDMCFG0,           0x05},
+        {CC1200_SYMBOL_RATE2,      0xB9},
+        {CC1200_SYMBOL_RATE1,      0x99},
+        {CC1200_SYMBOL_RATE0,      0x9A},
+        {CC1200_AGC_REF,           0x35},
+        {CC1200_AGC_CFG3,          0x31},
+        {CC1200_AGC_CFG2,          0x00},
+        {CC1200_AGC_CFG1,          0x27},
+        {CC1200_AGC_CFG0,          0x4F},
+        {CC1200_FIFO_CFG,          0x00},
+        {CC1200_FS_CFG,            0x12},
+        {CC1200_PKT_CFG2,          0x00},
+        {CC1200_PKT_CFG0,          0x20},
+        {CC1200_PA_CFG1,           0x77}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG0,           0x51},
+        {CC1200_PKT_LEN,           0xFF},
+        {CC1200_IF_MIX_CFG,        0x18},
+        {CC1200_FREQOFF_CFG,       0x2C},
+        {CC1200_MDMCFG2,           0x02},
+        {CC1200_FREQ2,             0x5C},
+        {CC1200_FREQ1,             0x0F},
+        {CC1200_FREQ0,             0x5C},
+        {CC1200_IF_ADC1,           0xEE},
+        {CC1200_IF_ADC0,           0x10},
+        {CC1200_FS_DIG1,           0x07},
+        {CC1200_FS_DIG0,           0xA0},
+        {CC1200_FS_CAL3,           0x40},
+        {CC1200_FS_CAL1,           0x40},
+        {CC1200_FS_CAL0,           0x0E},
+        {CC1200_FS_DIVTWO,         0x03},
+        {CC1200_FS_DSM0,           0x33},
+        {CC1200_FS_DVC0,           0x17},
+        {CC1200_FS_PFD,            0x00},
+        {CC1200_FS_PRE,            0x6E},
+        {CC1200_FS_REG_DIV_CML,    0x1C},
+        {CC1200_FS_SPARE,          0xAC},
+        {CC1200_FS_VCO0,           0xB5},
+        {CC1200_IFAMP,             0x09},
+        {CC1200_XOSC5,             0x0E},
+        {CC1200_XOSC1,             0x03},
+};
 
 
 /**

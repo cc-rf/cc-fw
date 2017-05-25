@@ -8,7 +8,7 @@
 #include <semphr.h>
 #include <task.h>
 
-#define CC_SPI_DMA
+//#define CC_SPI_DMA
 //#define CC_SPI_LOCK
 //#define CC_SPI_NOTIFY   (1u<<29)
 
