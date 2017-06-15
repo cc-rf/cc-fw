@@ -211,9 +211,9 @@ def send_frames(cc):
 
     while 1:
         count += 1
-        # data = '\x3A' * 24
+        # data = '\x3A' * 79
         data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
-        cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x3b23, data)
+        cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x3b1c, data)
         # time.sleep(.015)
 
 
@@ -246,7 +246,7 @@ def main(args):
             print >>sys.stderr, "done."
             sys.exit(0)
 
-        cleanup.install(lambda: sys.exit(1))
+        # cleanup.install(lambda: sys.exit(1))
 
         cc.io.status()
 
@@ -260,7 +260,7 @@ def main(args):
         pass
 
     except SystemExit:
-        pass
+        raise
 
     except:
         traceback.print_exc()
@@ -272,6 +272,6 @@ def main(args):
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print "usage:", os.path.basename(sys.argv[0]), "<tty>"
-        raise SystemExit
+        sys.exit(1)
 
     main(sys.argv[1:])

@@ -29,17 +29,17 @@ extern pit_t pit_hop;
 
 #define NMAC_PEER_MAX       10
 
-#define NMAC_PEND_MAX       1
-#define NMAC_PEND_TIME      7
+#define NMAC_PEND_TIME      17
 #define NMAC_PEND_RETRY     3
 
 #define NMAC_TXQ_COUNT      3 // This should eventually reflect the number of threads waiting on messages
-#define NMAC_TXQ_SIZE       (NMAC_PEND_MAX * NMAC_TXQ_COUNT)
+#define NMAC_TXQ_SIZE       (NMAC_TXQ_COUNT)
 #define NMAC_RXQ_SIZE       7
 
 #define MAC_TX_TASK_STACK_SIZE  (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
 #define MAC_RX_TASK_STACK_SIZE  (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
 
+#define MAC_NOTIFY_ACK      (1u<<10)
 
 #define nmac_warn(format, ...) itm_printf(0, format "\r\n", ##__VA_ARGS__ )
 #define nmac_debug(format, ...) itm_printf(0, format "\r\n", ##__VA_ARGS__ )
@@ -93,18 +93,14 @@ typedef struct __packed {
 typedef struct __packed {
     u16 addr;
     u8 seqn;
-    //u32 ack_prev_rem;
-    //chan_t ack_prev_chan;
-    //u8 ack_prev_seqn;
+    ///chan_t chan;
+    ///u32 rem;
 
 } nmac_peer_t;
 
 typedef struct __packed {
     nmac_pkt_t *pkt;
-    xSemaphoreHandle mtx;
-    StaticSemaphore_t mtx_static;
-    xSemaphoreHandle sem;
-    StaticSemaphore_t sem_static;
+    TaskHandle_t task;
 
 } nmac_pend_t;
 
@@ -118,27 +114,23 @@ static bool handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
 static struct {
     mac_recv_t rx;
 
-    xTaskHandle task;
+    TaskHandle_t task;
     StaticTask_t task_static;
     StackType_t task_stack[MAC_TX_TASK_STACK_SIZE];
 
-    xTaskHandle rx_task;
+    TaskHandle_t rx_task;
     StaticTask_t rx_task_static;
     StackType_t rx_task_stack[MAC_RX_TASK_STACK_SIZE];
 
-    xQueueHandle txq;
+    QueueHandle_t txq;
     StaticQueue_t txq_static;
     nmac_static_pkt_t txq_buf[NMAC_TXQ_SIZE];
 
-    xQueueHandle rxq;
+    QueueHandle_t rxq;
     StaticQueue_t rxq_static;
     nmac_recv_t rxq_buf[NMAC_RXQ_SIZE];
 
-    xQueueHandle pendq;
-    StaticQueue_t pendq_static;
-    u8 pendq_buf[NMAC_PEND_MAX];
-
-    nmac_pend_t pend[NMAC_PEND_MAX];
+    nmac_pend_t pend;
     nmac_peer_t peer[NMAC_PEER_MAX];
 
 } nmac;
@@ -164,9 +156,6 @@ static nmac_peer_t *peer_get_or_add(u16 addr)
     if (pp) {
         pp->addr = addr;
         pp->seqn = 0;
-        //pp->ack_prev_rem = UINT32_MAX;
-        //pp->ack_prev_chan = (chan_t) -1;
-        //pp->ack_prev_seqn = 0;
         return pp;
     }
 
@@ -180,20 +169,7 @@ bool nmac_init(u8 cell, u16 addr, bool sync_master, mac_recv_t rx)
 
     nmac.txq = xQueueCreateStatic(NMAC_TXQ_SIZE, sizeof(nmac.txq_buf[0]), (u8 *)nmac.txq_buf, &nmac.txq_static);
     nmac.rxq = xQueueCreateStatic(NMAC_RXQ_SIZE, sizeof(nmac.rxq_buf[0]), (u8 *)nmac.rxq_buf, &nmac.rxq_static);
-    nmac.pendq = xQueueCreateStatic(NMAC_PEND_MAX, sizeof(u8), nmac.pendq_buf, &nmac.pendq_static);
-
-    for (u8 i = 0; i < NMAC_PEND_MAX; ++i) {
-        nmac.pend[i].pkt = NULL;
-        nmac.pend[i].mtx = xSemaphoreCreateBinaryStatic(&nmac.pend[i].mtx_static);
-        nmac.pend[i].sem = xSemaphoreCreateBinaryStatic(&nmac.pend[i].sem_static);
-
-        xSemaphoreGive(nmac.pend[i].mtx);
-
-        if (!xQueueSend(nmac.pendq, &i, 0)) {
-            nmac_debug("error: unable queue pend during setup");
-            return false;
-        }
-    }
+    nmac.pend = (nmac_pend_t){ NULL, NULL };
 
     nmac.task = xTaskCreateStatic(tx_task, "nmac:send", MAC_TX_TASK_STACK_SIZE, NULL, TASK_PRIO_HIGHEST, nmac.task_stack, &nmac.task_static);
     nmac.rx_task = xTaskCreateStatic(rx_task, "nmac:recv", MAC_RX_TASK_STACK_SIZE, NULL, TASK_PRIO_HIGH, nmac.rx_task_stack, &nmac.rx_task_static);
@@ -228,6 +204,9 @@ bool nmac_send(nmac_send_t type, u16 dest, u16 size, u8 data[])
 
 extern u32 tx_times[];
 
+void prev_pkt_info(u32 *rem0, u32 *rem1, chan_t *chan0, chan_t *chan1);
+
+
 static bool send_packet(nmac_static_pkt_t *pkt)
 {
     assert(pkt->size <= MAC_PKT_SIZE_MAX);
@@ -237,8 +216,6 @@ static bool send_packet(nmac_static_pkt_t *pkt)
     const bool needs_ack = pkt->flag & MAC_FLAG_ACK_REQ;
     const u8 nphy_flag = (u8)((imm ? PHY_PKT_FLAG_IMMEDIATE : 0) | PHY_PKT_FLAG_BLOCK);
 
-    nmac_pend_t *pend = NULL;
-    u8 pend_idx;
     u8 retry = NMAC_PEND_RETRY;
 
     //nmac_debug_pkt(
@@ -257,27 +234,19 @@ static bool send_packet(nmac_static_pkt_t *pkt)
     }
 
     if (needs_ack) {
-        if (!xQueueReceive(nmac.pendq, &pend_idx, pdMS_TO_TICKS(1000))) {
-            nmac_debug("mac/tx: acquire pend failed");
-            return false;
-        }
-
-        pend = &nmac.pend[pend_idx];
-        pend->pkt = (nmac_pkt_t *)pkt;
-
-        if (!xSemaphoreTake(pend->mtx, pdMS_TO_TICKS(1000))) {
-            nmac_debug("mac/tx: acquire pend mtx failed");
-            return false;
-        }
+        nmac.pend.pkt = (nmac_pkt_t *)pkt;
+        nmac.pend.task = xTaskGetCurrentTaskHandle();
     }
 
-    sclk_t sent;
-    u32 rem, rem2;
+    ///sclk_t sent;
+    ///u32 rem, rem2;
+    ///chan_t chan_send;
 
 _retry_tx:
 
-    sent = sclk_time();
-    rem = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
+    ///chan_send = chan_cur;
+    ///sent = sclk_time();
+    ///rem = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
 
     if (!nphy_tx(nphy_flag, (u8 *)pkt, pkt_len)) {
 
@@ -291,20 +260,15 @@ _retry_tx:
             // TODO: Better cleanup/return flow
 
             if (needs_ack) {
-                if (!xQueueSend(nmac.pendq, &pend_idx, 0)) {
-                    nmac_debug("(critical) unable to return pend sem to resource queue");
-                    assert(false);
-                }
-
-                xSemaphoreGive(pend->mtx);
+                nmac.pend = (nmac_pend_t){ NULL, NULL };
             }
 
             return false;
         }
 
     } else {
-        rem2 = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
-        sent = sclk_time() - sent;
+        ///rem2 = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
+        ///sent = sclk_time() - sent;
 
         nmac_debug_pkt(
                 "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t %s",
@@ -314,16 +278,9 @@ _retry_tx:
     }
 
     if (needs_ack) {
-        xSemaphoreGive(pend->mtx);
-
         const u32 tx_time = (NMAC_PEND_TIME /** (NMAC_PEND_RETRY - retry + 1)*/) + (2 * nphy_delay(pkt->size + (u8)MAC_PKT_OVERHEAD)) / 1000;
 
-        if (!xSemaphoreTake(pend->sem, pdMS_TO_TICKS(tx_time))) {
-
-            if (!xSemaphoreTake(pend->mtx, pdMS_TO_TICKS(100))) {
-                nmac_debug("(critical) unable to acquire mutex for pend (1)");
-                assert(false);
-            }
+        if (!xTaskNotifyWait(MAC_NOTIFY_ACK, MAC_NOTIFY_ACK, NULL, pdMS_TO_TICKS(tx_time))) {
 
             if ((pkt->flag & MAC_FLAG_ACK_RSP)) {
                 nmac_debug("race condition: packet acked successfully");
@@ -336,9 +293,15 @@ _retry_tx:
                         //pkt->flag |= MAC_FLAG_PKT_IMM; // retries are urgent
                     }
 
-                    nmac_debug("retry: chan=%u seq=%03lu rem0=%lu rem1=%lu send=%lu",
-                               chan_cur, (u32)pkt->seqn, rem, rem2, (u32)sent
-                    );
+                    //nmac_debug("retry: chan=%02u/%02u seq=%03u \t rem0=%lu \t rem1=%lu \t send=%lu \t len=%u",
+                    //           chan_send, chan_cur, pkt->seqn, rem, rem2, (u32)sent, pkt_len
+                    //);
+
+                    u32 rem0, rem1;
+                    chan_t chan0, chan1;
+                    prev_pkt_info(&rem0, &rem1, &chan0, &chan1);
+
+                    nmac_debug("retry: seq=%03u len=%u pchn=%02u/%02u prem=%lu/%lu", pkt->seqn, pkt_len, chan0, chan1, rem0, rem1);
 
                     goto _retry_tx;
                 } else {
@@ -346,26 +309,13 @@ _retry_tx:
                     nmac_warn("drop 0x%02X/%u", pkt->seqn, pkt->size);
                 }
             }
-
-        } else {
-            if (!xSemaphoreTake(pend->mtx, pdMS_TO_TICKS(100))) {
-                nmac_debug("(critical) unable to acquire mutex for pend (2)");
-                assert(false);
-            }
         }
 
         /*if (retry != NMAC_PEND_RETRY) {
             itm_printf(0, "retry %u\n", NMAC_PEND_RETRY - retry);
         }*/
 
-        pend->pkt = NULL;
-
-        if (!xQueueSend(nmac.pendq, &pend_idx, 0)) {
-            nmac_debug("(critical) unable to return pend sem to resource queue");
-            assert(false);
-        }
-
-        xSemaphoreGive(pend->mtx);
+        nmac.pend = (nmac_pend_t){ NULL, NULL };
     }
 
     return true;
@@ -396,7 +346,7 @@ static bool send(u16 dest, u8 flag, u16 size, u8 data[])
 
 static void tx_task(void *param __unused)
 {
-    const xQueueHandle txq = nmac.txq;
+    const QueueHandle_t txq = nmac.txq;
     nmac_static_pkt_t pkt;
 
     while (1) {
@@ -410,7 +360,7 @@ static void tx_task(void *param __unused)
 
 static void rx_task(void *param __unused)
 {
-    const xQueueHandle rxq = nmac.rxq;
+    const QueueHandle_t rxq = nmac.rxq;
     nmac_recv_t recv;
 
     while (1) {
@@ -447,66 +397,41 @@ static bool handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 
             if (peer) {
                 if (pkt->flag & MAC_FLAG_ACK_REQ) {
-                    //const u32 remaining = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
-
-                    send(pkt->addr, MAC_FLAG_PKT_BLK | MAC_FLAG_PKT_IMM | MAC_FLAG_ACK_RSP, sizeof(pkt->seqn), &pkt->seqn);
-
                     /*if (pkt->flag & MAC_FLAG_ACK_RQR) {
+                        nmac_debug("rqr-ack-tx: seq=%03u pseq=%03u chan=%02u pchan=%02u \t prem=%lu", pkt->seqn, peer->seqn, chan_cur, peer->chan, peer->rem);
+                    } else {
+                        peer->chan = chan_cur;
+                        peer->rem = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
+                    }*/
+
+                    if (pkt->flag & MAC_FLAG_ACK_RQR) {
+                        u32 rem0, rem1;
+                        chan_t chan0, chan1;
+                        prev_pkt_info(&rem0, &rem1, &chan0, &chan1);
                         nmac_debug(
-                                "rqr-tx: seq=%03lu chan=%02u seq_prev=%03lu chan_prev=%02u rem=%05lu rem_prev=%05lu",
-                                (u32)pkt->seqn, chan_cur, (u32)peer->ack_prev_seqn,
-                                peer->ack_prev_chan, remaining, peer->ack_prev_rem
+                                "rqr-ack-tx: seq=%03u pseq=%03u len=%u pchn=%02u/%02u prem=%lu/%lu",
+                                pkt->seqn, peer->seqn, pkt->size + MAC_PKT_OVERHEAD, chan0, chan1, rem0, rem1
                         );
                     }
 
-                    peer->ack_prev_rem = remaining;
-                    peer->ack_prev_chan = chan_cur;
-                    peer->ack_prev_seqn = pkt->seqn;*/
+                    send(pkt->addr, MAC_FLAG_PKT_BLK | MAC_FLAG_PKT_IMM | MAC_FLAG_ACK_RSP, sizeof(pkt->seqn), &pkt->seqn);
                 }
 
                 if (pkt->flag & MAC_FLAG_ACK_RSP) {
                     const u8 seqn = *(u8 *)pkt->data;
-                    u8 i;
+                    nmac_pkt_t *const pend = nmac.pend.pkt;
 
-                    for (i = 0; i < NMAC_PEND_MAX; ++i) {
-                        if (nmac.pend[i].pkt) {
-                            if (!xSemaphoreTake(nmac.pend[i].mtx, 0)) {
-                                // TODO: Move this processing out to the receive handler.
-                                nmac_debug("(error) unable to acquire mutex for ack");
-                                continue;
-                            }
+                    if (pend && seqn == pend->seqn && (!pend->dest || pkt->addr == pend->dest)) {
+                        if (!(pend->flag & MAC_FLAG_ACK_RSP)) {
 
-                            nmac_pkt_t *const pend = nmac.pend[i].pkt;
+                            pend->flag |= MAC_FLAG_ACK_RSP;
 
-                            if (pend && seqn == pend->seqn && (!pend->dest || pkt->addr == pend->dest)) {
-                                if (!(pend->flag & MAC_FLAG_ACK_RSP)) {
+                            if (nmac.pend.task)
+                                xTaskNotify(nmac.pend.task, MAC_NOTIFY_ACK, eSetBits);
 
-                                    pend->flag |= MAC_FLAG_ACK_RSP;
-
-                                    if ((pend->flag & MAC_FLAG_ACK_RQR)) {
-                                        nmac_debug_v("rqr-rx: seq=%03lu chan=%02u rem=%05lu",
-                                                   (u32)seqn, chan_cur,
-                                                   (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u)
-                                        );
-                                    }
-
-                                    xSemaphoreGive(nmac.pend[i].mtx);
-                                    xSemaphoreGive(nmac.pend[i].sem);
-                                } else {
-
-                                    itm_puts(0, "ack-dup\n");
-                                    xSemaphoreGive(nmac.pend[i].mtx);
-                                }
-
-                                break;
-                            } else {
-                                xSemaphoreGive(nmac.pend[i].mtx);
-                            }
+                        } else {
+                            itm_puts(0, "ack-dup\n");
                         }
-                    }
-
-                    if (i == NMAC_PEND_MAX) {
-                        itm_puts(0, "ack-late\n");
                     }
 
                 } else {

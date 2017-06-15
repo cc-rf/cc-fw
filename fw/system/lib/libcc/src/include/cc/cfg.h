@@ -152,11 +152,8 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT[] = {
         {CC1200_AGC_CFG0,          0x4F},
         {CC1200_FIFO_CFG,          0x00},
         {CC1200_FS_CFG,            0x12},
-        {CC1200_PKT_CFG2,          0x00},
-        {CC1200_PKT_CFG0,          0x20},
         {CC1200_PA_CFG1,           0x77}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
-        {CC1200_PKT_LEN,           0xFF},
         {CC1200_IF_MIX_CFG,        0x18},
         {CC1200_FREQOFF_CFG,       0x2C},
         {CC1200_MDMCFG2,           0x02},
@@ -225,11 +222,8 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
         {CC1200_AGC_CFG0,          0x4F},
         {CC1200_FIFO_CFG,          0x00},
         {CC1200_FS_CFG,            0x12},
-        {CC1200_PKT_CFG2,          0x00},
-        {CC1200_PKT_CFG0,          0x20},
         {CC1200_PA_CFG1,           0x77}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
-        {CC1200_PKT_LEN,           0xFF},
         {CC1200_IF_MIX_CFG,        0x18},
         {CC1200_FREQOFF_CFG,       0x2C},
         {CC1200_MDMCFG2,           0x02},
@@ -257,60 +251,68 @@ static const struct cc_cfg_reg CC_CFG_DEFAULT_1[] = {
 };
 
 
+
+
 /**
- * Max rate configuration.
+ * New max rate configuration.
  *
- * Deviation        1666.6 kHz
+ * Deviation        600 kHz
  * Modulation       4-GFSK
- * Symbol Rate      500 ksps
+ * Symbol Rate      600 ksps
  *
  * Notes:
  *
- *
- *
+ * SYNC_CFG1: 0xA8->0xAA. Increasing sync word match tolerance 0x8->0xA.
+ * SYNC_CFG0: 0x03->0x13. RX config limitation bit.
+ * CHAN_BW: 0x01->0x41->0x01. RX bandwidth 1.6MHz->833kHz->1.6MHz.
+ * DEVIATION_M/DEV_E: 0x47/0x2F->0x9A/0x2E->0x48/0x2F. dev 399kHz->250kHz->400kHz.
+ * PREAMBLE_CFG1: 0x00->0x20. Preamble length 3->6 bytes.
+ * AGC_REF: 0x33->0x38. SmartRF recommended after changing chan bw.
+ * SYNC_CFG0: 0x13->0x03. Does not work when set, but not needed anyway.
+ * DEVIATION_M/DEV_E: 0x48/0x2F->0x9A/0x2F. dev 400kHz->500kHz.
+ * AGC_CFG2: 0x60->0x00. Default mode.
+ * IF_MIX_CFG: 0x00. Calling out default of Zero-IF mode.
+ * SYMBOL_RATE: 0xC9/0x99/0x9A->0xCE/0xB8/0x52. 500ksps->600ksps.
+ * DEVIATION_M/DEV_E: 0x9A/0x2F->0xEC/0x2F. dev 500kHz->600kHz.
+ * PA_CFG1: 0x77->0x47. PA power +10dBm -> -14dBm. Should produce -1dBm with HGM off.
  */
 static const struct cc_cfg_reg CC_CFG_DEFAULT_MAXRATE[] = {
         {CC1200_SYNC3,             0x5A},
         {CC1200_SYNC2,             0x0F},
         {CC1200_SYNC1,             0xBE},
         {CC1200_SYNC0,             0x66},
-        {CC1200_SYNC_CFG1,         0xA5},
+        {CC1200_PA_CFG1,           0x47},
+
+        {CC1200_SYNC_CFG1,         0xAA},
         {CC1200_SYNC_CFG0,         0x03},
-        {CC1200_DEVIATION_M,       0x47},
+        {CC1200_DEVIATION_M,       0xEC},
         {CC1200_MODCFG_DEV_E,      0x2F},
         {CC1200_DCFILT_CFG,        0x1E},
-        {CC1200_PREAMBLE_CFG1,     0x18},
+        {CC1200_PREAMBLE_CFG1,     0x20},
         {CC1200_PREAMBLE_CFG0,     0x8A},
         {CC1200_IQIC,              0x00},
         {CC1200_CHAN_BW,           0x01},
         {CC1200_MDMCFG1,           0x42},
         {CC1200_MDMCFG0,           0x05},
-        {CC1200_SYMBOL_RATE2,      0xC9},
-        {CC1200_SYMBOL_RATE1,      0x99},
-        {CC1200_SYMBOL_RATE0,      0x9A},
-        {CC1200_AGC_REF,           0x33}, // SRF says 0x2F
-        {CC1200_AGC_CS_THR,        (u8)-117},
-        {CC1200_AGC_CFG2,          0x60},
+        {CC1200_SYMBOL_RATE2,      0xCE},
+        {CC1200_SYMBOL_RATE1,      0xB8},
+        {CC1200_SYMBOL_RATE0,      0x52},
+        {CC1200_AGC_REF,           0x33},
+        {CC1200_AGC_CFG2,          0x00},
         {CC1200_AGC_CFG1,          0x12},
         {CC1200_AGC_CFG0,          0x84},
         {CC1200_FIFO_CFG,          0x00},
         {CC1200_FS_CFG,            0x12},
-        {CC1200_PKT_CFG2,          0x00},
-        {CC1200_PKT_CFG0,          0x20},
-        {CC1200_PA_CFG1,           0x7F}, // w/pa: 0x55 == 17dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
-        {CC1200_PA_CFG0,           0x50},
-        {CC1200_PKT_LEN,           0xFF},
-        //{CC1200_IF_MIX_CFG,        0x1C},
-        {CC1200_FREQOFF_CFG,       0x24}, // SRF says 0x23
+        {CC1200_IF_MIX_CFG,        0x00},
+        {CC1200_FREQOFF_CFG,       0x23},
         {CC1200_MDMCFG2,           0x00},
         {CC1200_FREQ2,             0x5C},
         {CC1200_FREQ1,             0x0F},
         {CC1200_FREQ0,             0x5C},
         {CC1200_IF_ADC1,           0xEE},
         {CC1200_IF_ADC0,           0x10},
-        {CC1200_FS_DIG1,           0x07},
-        {CC1200_FS_DIG0,           0xA0},
-        {CC1200_FS_CAL3,           0x40},
+        {CC1200_FS_DIG1,           0x04},
+        {CC1200_FS_DIG0,           0xA3},
         {CC1200_FS_CAL1,           0x40},
         {CC1200_FS_CAL0,           0x0E},
         {CC1200_FS_DIVTWO,         0x03},

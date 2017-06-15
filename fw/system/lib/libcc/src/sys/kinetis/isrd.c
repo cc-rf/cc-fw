@@ -94,7 +94,7 @@ static IRQn_Type const irqns[] = PORT_IRQS;
 
 bool isrd_state(const u8 port, const u8 pin)
 {
-    return !!GPIO_ReadPinInput(gpios[port], pin);
+    return GPIO_ReadPinInput(gpios[port], pin) != 0;
 }
 
 void isrd_configure(const u8 port, const u8 pin, const port_interrupt_t type, const isr_t isr, const s8 prio_decrease)

@@ -56,6 +56,14 @@
 #define UFLAG2_GPIO         GPIOE
 #define UFLAG2_PIN          4
 
+#define CHAN_CLOCK_PORT     PORTA
+#define CHAN_CLOCK_GPIO     GPIOA
+#define CHAN_CLOCK_PIN      16
+
+#define CHAN_CYCLE_PORT     PORTA
+#define CHAN_CYCLE_GPIO     GPIOA
+#define CHAN_CYCLE_PIN      17
+
 static void pin_flag_init(void);
 static void main_task(void *param);
 
@@ -128,7 +136,7 @@ int main(void)
     vTaskStartScheduler();
 }
 
-static bool __pflag_set, __uflag1_set, __uflag2_set;
+static volatile bool __pflag_set, __uflag1_set, __uflag2_set, __chan_clock, __chan_cycle;
 
 static void pin_flag_init(void)
 {
@@ -180,7 +188,17 @@ static void pin_flag_init(void)
     GPIO_PinInit(UFLAG2_GPIO, UFLAG2_PIN, &gpio_pin_config);
     __uflag2_set = GPIO_ReadPinInput(UFLAG2_GPIO, UFLAG2_PIN) != 0;
     GPIO_WritePinOutput(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, 0);
-    PORT_SetPinMux(UFLAG2_ON_PORT,  UFLAG2_ON_PIN, UFLAG2_ON_MUX_ORIG);
+    PORT_SetPinMux(UFLAG2_ON_PORT, UFLAG2_ON_PIN, UFLAG2_ON_MUX_ORIG);
+
+
+    PORT_SetPinConfig(CHAN_CLOCK_PORT, CHAN_CLOCK_PIN, &port_pin_config_out);
+    GPIO_PinInit(CHAN_CLOCK_GPIO, CHAN_CLOCK_PIN, &gpio_pin_config_out);
+    __chan_clock = true;
+
+    PORT_SetPinConfig(CHAN_CYCLE_PORT, CHAN_CYCLE_PIN, &port_pin_config_out);
+    GPIO_PinInit(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, &gpio_pin_config_out);
+    GPIO_WritePinOutput(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, 0);
+    __chan_cycle = false;
 }
 
 static inline bool pflag_set(void)
@@ -196,6 +214,16 @@ static inline bool uflag1_set(void)
 static inline bool uflag2_set(void)
 {
     return __uflag2_set;
+}
+
+void chan_clock_trig(void)
+{
+    GPIO_WritePinOutput(CHAN_CLOCK_GPIO, CHAN_CLOCK_PIN, (u8)(__chan_clock = !__chan_clock));
+}
+
+void chan_cycle_trig(void)
+{
+    GPIO_WritePinOutput(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, (u8)(__chan_cycle = !__chan_cycle));
 }
 
 static bool boss;
