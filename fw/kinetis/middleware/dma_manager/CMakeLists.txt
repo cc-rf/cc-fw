@@ -1,7 +1,7 @@
 set(NAME kinetis_middleware_dma_manager)
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         fsl_dma_manager.c
 )
 

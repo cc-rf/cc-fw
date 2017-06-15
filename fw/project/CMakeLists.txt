@@ -4,4 +4,4 @@ endif()
 
 add_subdirectory(${CONFIG_FW_PROJECT})
 
-add_library(fw_project ALIAS fw_project_${CONFIG_FW_PROJECT})
+add_executable(fw_project ALIAS fw_project_${CONFIG_FW_PROJECT})

@@ -7,7 +7,7 @@ elseif(NOT CONFIG_MCUC_PLATFORM STREQUAL "kinetis")
 endif()
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         src/${CONFIG_MCUC_PLATFORM}/master.c
         src/${CONFIG_MCUC_PLATFORM}/slave.c
 )

@@ -11,7 +11,7 @@ else()
 endif()
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         startup/startup_MK26F18.S
         startup/system_MK26F18.c
 )

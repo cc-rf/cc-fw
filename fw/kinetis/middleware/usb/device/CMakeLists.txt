@@ -1,7 +1,7 @@
 set(NAME kinetis_middleware_usb_device)
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         usb_device_dci.c
         usb_device_ehci.c
         usb_device_khci.c

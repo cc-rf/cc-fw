@@ -1,1 +1,1 @@
-set(CONFIG_FW_PROJECT "usb" CACHE STRING "Target Firmware Project (fw)")
+set(CONFIG_FW_PROJECT "cloudchaser" CACHE STRING "Target Firmware Project (fw)")

@@ -109,6 +109,26 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTB,  5u, kPORT_MuxAsGpio);                // GPIO_HDR #9   ** pflag input
 
     /**
+     * Enable I2C1 SCL/SDA on GPIO header pins 4/6
+     */
+    /*PORT_SetPinMux(PORTE,  0u, kPORT_MuxAlt6);
+    PORT_SetPinMux(PORTE,  1u, kPORT_MuxAlt6);*/
+
+    const port_pin_config_t port_pin_config = {
+            .pullSelect = kPORT_PullUp,
+            .slewRate = kPORT_FastSlewRate,
+            .passiveFilterEnable = kPORT_PassiveFilterDisable,
+            .openDrainEnable = kPORT_OpenDrainEnable,
+            .driveStrength = kPORT_LowDriveStrength,
+            .mux = kPORT_MuxAlt6,
+            .lockRegister = kPORT_LockRegister,
+    };
+
+    PORT_SetPinConfig(PORTE, 0u, &port_pin_config);
+    PORT_SetPinConfig(PORTE, 1u, &port_pin_config);
+
+
+    /**
      * Pull-up for SPI slave PCS
      */
     /*const port_pin_config_t port_pin_config = {

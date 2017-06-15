@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.4)
-project(cloudchaser)
+
 set(ROOT "${CMAKE_CURRENT_LIST_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${ROOT}/etc/cmake/")
+
+set(BUILD_ROOT "${CMAKE_CURRENT_BINARY_DIR}")
 
 if(CMAKE_CURRENT_BINARY_DIR STREQUAL "${CMAKE_CURRENT_LIST_DIR}")
     message(FATAL_ERROR "Only out-of-source builds are supported!")
@@ -16,4 +18,3 @@ include(util)
 
 include(fw/config.cmake)
 add_subdirectory(fw)
-add_subdirectory(lib)

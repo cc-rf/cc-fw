@@ -1,7 +1,7 @@
 set(NAME kinetis_sdk_driver)
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         fsl_adc16.c
         fsl_cmp.c
         fsl_common.c

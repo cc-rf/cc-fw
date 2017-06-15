@@ -1,2 +1,3 @@
-add_subdirectory(libcc)
-add_subdirectory(mcuc)
+add_subdirectory(ccrf)
+add_subdirectory(kio)
+add_subdirectory(usr)

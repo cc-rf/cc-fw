@@ -1,7 +1,7 @@
 set(NAME kinetis_middleware_usb_phy)
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         usb_phy.c
 )
 

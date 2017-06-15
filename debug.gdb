@@ -9,8 +9,8 @@ monitor halt
 flushreg
 monitor speed auto
 monitor flash breakpoints 1
-symbol-file fw/fw.elf
-load fw/fw.elf
+symbol-file fw.elf
+load fw.elf
 monitor clrbp
 monitor reset
 monitor halt

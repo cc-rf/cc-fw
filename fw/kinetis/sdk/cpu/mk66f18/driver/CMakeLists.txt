@@ -1,7 +1,7 @@
 set(NAME kinetis_sdk_mk66f18_driver)
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         fsl_clock.c
         fsl_cmt.c
         fsl_enet.c

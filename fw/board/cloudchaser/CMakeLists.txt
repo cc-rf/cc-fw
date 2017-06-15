@@ -1,7 +1,7 @@
 set(NAME fw_board_cloudchaser)
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         board.c
         clock_config.c
         pin_mux.c

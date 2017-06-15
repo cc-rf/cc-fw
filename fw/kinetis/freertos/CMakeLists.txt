@@ -1,7 +1,7 @@
 set(NAME kinetis_freertos)
 
 add_library(
-        ${NAME} STATIC
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         croutine.c
         event_groups.c
         list.c
