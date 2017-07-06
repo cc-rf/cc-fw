@@ -211,9 +211,9 @@ def send_frames(cc):
 
     while 1:
         count += 1
-        data = '\x3A' * 101
-        # data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
-        cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x3b23, data)
+        # data = '\x3A' * 114
+        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
+        cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x3b35, data)
         # time.sleep(.015)
 
 

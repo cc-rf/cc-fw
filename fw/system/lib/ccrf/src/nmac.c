@@ -23,13 +23,10 @@
 #include <kio/sclk.h>
 #include <cc/chan.h>
 
-extern volatile chan_t chan_cur;
-extern pit_t pit_hop;
-
 
 #define NMAC_PEER_MAX       10
 
-#define NMAC_PEND_TIME      5
+#define NMAC_PEND_TIME      7
 #define NMAC_PEND_RETRY     3
 
 #define NMAC_TXQ_COUNT      3 // This should eventually reflect the number of threads waiting on messages
@@ -93,8 +90,6 @@ typedef struct __packed {
 typedef struct __packed {
     u16 addr;
     u8 seqn;
-    ///chan_t chan;
-    ///u32 rem;
 
 } nmac_peer_t;
 
@@ -202,11 +197,6 @@ bool nmac_send(nmac_send_t type, u16 dest, u16 size, u8 data[])
     }
 }
 
-extern u32 tx_times[];
-
-void prev_pkt_info(u32 *rem0, u32 *rem1, chan_t *chan0, chan_t *chan1);
-
-
 static bool send_packet(nmac_static_pkt_t *pkt)
 {
     assert(pkt->size <= MAC_PKT_SIZE_MAX);
@@ -217,11 +207,6 @@ static bool send_packet(nmac_static_pkt_t *pkt)
     const u8 nphy_flag = (u8)((imm ? PHY_PKT_FLAG_IMMEDIATE : 0) | PHY_PKT_FLAG_BLOCK);
 
     u8 retry = NMAC_PEND_RETRY;
-
-    //nmac_debug_pkt(
-    //        "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t TX-BEGIN",
-    //        pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, SCLK_MSEC(sclk_time())
-    //);
 
     if (!(pkt->flag & MAC_FLAG_PKT_BLK)) {
         if (!xQueueSend(nmac.txq, pkt, portMAX_DELAY)) {
@@ -239,14 +224,10 @@ static bool send_packet(nmac_static_pkt_t *pkt)
     }
 
     ///sclk_t sent;
-    ///u32 rem, rem2;
-    ///chan_t chan_send;
 
 _retry_tx:
 
-    ///chan_send = chan_cur;
     ///sent = sclk_time();
-    ///rem = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
 
     if (!nphy_tx(nphy_flag, (u8 *)pkt, pkt_len)) {
 
@@ -267,9 +248,6 @@ _retry_tx:
         }
 
     } else {
-        ///rem2 = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
-        ///sent = sclk_time() - sent;
-
         nmac_debug_pkt(
                 "pkt: addr=0x%04X dest=0x%04X seqn=0x%02X flag=0x%02X size=%03u time=%05lu \t %s",
                 pkt->addr, pkt->dest, pkt->seqn, pkt->flag, pkt->size, SCLK_MSEC(sent),
@@ -278,13 +256,13 @@ _retry_tx:
     }
 
     if (needs_ack) {
-        const u32 tx_time = (NMAC_PEND_TIME /** (NMAC_PEND_RETRY - retry + 1)*/) + (2 * nphy_delay(pkt->size + (u8)MAC_PKT_OVERHEAD)) / 1000;
-        sclk_t elaps = sclk_time();
+        const u32 tx_time = NMAC_PEND_TIME + nphy_delay(pkt->size + (u8)MAC_PKT_OVERHEAD) / 1000;
+        //sclk_t elaps = sclk_time();
 
         if (!xTaskNotifyWait(MAC_NOTIFY_ACK, MAC_NOTIFY_ACK, NULL, pdMS_TO_TICKS(tx_time))) {
-            elaps = sclk_time() - elaps;
+            //elaps = sclk_time() - elaps;
 
-            if ((pkt->flag & MAC_FLAG_ACK_RSP)) {
+            if (((volatile u8)pkt->flag & MAC_FLAG_ACK_RSP)) {
                 nmac_debug("race condition: packet acked successfully");
 
             } else {
@@ -295,35 +273,17 @@ _retry_tx:
                         //pkt->flag |= MAC_FLAG_PKT_IMM; // retries are urgent
                     }
 
-                    //nmac_debug("retry: chan=%02u/%02u seq=%03u \t rem0=%lu \t rem1=%lu \t send=%lu \t len=%u",
-                    //           chan_send, chan_cur, pkt->seqn, rem, rem2, (u32)sent, pkt_len
-                    //);
-
-                    u32 rem0, rem1;
-                    chan_t chan0, chan1;
-                    prev_pkt_info(&rem0, &rem1, &chan0, &chan1);
-
                     nmac_debug(
-                            "retry: seq=%03u len=%03u pchn=%02u/%02u prem=%lu/%lu \t elaps=%lu",
-                            pkt->seqn, pkt_len, chan0, chan1, rem0, rem1, elaps
+                            "retry: seq=%03u len=%03u",// elaps=%lu",
+                            pkt->seqn, pkt_len//, elaps
                     );
 
                     goto _retry_tx;
                 } else {
-                    //nmac_debug("retry: start=%lu now=%lu seq=%lu <fail>", SCLK_MSEC(start), SCLK_MSEC(sclk_time()), (u32)pkt->seqn);
                     nmac_warn("drop 0x%02X/%u", pkt->seqn, pkt->size);
                 }
             }
-        } else {
-            /*const sclk_t ts = sclk_time();
-            elaps = ts - elaps;
-            sent = ts - sent;
-            nmac_debug("-> l=%03u t=%lu/%lu", pkt->size, (u32)sent, (u32)elaps);*/
         }
-
-        /*if (retry != NMAC_PEND_RETRY) {
-            itm_printf(0, "retry %u\n", NMAC_PEND_RETRY - retry);
-        }*/
 
         nmac.pend = (nmac_pend_t){ NULL, NULL };
     }
@@ -407,20 +367,10 @@ static bool handle_rx(u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
 
             if (peer) {
                 if (pkt->flag & MAC_FLAG_ACK_REQ) {
-                    /*if (pkt->flag & MAC_FLAG_ACK_RQR) {
-                        nmac_debug("rqr-ack-tx: seq=%03u pseq=%03u chan=%02u pchan=%02u \t prem=%lu", pkt->seqn, peer->seqn, chan_cur, peer->chan, peer->rem);
-                    } else {
-                        peer->chan = chan_cur;
-                        peer->rem = (u32)(pit_tick_nsec(pit_get_current(pit_hop))/1000u);
-                    }*/
-
                     if (pkt->flag & MAC_FLAG_ACK_RQR) {
-                        u32 rem0, rem1;
-                        chan_t chan0, chan1;
-                        prev_pkt_info(&rem0, &rem1, &chan0, &chan1);
                         nmac_debug(
-                                "rqr-ack-tx: seq=%03u pseq=%03u len=%03u pchn=%02u/%02u prem=%lu/%lu",
-                                pkt->seqn, peer->seqn, pkt->size + MAC_PKT_OVERHEAD, chan0, chan1, rem0, rem1
+                                "rqr-ack-tx: seq=%03u pseq=%03u len=%03u",
+                                pkt->seqn, peer->seqn, pkt->size + MAC_PKT_OVERHEAD
                         );
                     }
 

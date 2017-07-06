@@ -107,7 +107,7 @@
 #define configUSE_TICK_HOOK 0U
 
 #define configCPU_CLOCK_HZ (SystemCoreClock)
-#define configTICK_RATE_HZ ((TickType_t)1000U)
+#define configTICK_RATE_HZ ((TickType_t)100000U)
 #define configMAX_PRIORITIES (18U)
 #define configMINIMAL_STACK_SIZE ((unsigned short)/*90U*//*120U*/192U)
 

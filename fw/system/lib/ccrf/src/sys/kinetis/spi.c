@@ -8,8 +8,6 @@
 #include <semphr.h>
 #include <task.h>
 
-// TODO: Enable DMA + Notify
-
 //#define CC_SPI_DMA
 //#define CC_SPI_LOCK
 //#define CC_SPI_NOTIFY   (1u<<29)
@@ -21,6 +19,10 @@
 static void spi_dma_callback(SPI_Type *base, dspi_master_edma_handle_t *handle, status_t status, void *userData);
 #elif !defined(CC_SPI_POLL)
 static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData);
+#endif
+
+#if (defined(CC_SPI_DMA) && defined(CC_SPI_POLL)) || (defined(CC_SPI_NOTIFY) && defined(CC_SPI_POLL))
+#error Bad SPI feature combination!
 #endif
 
 static struct {
@@ -113,10 +115,17 @@ void cc_spi_init(cc_dev_t dev)
         NVIC_SetPriority(((IRQn_Type [][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][spi[dev].tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
         NVIC_SetPriority(((IRQn_Type [][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][spi[dev].rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
 
-        DSPI_MasterTransferCreateHandleEDMA(
-                cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *) spi[dev].sem,
-                &spi[dev].rx_handle, &spi[dev].im_handle, &spi[dev].tx_handle
-        );
+        #ifdef CC_SPI_NOTIFY
+            DSPI_MasterTransferCreateHandleEDMA(
+                    cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *) NULL,
+                    &spi[dev].rx_handle, &spi[dev].im_handle, &spi[dev].tx_handle
+            );
+        #else
+            DSPI_MasterTransferCreateHandleEDMA(
+                    cfg->spi, &spi[dev].edma_handle, spi_dma_callback, (void *) spi[dev].sem,
+                    &spi[dev].rx_handle, &spi[dev].im_handle, &spi[dev].tx_handle
+            );
+        #endif
 
     #else
 
@@ -212,8 +221,17 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
             xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
         #endif
 
+        #ifdef CC_SPI_NOTIFY
+            spi[dev].edma_handle.userData = xTaskGetCurrentTaskHandle();
+        #endif
+
         DSPI_MasterTransferEDMA(cfg->spi, &spi[dev].edma_handle, &xfer);
-        xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
+
+        #ifdef CC_SPI_NOTIFY
+            while (!xTaskNotifyWait(CC_SPI_NOTIFY, CC_SPI_NOTIFY, NULL, portMAX_DELAY));
+        #else
+            xSemaphoreTake(spi[dev].sem, portMAX_DELAY);
+        #endif
 
         #ifdef CC_SPI_LOCK
             xSemaphoreGive(spi[dev].mtx);
@@ -259,7 +277,13 @@ u8 cc_spi_io(cc_dev_t dev, u8 flag, u16 addr, u8 *tx, u8 *rx, u32 len)
 static void spi_dma_callback(SPI_Type *base, dspi_master_edma_handle_t *handle, status_t status, void *userData)
 {
     BaseType_t xHigherPriorityTaskWoken;
-    xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
+
+    #ifndef CC_SPI_NOTIFY
+        xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
+    #else
+        xTaskNotifyFromISR((xTaskHandle)userData, CC_SPI_NOTIFY, eSetBits, &xHigherPriorityTaskWoken);
+    #endif
+
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 

@@ -481,82 +481,9 @@ u64 cc_set_rx_timeout(cc_dev_t dev, u64 ns)
     return ((1000000000ul * 1250ul * ev) << (4 * wr)) / CC_XOSC_FREQ; /* TODO: Is rounding needed? */
 }
 
-void cc_set_mod_cfg_0(cc_dev_t dev)
-{
-    cc_strobe(dev, CC1200_SIDLE);
-
-    //cc_set_freq_dev(dev, 20000);
-    cc_set(dev, CC1200_DEVIATION_M, 0x06);
-    cc_set(dev, CC1200_MODCFG_DEV_E, 0x0B);
-
-    cc_set_symbol_rate(dev, 50000);
-
-    //cc_set_rx_filt_bw(dev, 105000);
-    cc_set(dev, CC1200_CHAN_BW, 0x84);
-
-    cc_set(dev, CC1200_DCFILT_CFG, 0x56);
-    cc_set(dev, CC1200_AGC_REF, /*0x2E*/0x4E/*TI says 3E*/);
-    cc_set(dev, CC1200_AGC_CS_THR, /*0x01*/0xEC);
-    cc_set(dev, CC1200_IFAMP, 0x05);
-    cc_set(dev, CC1200_PA_CFG0, 0x53);
-
-    cc_set(dev, CC1200_SYNC_CFG1, 0x09 | CC1200_SYNC_CFG1_SYNC_MODE_16);
-    cc_set(dev, CC1200_PKT_CFG1, CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F |
-                                 CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF |
-                                 CC1200_PKT_CFG1_APPEND_STATUS);
-    cc_set(dev, CC1200_PREAMBLE_CFG1, 0x4 << 2);
-
-    // FB2PLL off
-    //cc_set(dev, CC1200_FREQOFF_CFG, 0x20);
-
-    //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_NORMAL);
-    //cc_dbg("[%u] MODCFG_DEV_E[NORMAL] = 0x%02X", dev, cc_get(dev, CC1200_MODCFG_DEV_E));
-}
-
-void cc_set_mod_cfg_1(cc_dev_t dev)
-{
-    cc_strobe(dev, CC1200_SIDLE);
-
-    //cc_set_freq_dev(dev, 180000);
-    cc_set(dev, CC1200_DEVIATION_M, 0x27); // 180 kHz
-    //cc_set(dev, CC1200_DEVIATION_M, 0x89); // 120 kHz
-    //cc_set(dev, CC1200_DEVIATION_M, 0x48); // 200 kHz
-    cc_set(dev, CC1200_MODCFG_DEV_E, 0x8E); // 180/200 kHz DSSS
-    //cc_set(dev, CC1200_MODCFG_DEV_E, 0x2E); // 180/200 kHz NORMAL, 4-GFSK
-    //cc_set(dev, CC1200_MODCFG_DEV_E, 0xAD); // 90 kHz DSSS, 4-GFSK
-    //cc_set(dev, CC1200_MODCFG_DEV_E, 0x8D); // 120 kHz
-
-    cc_set_symbol_rate(dev, 200000);
-
-    //cc_set_rx_filt_bw(dev, 512000);
-    cc_set(dev, CC1200_CHAN_BW, 0x03);
-
-    cc_set(dev, CC1200_DCFILT_CFG, 0x56);
-    cc_set(dev, CC1200_AGC_REF, /*0x27*/0x54/*TI says 0x45*/);
-    cc_set(dev, CC1200_AGC_CS_THR, /*0x01*/0xEC);
-    cc_set(dev, CC1200_IFAMP, 0x05);
-    cc_set(dev, CC1200_PA_CFG0, 0x51);
-
-    cc_set(dev, CC1200_SYNC_CFG1, 0xA5);
-    cc_set(dev, CC1200_PKT_CFG1, CC1200_PKT_CFG1_CRC_CFG_ON_INIT_1D0F |
-                                 CC1200_PKT_CFG1_ADDR_CHECK_CFG_OFF |
-                                 CC1200_PKT_CFG1_APPEND_STATUS |
-                                 CC1200_PKT_CFG1_WHITE_DATA);
-    cc_set(dev, CC1200_PREAMBLE_CFG1, 0x2 << 2);
-
-    // FB2PLL
-    //cc_set(dev, CC1200_FREQOFF_CFG, 0x30);
-
-    //cc_update(dev, CC1200_MODCFG_DEV_E, CC1200_MODCFG_DEV_E_MODEM_MODE_M, CC1200_MODCFG_DEV_E_MODEM_MODE_DSSS_PN);
-    //cc_dbg("[%u] MODCFG_DEV_E[DSSS] = 0x%02X", dev, cc_get(dev, CC1200_MODCFG_DEV_E));
-
-}
-
 s16 cc_get_rssi(cc_dev_t dev)
 {
-    //u8 rssi1 = cc_get(dev, CC1200_RSSI1);
-    //s16 rssi = rssi1;
-    return (s16)(s8)cc_get(dev, CC1200_RSSI1);// - (s16)107/*99*/;
+    return (s16)(s8)cc_get(dev, CC1200_RSSI1);
 }
 
 u32 cc_get_tx_time(cc_dev_t dev, u32 len)
@@ -570,5 +497,5 @@ u32 cc_get_tx_time(cc_dev_t dev, u32 len)
     // Note for later: with 4-ary modulation the preamble is still sent as 2-ary.
 
 
-    return (1000000 * 8 * (len + overhead) /*+ (symbol_rate >> 1)*/) / symbol_rate;
+    return 200/*I/O overhead*/ + ((1000000 * 8 * (len + overhead) /*+ (symbol_rate >> 1)*/) / symbol_rate);
 }
