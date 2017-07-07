@@ -5,8 +5,8 @@ monitor reset
 monitor halt
 flushreg
 monitor speed auto
-symbol-file fw/fw.elf
-load fw/fw.elf
+symbol-file fw.elf
+load fw.elf
 monitor clrbp
 monitor reset
 disconnect

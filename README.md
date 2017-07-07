@@ -1,34 +1,37 @@
 # Cloud Chaser
+Primary Contact: Phillip Sitbon <phillip.sitbon@intel.com>
 
-This project supports the Cloud Chaser board, which has:
+### Purpose
+Cloud Chaser is a sub-GHz radio platform designed to provide robust and reliable wireless
+communications with mobile systems (e.g. wearable and IoT)
+in a small form factor. Capabilities include high-bandwidth sensor streaming,
+ultra-low latency response, long range (1km+) and high speed (up to 1Mbps) configurations,
+easy programmability, and full regulatory compliance within the 915MHz/868MHz bands.
+
+### Project Summary
+
+This project supports the Cloud Chaser v1 and v2 boards, which have:
 
 - An NXP (Formerly Freescale) Kinetis K66 180MHz CPU (MK66FX1M0VMD18)
-- Two CC1200 radios
-- Two CC1190 range extenders
+- Two CC1200 radios (v2 has one)
+- Two CC1190 range extenders (v2 has one)
 
-The code here is largely an adaptation of the Kinetis SDK v2.0.
+The base system code here is largely an adaptation of the Kinetis SDK v2.0.
 It has been converted to use CMake but otherwise efforts were
  taken to leave the SDK code as unchanged as possible.
 
-Things are still in the early stages. Please contact
-Phillip Sitbon <phillip.sitbon@intel.com> with inquiries.
-
 ### Project Structure
 
- - `fw`: The base firmware project directory
- (this repository will eventually hold additional support projects
- and libraries).
- - `fw/core`: The primary SDK codebase, organized into `board`,
- `cpu`, `driver`, and other components.
- - `fw/project`: Project folders that define the operation of the
- device. Each project specifies which board it uses, which in turn
- specifies which CPU is used. One project is configured as the "main"
- project for the primary configure & build phases (more below).
+ - `fw`: The base firmware project directory.
+   - `config.cmake`: Defines the project name, loaded from `fw/project/<name>`.
+ - `fw/kinetis`: The primary SDK codebase, organized into `freertos`,
+ `sdk`, and `middleware` categories.
+ - `fw/board`: SDK-integrated board parameters / support.
+ - `fw/project/cloudchaser`: The default main project that implements application functionality.
 
 ## Build & Flash
 
-Currently only Linux is supported as a build/flash platform, but there
-is potential for that to change in the future.
+Currently only Linux is supported as a build/flash platform, but build on Mac have been reported as successful as well.
 
 ### Building
 
@@ -44,13 +47,13 @@ CMake does most of the work, you lucky dog.
   - gdb-arm-none-eabi
   - libnewlib-arm-none-eabi
 - JLink Tools:
-  - (64-bit deb) https://www.segger.com/jlink-software.html?step=1&file=JLinkLinuxDEB64_5.12.5
+  - (64-bit deb) https://www.segger.com/jlink-software.html
 
 #### Configuring
 
-The default configuration builds the project in `fw/project/default`, which is
+The default configuration builds the project in `fw/project/cloudchaser`, which is
 set in `fw/config.cmake`. The board selection for the project is defined
-in `fw/project/default/config.cmake`, which is `cloudchaser` by default.
+in `fw/project/cloudchaser/config.cmake`, which is `cloudchaser` by default.
 
 If any `config.cmake` parameters are changed, the `build` directory
 below needs to be wiped and `cmake` re-run.
@@ -61,9 +64,9 @@ From the top level folder:
 
     sky:cloudchaser$ mkdir build && cd $_
     sky:build$ cmake ..
-    sky:build$ make fw
+    sky:build$ make
 
-After this, the target `.elf` file is `fw/fw.elf`.
+After this, the target `.elf` file is `fw.elf` in the `build` folder.
 
 #### Flash
 
@@ -96,10 +99,14 @@ You may need to install the telnet package.
 #### Advanced Debugging
 
 If you want to get serious about debugging and, like the maintainer
-don't know gdb very deeply, you might like Segger's J-Link Debugger.
+don't know gdb very deeply, you might like Segger's J-Link Debugger from their software page.
 It has a graphical interface and is easy to use.
-
-It can be found here: https://download.segger.com/J-Link/J-LinkDebugger/jlinkdebugger_2.14.8_x86_64.deb
 
 If you want to get going with it fast, point it to the settings file
 located at `etc/fw.jdebug`.
+
+## Usage
+
+Currently the primary interface to Cloud Chaser is via Python (2.7+) scripts.
+Within the `etc/scripts` folder, `cc.py` defines the interface class and provides
+examples on how to send and receive packets.
