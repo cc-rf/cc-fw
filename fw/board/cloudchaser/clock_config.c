@@ -38,11 +38,6 @@
 
 void BOARD_InitOsc0(void);
 
-/*******************************************************************************
- * Variables
- ******************************************************************************/
-/* System clock frequency. */
-extern uint32_t SystemCoreClock;
 
 /*******************************************************************************
  * Code
@@ -87,9 +82,7 @@ void BOARD_BootClockVLPR(void)
 
     CLOCK_SetSimConfig(&simConfig);
 
-    SystemCoreClock = 4000000U;
-
-    SystemCoreClockUpdate();
+    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
 
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
     SMC_SetPowerModeVlpr(SMC);
@@ -118,9 +111,7 @@ void BOARD_BootClockRUN(void)
 
     CLOCK_SetSimConfig(&simConfig);
 
-    SystemCoreClock = 120000000U;
-
-    SystemCoreClockUpdate();
+    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
 
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
     SMC_SetPowerModeRun(SMC);
@@ -154,9 +145,7 @@ void BOARD_BootClockHSRUN(void)
 
     CLOCK_SetSimConfig(&simConfig);
 
-    SystemCoreClock = 180000000U;
-
-    SystemCoreClockUpdate();
+    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
 }
 
 void BOARD_BootClockOCHSRUN(void)
@@ -184,9 +173,7 @@ void BOARD_BootClockOCHSRUN(void)
 
     CLOCK_SetSimConfig(&simConfig);
 
-    SystemCoreClock = 210000000U;
-
-    SystemCoreClockUpdate();
+    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
 }
 
 void BOARD_InitOsc0(void)
@@ -195,7 +182,7 @@ void BOARD_InitOsc0(void)
             .capLoad = 0,
             .workMode = kOSC_ModeOscLowPower,
             .oscerConfig = {
-                    .enableMode = kOSC_ErClkEnable,
+                    .enableMode = kOSC_ErClkEnable | kOSC_ErClkEnableInStop,
 #if (defined(FSL_FEATURE_OSC_HAS_EXT_REF_CLOCK_DIVIDER) && FSL_FEATURE_OSC_HAS_EXT_REF_CLOCK_DIVIDER)
                     .erclkDiv = 0U, /* phillip: why was this 2 (val = 1) before? I think some component requires osc0er to be < 24MHz? */
 #endif

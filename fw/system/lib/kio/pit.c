@@ -119,7 +119,7 @@ static inline void pit_clear(pit_t pit)
     PIT_DisableInterrupts(PIT, pit->chnl, kPIT_TimerInterruptEnable);
     PIT_ClearStatusFlags(PIT, pit->chnl, kPIT_TimerFlag);
     PIT_SetTimerChainMode(PIT, pit->chnl, false);
-    if (--pit_used) pit_deinit();
+    if (!--pit_used) pit_deinit();
     pit->handler = NULL;
     pit->param = NULL;
     pit->used = false;

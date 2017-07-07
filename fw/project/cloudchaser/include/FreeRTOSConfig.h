@@ -90,6 +90,13 @@
 #define TASK_PRIO_LOW               ((TASK_PRIO_DEFAULT + TASK_PRIO_LOWEST) / 2)
 #define TASK_PRIO_LOWEST            (TASK_PRIO_MIN + 1)
 
+/* Phillip: Additional macros */
+
+#define pdUS_TO_TICKS( xTimeInUs ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTimeInUs ) * ( TickType_t ) configTICK_RATE_HZ ) / ( TickType_t ) 1000000 ) )
+
+#define pdTICKS_TO_US( xTicks ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTicks ) * ( TickType_t ) 1000000 ) / ( TickType_t ) configTICK_RATE_HZ ) )
+
+
 /*-----------------------------------------------------------
  * Application specific definitions.
  *
@@ -107,7 +114,7 @@
 #define configUSE_TICK_HOOK 0U
 
 #define configCPU_CLOCK_HZ (SystemCoreClock)
-#define configTICK_RATE_HZ ((TickType_t)100000U)
+#define configTICK_RATE_HZ ((TickType_t)10000U)
 #define configMAX_PRIORITIES (18U)
 #define configMINIMAL_STACK_SIZE ((unsigned short)/*90U*//*120U*/192U)
 

@@ -613,9 +613,7 @@ static void nphy_task(void *param __unused)
 
         loop_time_prev = ts;*/
 
-        #define pdUS_TO_TICKS( xTimeInUs ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTimeInUs ) * ( TickType_t ) configTICK_RATE_HZ ) / ( TickType_t ) 1000000 ) )
-
-        if (xTaskNotifyWait(0, NOTIFY_MASK_ALL, &notify, tx_next ? pdUS_TO_TICKS(1000) : portMAX_DELAY)) {
+        if (xTaskNotifyWait(0, NOTIFY_MASK_ALL, &notify, tx_next ? pdMS_TO_TICKS(1) : portMAX_DELAY)) {
 
             if (notify & NOTIFY_MASK_ISR) {
                 ms = cc_get(dev, CC1200_MARC_STATUS1);

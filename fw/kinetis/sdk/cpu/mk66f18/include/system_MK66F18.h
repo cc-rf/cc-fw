@@ -138,14 +138,6 @@ extern uint32_t SystemCoreClock;
  */
 void SystemInit (void);
 
-/**
- * @brief Updates the SystemCoreClock variable.
- *
- * It must be called whenever the core clock is changed during program
- * execution. SystemCoreClockUpdate() evaluates the clock register settings and calculates
- * the current core clock.
- */
-void SystemCoreClockUpdate (void);
 
 #ifdef __cplusplus
 }
