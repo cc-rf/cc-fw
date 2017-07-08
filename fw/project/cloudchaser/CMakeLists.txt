@@ -24,6 +24,7 @@ target_link_libraries(
         ${NAME}
         PUBLIC usr
         PUBLIC fw_board
+        PUBLIC kio
         PUBLIC kinetis_middleware_usb
         PUBLIC kinetis_middleware_usb_phy
         PUBLIC kinetis_middleware_usb_device

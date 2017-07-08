@@ -174,7 +174,8 @@ static struct {
     } dfsr;                                // Debug Fault Status Register (0xE000ED30)
 
     volatile unsigned int afsr;            // Auxiliary Fault Status Register (0xE000ED3C), Vendor controlled (optional)
-} HardFaultRegs;
+
+} HardFaultRegs __used;
 
 
 

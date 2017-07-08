@@ -9,7 +9,7 @@
 #include <kio/uid.h>
 #include <kio/uart.h>
 
-#include <cc/nmac.h>
+#include <ccrf/mac.h>
 
 #define USB_IN_DATA_MAX     (MAC_PKT_SIZE_MAX + 64)
 
@@ -73,8 +73,8 @@ extern bool uflag2_set(void);
 
 static void uart_relay_run(void);
 
-static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi);
-static void sync_hook(u32 chan);
+static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], s8 rssi, u8 lqi);
+static void sync_hook(chan_id_t chan);
 
 static void frame_recv(u8 port, serf_t *frame, size_t size);
 
@@ -87,14 +87,13 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
 static void write_code_status(u8 port, code_status_t *code_status);
 
 
+static mac_t mac;
+
 static code_status_t status;
 
 static uart_t uart = NULL;
 static size_t usb_in_size[USB_CDC_INSTANCE_COUNT] = {0};
 static u8 usb_in_data[USB_CDC_INSTANCE_COUNT][USB_IN_DATA_MAX];
-
-static bool boss;
-static u8 cell;
 
 
 void cloudchaser_main(void)
@@ -110,52 +109,54 @@ void cloudchaser_main(void)
             .send_bytes = 0
     };
 
+    mac_config_t mac_config = {
+            .rdid = 0,
+            .boss = false,
+            .addr = status.node,
+            .cell = 0,
+            .recv = handle_rx,
+            .sync = NULL
+    };
+
     if (uflag1_set()) {
         LED_A_TOGGLE();
         LED_C_TOGGLE();
 
     } else {
-        nphy_hook_sync(sync_hook);
+        mac_config.sync = sync_hook;
     }
 
 
-    boss = pflag_set();
+    mac_config.boss = pflag_set();
 
-    if (uflag1_set())       cell = 0xA1;
-    else if (uflag2_set())  cell = 0xA2;
-    else                    cell = 0xA0;
+    if (uflag1_set())       mac_config.cell = 0xA1;
+    else if (uflag2_set())  mac_config.cell = 0xA2;
+    else                    mac_config.cell = 0xA0;
 
     printf(
             "\r\nCloud Chaser %08lX%08lX@%02X.%04X\r\n\r\n",
-            (u32)(status.serial >> 32), (u32)status.serial, cell, status.node
+            (u32)(status.serial >> 32), (u32)status.serial, mac_config.cell, status.node
     );
 
-    if (nmac_init(cell, status.node, boss, handle_rx)) {
+    if ((mac = mac_init(&mac_config))) {
 
         if (uflag1_set()) {
             uart_relay_run();
         }
 
-        if (uflag2_set() && boss) {
+        if (uflag2_set() && mac_config.boss) {
             printf("meter: auto-tx enabled\r\n");
             #define TXLEN 45
 
             while (1) {
                 const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
-                nmac_send(NMAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send);
+                mac_send(mac, MAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send);
                 vTaskDelay(pdMS_TO_TICKS(23));
             }
         }
 
-        /*while (1) {
-            itm_puts(0, "<itm> usb: send periodic\n");
-            const char to_send[] = "Hello Peer\r\n";
-            usb_write((u8 *)to_send, strlen(to_send));
-            vTaskDelay(pdMS_TO_TICKS(5000));
-        }*/
-
-        //goto _end;
         while(1) vTaskDelay(portMAX_DELAY);
+
     }
 }
 
@@ -177,7 +178,7 @@ static void uart_relay_run(void)
     while (1) {
         uart_read(uart, (u8 *)message.input, 1);
         //itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
-        if (nmac_send(NMAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
+        if (mac_send(mac, MAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
             if (!uflag2_set()) {
                 LED_C_TOGGLE();
                 LED_D_TOGGLE();
@@ -187,7 +188,7 @@ static void uart_relay_run(void)
 }
 
 
-static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi, u8 lqi)
+static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], s8 rssi, u8 lqi)
 {
     ++status.recv_count;
     status.recv_bytes += size;
@@ -241,19 +242,19 @@ static void handle_rx(u16 node, u16 peer, u16 dest, u16 size, u8 data[], s8 rssi
             LED_C_OFF();
         }
 
-        if (!boss) {
-            nmac_send(NMAC_SEND_STRM, 0x0000, size, data);
+        if (!mac_boss(mac)) {
+            mac_send(mac, MAC_SEND_STRM, 0x0000, size, data);
             return;
         }
 
         return;
     }
 
-    write_code_recv(node, peer, dest, size, data, rssi, lqi);
+    write_code_recv(mac_addr(mac), peer, dest, size, data, rssi, lqi);
 }
 
 
-static void sync_hook(u32 chan)
+static void sync_hook(chan_id_t chan)
 {
     if (uflag2_set()) {
         if (chan == 11 || chan == 13 || chan == 15 || chan == 17) LED_D_ON();
@@ -341,9 +342,9 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
         code_send->size = MAC_PKT_SIZE_MAX;
     }
 
-    if (!code_send->node || code_send->node == nmac_get_addr()) {
-        const bool result = nmac_send(
-                (nmac_send_t) code_send->type,
+    if (!code_send->node || code_send->node == mac_addr(mac)) {
+        const bool result = mac_send(mac,
+                (mac_send_t) code_send->type,
                 code_send->dest,
                 code_send->size,
                 code_send->data
@@ -357,13 +358,6 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
             //LED_D_TOGGLE();
         }
     }
-
-    /*itm_printf(0, "(send) type=0x%02X dest=0x%04X size=0x%02X result=%u\r\n",
-           (nmac_send_t)code_send->type,
-           code_send->dest,
-           pkt_size,
-           result
-    );*/
 }
 
 
@@ -396,7 +390,6 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
 
 static void handle_code_echo(u8 port, size_t size, u8 *data)
 {
-    //itm_printf(0, "<itm> echo: \"%s\"\n", data);
     if (data[size - 1] != '\n')
         printf("(remote) %s\r\n", data);
     else
@@ -406,8 +399,7 @@ static void handle_code_echo(u8 port, size_t size, u8 *data)
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi)
 {
-    //itm_printf(0, "<itm> recv: node=0x%04X peer=0x%04X dest=0x%04X size=%lu\n", node, peer, dest, size);
-    code_recv_t *code_recv = malloc(sizeof(code_recv_t) + size); assert(code_recv);
+    code_recv_t *code_recv = alloca(sizeof(code_recv_t) + size); assert(code_recv);
 
     code_recv->node = node;
     code_recv->peer = peer;
@@ -419,16 +411,11 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     memcpy(code_recv->data, data, size);
     size += sizeof(code_recv_t);
 
-    //itm_printf(0, "<itm> recv: raw frame data size=%lu\n", size);
     u8 *frame;
     size = serf_encode(CODE_ID_RECV, (u8 *)code_recv, size, &frame);
-    free(code_recv);
 
     if (frame) {
-        //itm_printf(0, "<itm> recv: frame size=%lu\n", size);
         usb_write_direct(0, frame, size);
-        //itm_printf(0, "<itm> recv: frame size=%lu <wrote>\n", size);
-        //free(frame);
     }
 }
 

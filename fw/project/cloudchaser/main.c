@@ -87,7 +87,7 @@ int main(void)
 {
     pin_flag_init();
 
-    const xTaskHandle main_task_handle = xTaskCreateStatic(
+    xTaskCreateStatic(
             main_task, "main", MAIN_TASK_STACK_SIZE, NULL, TASK_PRIO_DEFAULT,
             main_task_stack, &main_task_static
     );

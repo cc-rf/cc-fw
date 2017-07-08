@@ -41,7 +41,7 @@
 #include "semphr.h"
 #include "event_groups.h"
 
-#include <cc/common.h>
+#include <usr/type.h>
 
 typedef void (* vcom_rx_t)(u8 port, size_t size, u8 *data);
 
