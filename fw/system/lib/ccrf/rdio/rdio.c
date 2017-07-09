@@ -24,6 +24,10 @@
 #endif
 
 
+static void rdio_isr_status_1(rdio_t rdio);
+static void rdio_isr_status_0(rdio_t rdio);
+
+
 rdio_t rdio_init(const rdio_config_t *config)
 {
     rdio_t rdio = malloc(sizeof(struct radio)); assert(rdio);
@@ -63,6 +67,12 @@ rdio_t rdio_init(const rdio_config_t *config)
         ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO3, CCRF_ISR_EDGE_RISING, config->isr, config->isr_param);
     }
 
+    rdio_reg_set(rdio, CC1200_IOCFG2, CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1);
+    ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO2, CCRF_ISR_EDGE_BOTH, (ccrf_isr_t) rdio_isr_status_1, rdio);
+
+    rdio_reg_set(rdio, CC1200_IOCFG0, CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS0);
+    ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO0, CCRF_ISR_EDGE_BOTH, (ccrf_isr_t) rdio_isr_status_0, rdio);
+
     goto _done;
     _fail:
 
@@ -76,7 +86,19 @@ rdio_t rdio_init(const rdio_config_t *config)
 }
 
 
-rdio_state_t rdio_state(rdio_t rdio)
+static void rdio_isr_status_1(rdio_t rdio)
+{
+    rdio->flag[1] = (u8)ccrf_isr_state(rdio, CCRF_ISR_SRC_GPIO2);
+}
+
+
+static void rdio_isr_status_0(rdio_t rdio)
+{
+    rdio->flag[0] = (u8)ccrf_isr_state(rdio, CCRF_ISR_SRC_GPIO0);
+}
+
+
+rdio_state_t rdio_state_read(rdio_t rdio)
 {
     const u8 ms = rdio_reg_get(rdio, CC1200_MARCSTATE, NULL) & CC1200_MARC_2PIN_STATE_M;
     switch (ms) {
@@ -93,30 +115,57 @@ rdio_state_t rdio_state(rdio_t rdio)
 }
 
 
+/*volatile rdio_state_t rdio_state(rdio_t rdio)
+{
+    return (rdio_state_t) ((rdio->flag[1] << 1) | rdio->flag[0]);
+}*/
+
+
 rdio_status_t rdio_mode_idle(rdio_t rdio)
 {
-    rdio_status_t st = rdio_strobe_noop(rdio);
+    rdio_status_t status = RDIO_STATUS_IDLE;
 
-    if (!(st & RDIO_STATUS_IDLE)) {
-        st = rdio_strobe_idle(rdio);
+    if (rdio_state(rdio) != RDIO_STATE_IDLE) {
+        status = rdio_strobe_idle(rdio);
     }
 
-    return st;
+    return status;
 }
 
 
 rdio_status_t rdio_mode_rx(rdio_t rdio)
 {
-    rdio_status_t st;
+    rdio_status_t status = RDIO_STATUS_RX;
+    
+    switch (rdio_state(rdio)) {
+        case RDIO_STATE_SETTLE:
+            goto _full_check;
+            break;
+        
+        case RDIO_STATE_TX:
+            break;
+        
+        case RDIO_STATE_IDLE:
+            break;
 
+        default:
+        case RDIO_STATE_RX:
+            goto _done;
+    }
+
+    status = rdio_strobe_rx(rdio);
+
+    goto _done;
+    _full_check:
+    
     do {
-        st = rdio_strobe_noop(rdio) & RDIO_STATUS_MASK;
+        status = rdio_strobe_noop(rdio) & RDIO_STATUS_MASK;
 
-    } while (st == RDIO_STATUS_SETTLING || st == RDIO_STATUS_CALIBRATE);
+    } while (status == RDIO_STATUS_SETTLING || status == RDIO_STATUS_CALIBRATE);
 
-    switch (st) {
+    switch (status) {
         case RDIO_STATUS_RX:
-            return st;
+            goto _done;
 
         case RDIO_STATUS_TX:
             break;
@@ -139,7 +188,11 @@ rdio_status_t rdio_mode_rx(rdio_t rdio)
             break;
     }
 
-    return rdio_strobe_rx(rdio);
+    status = rdio_strobe_rx(rdio);
+
+    _done:
+
+    return status;
 }
 
 rdio_status_t rdio_cca_run(rdio_t rdio, bool check)

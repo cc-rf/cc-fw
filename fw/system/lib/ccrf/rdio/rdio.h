@@ -10,11 +10,33 @@
 #define CC_PA_SUPPORT           1               /* Enable functions for using power amplifier */
 
 
+typedef enum __packed {
+    RDIO_STATUS_MASK            = CC1200_STATUS_STATE_M,
+    RDIO_STATUS_IDLE            = CC1200_STATE_IDLE,
+    RDIO_STATUS_RX              = CC1200_STATE_RX,
+    RDIO_STATUS_TX              = CC1200_STATE_TX,
+    RDIO_STATUS_FSTXON          = CC1200_STATE_FSTXON,
+    RDIO_STATUS_CALIBRATE       = CC1200_STATE_CALIBRATE,
+    RDIO_STATUS_SETTLING        = CC1200_STATE_SETTLING,
+    RDIO_STATUS_RXFIFO_ERROR    = CC1200_STATE_RXFIFO_ERROR,
+    RDIO_STATUS_TXFIFO_ERROR    = CC1200_STATE_TXFIFO_ERROR
+
+} rdio_status_t;
+
+typedef enum __packed {
+    RDIO_STATE_SETTLE,
+    RDIO_STATE_TX,
+    RDIO_STATE_IDLE,
+    RDIO_STATE_RX
+
+} rdio_state_t;
+
 typedef u8 rdio_id_t;
 typedef void (* rdio_isr_t)(void *param);
 
 typedef struct __packed radio {
     rdio_id_t id;
+    volatile u8 flag[2];
 
 } *rdio_t;
 
@@ -35,30 +57,12 @@ typedef struct __packed {
 
 } rdio_config_t;
 
-typedef enum __packed {
-    RDIO_STATUS_MASK            = CC1200_STATUS_STATE_M,
-    RDIO_STATUS_IDLE            = CC1200_STATE_IDLE,
-    RDIO_STATUS_RX              = CC1200_STATE_RX,
-    RDIO_STATUS_TX              = CC1200_STATE_TX,
-    RDIO_STATUS_FSTXON          = CC1200_STATE_FSTXON,
-    RDIO_STATUS_CALIBRATE       = CC1200_STATE_CALIBRATE,
-    RDIO_STATUS_SETTLING        = CC1200_STATE_SETTLING,
-    RDIO_STATUS_RXFIFO_ERROR    = CC1200_STATE_RXFIFO_ERROR,
-    RDIO_STATUS_TXFIFO_ERROR    = CC1200_STATE_TXFIFO_ERROR
-    
-} rdio_status_t;
-
-typedef enum __packed {
-    RDIO_STATE_SETTLE,
-    RDIO_STATE_TX,
-    RDIO_STATE_IDLE,
-    RDIO_STATE_RX
-
-} rdio_state_t;
 
 rdio_t rdio_init(const rdio_config_t *config);
 
-rdio_state_t rdio_state(rdio_t rdio);
+rdio_state_t rdio_state_read(rdio_t rdio);
+//volatile rdio_state_t rdio_state(rdio_t rdio);
+static inline volatile rdio_state_t rdio_state(rdio_t rdio) { return (rdio_state_t) ((rdio->flag[1] << 1) | rdio->flag[0]); }
 
 rdio_status_t rdio_mode_idle(rdio_t rdio);
 rdio_status_t rdio_mode_rx(rdio_t rdio);

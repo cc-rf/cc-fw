@@ -28,8 +28,6 @@
 
 
 #define PHY_PKT_FLAG_SYNC       (0x01)   // is a sync packet
-#define PHY_PKT_FLAG_NOSYNC     (0x02)   // not synced
-#define PHY_PKT_FLAG_RECAL      (0x08)
 
 #define PHY_TXQ_LEN             3
 
@@ -231,7 +229,7 @@ u32 phy_delay(u8 size)
 bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
 {
     if (size > PHY_FRAME_SIZE_MAX) {
-        //cc_dbg("frame too big: %u > %u", size, PHY_FRAME_SIZE_MAX);
+        phy_trace_error("frame too big: %u > %u", size, PHY_FRAME_SIZE_MAX);
         return false;
     }
 
@@ -262,18 +260,17 @@ bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
             if (xQueueSendToFront(phy->txq, &sq.pkt, portMAX_DELAY)) {
                 xTaskNotify(phy->task, NOTIFY_MASK_TX, eSetBits);
             } else {
-                //cc_dbg("tx pkt queue immediate fail");
+                phy_trace_error("tx pkt queue immediate fail");
             }
         }
 
-    } else if (xQueueSend(phy->txq, &sq.pkt, portMAX_DELAY/*pdMS_TO_TICKS(500)*/)) {
+    } else if (xQueueSend(phy->txq, &sq.pkt, portMAX_DELAY)) {
         xTaskNotify(phy->task, NOTIFY_MASK_TX, eSetBits);
     } else {
-        //cc_dbg("tx pkt queue fail");
+        phy_trace_error("tx pkt queue fail");
     }
 
     if (block) {
-        //xTaskNotifyWait(CALLER_NOTIFY_TX_MASK, CALLER_NOTIFY_TX_MASK, NULL, portMAX_DELAY);
         u32 notify;
 
         do {
@@ -299,7 +296,6 @@ static void phy_task(phy_t const restrict phy)
     u32 chan_id_ticks;
     u32 remaining = 0;
     volatile ccrf_clock_t tx_next = 0;
-    //u32 recal_cycles = RECAL_CYCLES + 1;
     u32 notify;
 
     volatile chan_id_t chan_cur = (chan_id_t) -1;
@@ -308,7 +304,7 @@ static void phy_task(phy_t const restrict phy)
     phy_sync_pkt_t pkt_sync = {
             .hdr = {
                     .size = sizeof(phy_sync_pkt_t) - 1,
-                    .flag = (u8)(PHY_PKT_FLAG_IMMEDIATE | PHY_PKT_FLAG_SYNC | (!phy->boss ? PHY_PKT_FLAG_NOSYNC : 0))
+                    .flag = (u8)(PHY_PKT_FLAG_IMMEDIATE | PHY_PKT_FLAG_SYNC)
             },
     };
 
@@ -329,8 +325,6 @@ static void phy_task(phy_t const restrict phy)
     ccrf_clock_t loop_time_prev = loop_time_start;
     ccrf_clock_t loop_time_sum = 0;
     u32 loop_time_count = 0;*/
-
-    //ccrf_clock_t send_time;
 
     while (1) {
 
@@ -380,7 +374,7 @@ static void phy_task(phy_t const restrict phy)
                     case CC1200_MARC_STATUS1_TX_FIFO_UNDERFLOW:
                     case CC1200_MARC_STATUS1_TX_FIFO_OVERFLOW:
                         rdio_strobe_txfl(phy->rdio);
-                        rdio_strobe_idle(phy->rdio);
+                        rdio_mode_idle(phy->rdio);
 
                     case CC1200_MARC_STATUS1_TX_FINISHED:
                         ccrf_amp_mode_tx(phy->rdio, false);
@@ -404,10 +398,6 @@ static void phy_task(phy_t const restrict phy)
 
                                 if ((void*)pkt == &pkt_sync) {
 
-                                    /*if (pkt_sync.hdr.flag & PHY_PKT_FLAG_RECAL) {
-                                        pkt_sync.hdr.flag &= ~PHY_PKT_FLAG_RECAL;
-                                    }*/
-
                                     phy->sync_time = ccrf_clock();
                                     ccrf_timer_restart(phy->hop_timer);
                                 }
@@ -426,6 +416,8 @@ static void phy_task(phy_t const restrict phy)
 
                     case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
                     case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
+                        rdio_strobe_rxfl(phy->rdio);
+                        break;
 
                     case CC1200_MARC_STATUS1_ADDRESS:
                     case CC1200_MARC_STATUS1_CRC:
@@ -468,19 +460,6 @@ static void phy_task(phy_t const restrict phy)
                 }
 
                 if (phy->sync) phy->sync(chan_cur);
-
-                /*if (!chan_cur) {
-                    if (!--recal_cycles) {
-                        recal_cycles = RECAL_CYCLES;
-                        recal_needed = true;
-                    }
-                } else if (recal_needed && chan_cycle_cur == CHAN_COUNT) {
-                    recal_needed = false;
-                }
-
-                if (recal_needed) {
-                    chan_recalibrate(&phy->chan.group, chan_cur);
-                }*/
 
                 if (pkt) {
                     const u8 tx_bytes = rdio_reg_get(phy->rdio, CC1200_NUM_TXBYTES, NULL);
@@ -530,10 +509,6 @@ static void phy_task(phy_t const restrict phy)
 
             pkt_sync.hdr.cell = phy->cell;
 
-            /*if (recal_needed) {
-                pkt_sync.hdr.flag |= PHY_PKT_FLAG_RECAL;
-            }*/
-
             rdio_fifo_write(phy->rdio, (u8 *) pkt, pkt->size + (u8)1);
             ccrf_amp_mode_tx(phy->rdio, true);
             rdio_strobe_tx(phy->rdio);
@@ -576,10 +551,6 @@ static void phy_task(phy_t const restrict phy)
                 xQueueReceive(phy->txq, &sq, 0);
 
                 if (!synced) {
-                    // TODO: decide whether or not this should be done for pkt_ack
-
-                    ((phy_pkt_t *)pkt)->hdr.flag |= PHY_PKT_FLAG_NOSYNC;
-
                     if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)
                         ((phy_pkt_t *)pkt)->hdr.flag &= ~PHY_PKT_FLAG_IMMEDIATE;
                 }
@@ -635,13 +606,10 @@ static bool phy_recv(phy_t phy, bool flush)
         spkt = (rf_pkt_t *)buf;
 
         if (spkt->size > PHY_FRAME_SIZE_MAX) {
-            // NOTE: _v added newly, but this is a useful error to see when timing is off. same applies for below
-            //cc_dbg("[%u] c=%u malformed: len[header]=%u > len[max]=%u  (len[fifo]=%u)", dev, pkt_count+1, spkt->len, PHY_FRAME_SIZE_MAX, len);
             break;
         }
 
         if (spkt->size > (len - PKT_OVERHEAD)) {
-            //cc_dbg("[%u] c=%u underflow: len[header]=%u > len[fifo]=%u", dev, pkt_count+1, spkt->len, len);
             break;
         }
 
@@ -655,11 +623,9 @@ static bool phy_recv(phy_t phy, bool flush)
             if (crc_ok) {
                 unblock |= phy_recv_packet(phy, spkt, rssi, lqi);
             } else {
-                //cc_dbg("[%u] c=%u bad crc", dev, pkt_count);
                 break;
             }
         } else {
-            //cc_dbg("[%u] c=%u empty", dev, pkt_count);
             break;
         }
 
@@ -687,23 +653,12 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
         if (!phy->boss) {
             phy->sync_time = ccrf_clock();
             ccrf_timer_restart(phy->hop_timer);
-
-            /*if (ppkt->hdr.flag & PHY_PKT_FLAG_RECAL) {
-                recal_needed = true;
-            }*/
         }
 
         return false;
     }
 
     ppkt->hdr.size -= (sizeof(phy_pkt_t) - sizeof(rf_pkt_t));
-
-    // NOTE: temporarily disabling this while other stuff gets debugged
-    /*if (ppkt->hdr.flag & PHY_PKT_FLAG_NOSYNC) {
-        if (boss && !sync_needed) {
-            sync_needed = true;
-        }
-    }*/
 
     return phy->recv(phy->recv_param, ppkt->hdr.flag, ppkt->hdr.size, ppkt->data, rssi, lqi);
 }
@@ -722,7 +677,7 @@ static inline void phy_chan_set(phy_t phy, chan_id_t chan)
 
     if (chan != chan_prev) {
         chan_prev = chan;
-        rdio_strobe_idle(phy->rdio);
+        rdio_mode_idle(phy->rdio);
         chan_select(&phy->chan.group, phy->chan.hop_table[chan]);
     }
 }

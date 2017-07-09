@@ -23,3 +23,4 @@ typedef void (* ccrf_isr_t)(void *param);
 
 
 void ccrf_isr_configure(rdio_t rdio, ccrf_isr_src_t src, ccrf_isr_edge_t edge, ccrf_isr_t isr, void *param);
+bool ccrf_isr_state(rdio_t rdio, ccrf_isr_src_t src);

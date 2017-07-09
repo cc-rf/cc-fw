@@ -157,6 +157,14 @@ void ccrf_isr_configure(rdio_t rdio, ccrf_isr_src_t src, ccrf_isr_edge_t edge, c
 }
 
 
+bool ccrf_isr_state(rdio_t rdio, ccrf_isr_src_t src)
+{
+    const sys_port_t port = cc_interface[rdio_id(rdio)].isr[src].port - 1;
+    const u32 pin = cc_interface[rdio_id(rdio)].isr[src].pin;
+    return GPIO_ReadPinInput(gpios[port], pin) != 0;
+}
+
+
 #define DECL_PORT_ISR(P) \
     __attribute__((interrupt,noclone)) void PORT##P##_IRQHandler(void) { \
         u32 isfr = PORT##P->ISFR;                           \
