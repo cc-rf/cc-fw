@@ -1,7 +1,18 @@
 #include <kio/sclk.h>
 #include <kio/pit.h>
 
-static pit_t sclk_pit[3] = {NULL};
+
+#define SCLK_PERIOD_0_NSEC    1000
+#define SCLK_PERIOD_1_COUNT   (1000000 * 10)
+
+
+static void sclk_pit_cycle(pit_t pit, void *param);
+
+
+static pit_t sclk_pit[2] = {NULL};
+
+static volatile pit_nsec_t sclk_high_value = 0;
+
 
 void sclk_init(void)
 {
@@ -9,31 +20,28 @@ void sclk_init(void)
         pit_init();
 
         sclk_pit[0] = pit_alloc(&(pit_cfg_t){
-                .period = pit_nsec_tick(1000)
+                .period = pit_nsec_tick(SCLK_PERIOD_0_NSEC)
         });
 
         sclk_pit[1] = pit_chain(sclk_pit[0], &(pit_cfg_t){
-                .period = UINT32_MAX
+                .period = SCLK_PERIOD_1_COUNT,
+                .handler = sclk_pit_cycle
         });
 
-        sclk_pit[2] = pit_chain(sclk_pit[1], &(pit_cfg_t){
-                .period = UINT32_MAX
-        });
-
-        pit_start(sclk_pit[2]);
         pit_start(sclk_pit[1]);
         pit_start(sclk_pit[0]);
-
-        //pit_ltt_init();
     }
 }
 
+
+static void sclk_pit_cycle(pit_t pit, void *param)
+{
+    const pit_nsec_t sclk_high_value_new = sclk_high_value + SCLK_PERIOD_1_COUNT;
+    sclk_high_value = sclk_high_value_new;
+}
+
+
 sclk_t sclk_time(void)
 {
-    return UINT64_MAX -
-            (((u64)pit_get_current(sclk_pit[2]) << 32u) |
-                    (u64)pit_get_current(sclk_pit[1])
-            );
-
-    //return pit_ltt_current() / 1000u;
+    return sclk_high_value + SCLK_PERIOD_1_COUNT - pit_get_current(sclk_pit[1]);
 }

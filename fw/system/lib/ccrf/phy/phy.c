@@ -350,7 +350,7 @@ static void phy_task(phy_t const restrict phy)
 
         loop_time_prev = ts;*/
 
-        if (xTaskNotifyWait(0, NOTIFY_MASK_ALL, &notify, tx_next ? pdMS_TO_TICKS(1) : portMAX_DELAY)) {
+        if (xTaskNotifyWait(0, NOTIFY_MASK_ALL, &notify, tx_next ? pdMS_TO_TICKS(1) >> 2 : portMAX_DELAY)) {
 
             if (notify & NOTIFY_MASK_ISR) {
                 ms = rdio_reg_get(phy->rdio, CC1200_MARC_STATUS1, NULL);

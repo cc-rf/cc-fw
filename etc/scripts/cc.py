@@ -246,7 +246,7 @@ def main(args):
             print >>sys.stderr, "done."
             sys.exit(0)
 
-        # cleanup.install(lambda: sys.exit(1))
+        cleanup.install(lambda: os._exit(0))
 
         cc.io.status()
 
