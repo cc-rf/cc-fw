@@ -4,9 +4,6 @@
 #include <fsl_gpio.h>
 #include <fsl_port.h>
 
-//#if !CC_PA_SUPPORT
-//#error CC_PA_SUPPORT must be set to 1
-//#endif
 
 static inline void amp_init_gpio(const sys_gpio_t *const gpio);
 static inline bool amp_ctrl_gpio(const sys_gpio_t *const gpio, const bool enable);
@@ -44,10 +41,7 @@ static inline void amp_init_gpio(const sys_gpio_t *const gpio)
 
 static inline bool amp_ctrl_gpio(const sys_gpio_t *const gpio, const bool enable)
 {
-    if (!SYS_PORT_VALID(gpio->port))
-        return false;
-
-    bool enabled = GPIO_ReadPinInput(SYS_PORT_GPION(gpio->port), gpio->pin) != 0;
+    const bool enabled = GPIO_ReadPinInput(SYS_PORT_GPION(gpio->port), gpio->pin) != 0;
 
     if (!(enable ^ enabled))
         return false;

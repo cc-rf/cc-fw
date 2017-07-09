@@ -109,7 +109,7 @@
  * See http://www.freertos.org/a00110.html.
  *----------------------------------------------------------*/
 
-#define configUSE_PREEMPTION 0U
+#define configUSE_PREEMPTION 1U
 #define configUSE_IDLE_HOOK 0U
 #define configUSE_TICK_HOOK 0U
 

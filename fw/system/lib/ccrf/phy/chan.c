@@ -1,10 +1,8 @@
 #include "phy/chan.h"
-#include "chan.h"
 
 #include <assert.h>
 #include <fsl_rnga.h>
 #include <stdlib.h>
-#include <sys/trace.h>
 
 
 static void chan_calibrate(chan_group_t *group, chan_info_t *chan);

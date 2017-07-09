@@ -44,7 +44,7 @@ static struct {
     StaticQueue_t sem_static;
     #endif
 
-} spi[CC_NUM_DEVICES];
+} spi[CCRF_CONFIG_RDIO_COUNT];
 
 bool ccrf_spi_init(rdio_t rdio)
 {

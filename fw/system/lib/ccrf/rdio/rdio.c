@@ -3,11 +3,8 @@
 #include "sys/spi.h"
 #include "sys/clock.h"
 #include "sys/isr.h"
+#include "sys/local.h"
 #include "sys/trace.h"
-#include "rdio.h"
-
-#include <stdlib.h>
-#include <assert.h>
 
 
 #define rdio_trace_info     ccrf_trace_info
@@ -28,9 +25,14 @@ static void rdio_isr_status_1(rdio_t rdio);
 static void rdio_isr_status_0(rdio_t rdio);
 
 
+static struct rdio rdios[CCRF_CONFIG_RDIO_COUNT];
+
+
 rdio_t rdio_init(const rdio_config_t *config)
 {
-    rdio_t rdio = malloc(sizeof(struct radio)); assert(rdio);
+    rdio_t rdio = &rdios[config->id];
+
+    memset(rdio, 0, sizeof(struct rdio));
 
     rdio->id = config->id;
 
@@ -77,7 +79,6 @@ rdio_t rdio_init(const rdio_config_t *config)
     _fail:
 
     if (rdio) {
-        free(rdio);
         rdio = NULL;
     }
 

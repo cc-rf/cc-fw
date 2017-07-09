@@ -1,6 +1,6 @@
 #include "kinetis.h"
 
-const interface_t cc_interface[CC_NUM_DEVICES] = {
+const interface_t cc_interface[CCRF_CONFIG_RDIO_COUNT] = {
 #if BOARD_CLOUDCHASER
     {
         .spi = {SPI0, 0},

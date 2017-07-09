@@ -2,7 +2,7 @@
 
 #include <usr/type.h>
 
-#include "common.h"
+#include "local.h"
 
 #include <fsl_device_registers.h>
 
@@ -50,4 +50,4 @@ typedef struct interface {
 
 } interface_t;
 
-extern const interface_t cc_interface[CC_NUM_DEVICES];
+extern const interface_t cc_interface[CCRF_CONFIG_RDIO_COUNT];

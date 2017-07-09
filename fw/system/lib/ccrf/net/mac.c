@@ -1,14 +1,12 @@
 #include <ccrf/mac.h>
 #include "phy/phy.h"
 #include "sys/trace.h"
+#include "sys/local.h"
 
 #include <FreeRTOS.h>
-#include <stdlib.h>
 #include <assert.h>
-#include <string.h>
 #include <task.h>
 #include <queue.h>
-#include <kio/uid.h>
 
 
 #define mac_trace_info          ccrf_trace_info
@@ -121,9 +119,15 @@ static void mac_task_recv(mac_t mac);
 
 static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
 
+
+static struct mac macs[CCRF_CONFIG_RDIO_COUNT];
+
+
 mac_t mac_init(mac_config_t *config)
 {
-    mac_t mac = calloc(1, sizeof(struct mac)); assert(mac);
+    mac_t mac = &macs[config->rdid];
+
+    memset(mac, 0, sizeof(struct mac));
 
     mac->addr = config->addr;
     mac->recv = config->recv;
@@ -158,7 +162,6 @@ mac_t mac_init(mac_config_t *config)
     _fail:
 
     if (mac) {
-        free(mac);
         mac = NULL;
     }
 
@@ -261,7 +264,7 @@ static bool mac_send_packet(mac_t mac, mac_static_pkt_t *pkt)
     const u8 pkt_len = sizeof(mac_pkt_t) + pkt->size;
     const bool imm = pkt->flag & MAC_FLAG_PKT_IMM;
     const bool needs_ack = pkt->flag & MAC_FLAG_ACK_REQ;
-    const u8 nphy_flag = (u8)((imm ? PHY_PKT_FLAG_IMMEDIATE : 0) | PHY_PKT_FLAG_BLOCK);
+    const u8 phy_flag = (u8)(imm ? PHY_PKT_FLAG_IMMEDIATE : 0) | (u8)(!imm || needs_ack ? PHY_PKT_FLAG_BLOCK : 0);
 
     u8 retry = MAC_PEND_RETRY;
 
@@ -286,7 +289,7 @@ static bool mac_send_packet(mac_t mac, mac_static_pkt_t *pkt)
 
     ///sent = sclk_time();
 
-    if (!phy_send(mac->phy, nphy_flag, (u8 *)pkt, pkt_len)) {
+    if (!phy_send(mac->phy, phy_flag, (u8 *)pkt, pkt_len)) {
 
         if (--retry) {
             mac_trace_warn("retry 0x%02X/%u [tx fail]", pkt->seqn, pkt->size);
@@ -381,10 +384,8 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi
 
     } else {
 
-        if (pkt->dest != 0 && pkt->dest != mac->addr) {
-            mac_trace_verbose("(rx) drop: addr mismatch");
+        if (pkt->dest == 0 || pkt->dest == mac->addr) {
 
-        } else {
             if (pkt->dest == mac->addr) {
                 unblock = true;
             }
@@ -392,7 +393,8 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi
             mac_peer_t *const peer = mac_peer_get(mac, pkt->addr);
 
             if (peer) {
-                if (pkt->flag & MAC_FLAG_ACK_REQ) {
+
+                if (pkt->dest == mac->addr && (pkt->flag & MAC_FLAG_ACK_REQ)) {
                     if (pkt->flag & MAC_FLAG_ACK_RQR) {
                         mac_trace_debug(
                                 "rqr-ack-tx: seq=%03u pseq=%03u len=%03u",
@@ -406,7 +408,7 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi
                     );
                 }
 
-                if (pkt->flag & MAC_FLAG_ACK_RSP) {
+                if (pkt->dest == mac->addr && (pkt->flag & MAC_FLAG_ACK_RSP)) {
                     const u8 seqn = *(u8 *)pkt->data;
                     mac_pkt_t *const pend = mac->pend.pkt;
 

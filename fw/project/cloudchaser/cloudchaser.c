@@ -11,6 +11,10 @@
 
 #include <ccrf/mac.h>
 
+
+#define CLOUDCHASER_RDIO_COUNT  1
+
+
 #define USB_IN_DATA_MAX     (MAC_PKT_SIZE_MAX + 64)
 
 #define CODE_ID_ECHO        0
@@ -87,7 +91,7 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
 static void write_code_status(u8 port, code_status_t *code_status);
 
 
-static mac_t mac;
+static mac_t macs[CLOUDCHASER_RDIO_COUNT];
 
 static code_status_t status;
 
@@ -138,25 +142,35 @@ void cloudchaser_main(void)
             (u32)(status.serial >> 32), (u32)status.serial, mac_config.cell, status.node
     );
 
-    if ((mac = mac_init(&mac_config))) {
+    if (!(macs[0] = mac_init(&mac_config))) {
+        return;
+    }
 
-        if (uflag1_set()) {
-            uart_relay_run();
+    #if CLOUDCHASER_RDIO_COUNT > 1
+
+        mac_config.rdid = 1;
+        mac_config.sync = NULL;
+        mac_config.addr += 1;
+
+        if (!(macs[1] = mac_init(&mac_config))) {
+            return;
         }
 
-        if (uflag2_set() && mac_config.boss) {
-            printf("meter: auto-tx enabled\r\n");
-            #define TXLEN 45
+    #endif
 
-            while (1) {
-                const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
-                mac_send(mac, MAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send);
-                vTaskDelay(pdMS_TO_TICKS(23));
-            }
+    if (uflag1_set()) {
+        uart_relay_run();
+    }
+
+    if (uflag2_set() && mac_config.boss) {
+        printf("meter: auto-tx enabled\r\n");
+        #define TXLEN 45
+
+        while (1) {
+            const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
+            mac_send(macs[0], MAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send);
+            vTaskDelay(pdMS_TO_TICKS(23));
         }
-
-        while(1) vTaskDelay(portMAX_DELAY);
-
     }
 }
 
@@ -178,7 +192,7 @@ static void uart_relay_run(void)
     while (1) {
         uart_read(uart, (u8 *)message.input, 1);
         //itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
-        if (mac_send(mac, MAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
+        if (mac_send(macs[0], MAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
             if (!uflag2_set()) {
                 LED_C_TOGGLE();
                 LED_D_TOGGLE();
@@ -342,20 +356,25 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
         code_send->size = MAC_PKT_SIZE_MAX;
     }
 
-    if (!code_send->node || code_send->node == mac_addr(mac)) {
-        const bool result = mac_send(mac,
-                (mac_send_t) code_send->type,
-                code_send->dest,
-                code_send->size,
-                code_send->data
-        );
+    for (u8 i = 0; i < CLOUDCHASER_RDIO_COUNT; ++i) {
+        if (!code_send->node || code_send->node == mac_addr(macs[i])) {
+            const bool result = mac_send(
+                    macs[i],
+                    (mac_send_t) code_send->type,
+                    code_send->dest,
+                    code_send->size,
+                    code_send->data
+            );
 
-        if (result) {
-            ++status.send_count;
-            status.send_bytes += code_send->size;
+            if (result) {
+                ++status.send_count;
+                status.send_bytes += code_send->size;
 
-            //LED_C_TOGGLE();
-            //LED_D_TOGGLE();
+                //LED_C_TOGGLE();
+                //LED_D_TOGGLE();
+            }
+
+            break;
         }
     }
 }

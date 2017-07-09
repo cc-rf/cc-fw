@@ -34,7 +34,7 @@ typedef enum __packed {
 typedef u8 rdio_id_t;
 typedef void (* rdio_isr_t)(void *param);
 
-typedef struct __packed radio {
+typedef struct __packed rdio {
     rdio_id_t id;
     volatile u8 flag[2];
 
