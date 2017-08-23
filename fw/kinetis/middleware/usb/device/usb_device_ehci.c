@@ -173,6 +173,25 @@ static void USB_DeviceEhciSetDefaultState(usb_device_ehci_state_struct_t *ehciSt
     ehciState->isResetting = 0U;
 }
 
+// phillip: implement missing handler using khci as template
+#if defined(USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING > 0U)
+static void USB_DeviceEhciInterruptError(usb_device_ehci_state_struct_t *ehciState)
+{
+    usb_device_callback_message_struct_t message;
+
+    // WTF to do here?
+    //ehciState->registerBase->ISTAT = (kUSB_KhciInterruptError);
+
+    message.buffer = (uint8_t *)NULL;
+    message.code = kUSB_DeviceNotifyError;
+    message.length = 0U;
+    message.isSetup = 0U;
+
+    /* Notify up layer the USB error detected. */
+    USB_DeviceNotificationTrigger(ehciState->deviceHandle, &message);
+}
+#endif /* USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING */
+
 /*!
  * @brief Initialize a specified endpoint.
  *
@@ -1570,13 +1589,14 @@ void USB_DeviceEhciIsrFunction(void *deviceHandle)
 
     ehciState->registerBase->USBSTS = status;
 
-#if defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING > 0U)
+    // phillip: fix from khci -> ehci
+#if defined(USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING > 0U)
     if (status & USBHS_USBSTS_UEI_MASK)
     {
         /* Error interrupt */
         USB_DeviceEhciInterruptError(ehciState);
     }
-#endif /* USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING */
+#endif /* USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING */
 
     if (status & USBHS_USBSTS_URI_MASK)
     {

@@ -1021,6 +1021,8 @@ usb_status_t USB_DeviceCancel(usb_device_handle handle, uint8_t endpointAddress)
 {
     usb_device_struct_t *deviceHandle = (usb_device_struct_t *)handle;
     usb_status_t error = kStatus_USB_Error;
+    //uint8_t endpoint = endpointAddress & USB_ENDPOINT_NUMBER_MASK;
+    //uint8_t direction = (endpointAddress & USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_MASK) >> USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_SHIFT;
 
     if (NULL == deviceHandle)
     {
@@ -1030,6 +1032,9 @@ usb_status_t USB_DeviceCancel(usb_device_handle handle, uint8_t endpointAddress)
     if (NULL != deviceHandle->controllerInterface)
     {
         error = deviceHandle->controllerInterface->deviceCancel(deviceHandle->controllerHandle, endpointAddress);
+        // phillip: clear busy flag?
+        //deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 1U;
+
     }
     else
     {

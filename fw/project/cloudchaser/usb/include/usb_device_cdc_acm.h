@@ -254,6 +254,16 @@ extern usb_status_t USB_DeviceCdcAcmEvent(void *handle, uint32_t event, void *pa
  * @retval kStatus_USB_ControllerNotFound The controller interface is invalid.
  */
 extern usb_status_t USB_DeviceCdcAcmSend(class_handle_t handle, uint8_t ep, uint8_t *buffer, uint32_t length);
+
+/*!
+ * @brief Cancel the send request.
+ *
+ * @param handle The class handle of the CDC ACM class.
+ * @param ep The endpoint number of the transfer.
+ * @return A USB error code or kStatus_USB_Success.
+ */
+extern usb_status_t USB_DeviceCdcAcmSendCancel(class_handle_t handle, uint8_t ep);
+
 /*!
  * @brief Primes the endpoint to receive packet from host.
  *

@@ -54,7 +54,7 @@ bool usb_composite_init(vcom_rx_t vcom_rx);
 #define CONTROLLER_ID kUSB_ControllerLpcIp3511Hs0
 #endif
 
-#define USB_DEVICE_INTERRUPT_PRIORITY (3U)
+#define USB_DEVICE_INTERRUPT_PRIORITY (0U)
 
 typedef struct _usb_device_composite_struct
 {

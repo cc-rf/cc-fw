@@ -20,6 +20,7 @@
 
 #include <MK66F18.h>
 #include <fsl_sim.h>
+#include <usr/serf.h>
 
 
 #include "usb_device_descriptor.h"
@@ -42,7 +43,7 @@
 
 
 
-#define USB_VCOM_TASK_STACK_SIZE            (TASK_STACK_SIZE_DEFAULT / sizeof(StackType_t))
+#define USB_VCOM_TASK_STACK_SIZE            (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
 #define USB_VCOM_RX_TASK_STACK_SIZE         (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
 #define USB_VCOM_TX_QUEUE_LEN               4
 #define USB_VCOM_RX_QUEUE_LEN               4
@@ -76,7 +77,7 @@ static struct usb_vcom {
     u8 rx_buf[DATA_BUFF_SIZE];
 
     //volatile bool receiving;
-    volatile bool sending;
+    volatile s8 sending;
 
     u8 instance;
 
@@ -150,92 +151,50 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
         if (g_deviceComposite->cdcVcom[instance].cdcAcmHandle == handle) break;
     }
 
+    if (instance == USB_CDC_INSTANCE_COUNT) {
+        itm_puts(0, "usb: instance not found\r\n");
+        return kStatus_USB_Error;
+    }
+
     usb_cdc_acm_info_t *acmInfo = &usb_vcom[instance].acm;
 
     switch (event)
     {
         case kUSB_DeviceCdcEventSendResponse:
         {
-            if ((epCbParam->length != 0) && (!(epCbParam->length % g_cdcVcomDicEndpoints[instance][0].maxPacketSize)))
-            {
-                /* If the last packet is the size of endpoint, then send also zero-ended packet,
-                 ** meaning that we want to inform the host that we do not have any additional
-                 ** data, so it can flush the output.
-                 */
-                ep = ((u8 []){USB_CDC_VCOM0_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_IN_ENDPOINT})[instance];
-                error = USB_DeviceCdcAcmSend(handle, ep, NULL, 0);
+            if (usb_vcom[instance].sending) {
+                --usb_vcom[instance].sending;
+                xSemaphoreGive(usb_vcom[instance].txs);
             }
-            else if ((1 == g_deviceComposite->cdcVcom[instance].attach) && (1 == g_deviceComposite->cdcVcom[instance].startTransactions))
-            {
-                if ((epCbParam->buffer != NULL) || ((epCbParam->buffer == NULL) && (epCbParam->length == 0)))
-                {
-                    ep = ((u8 []){USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT})[instance];
-                    error = USB_DeviceCdcAcmRecv(handle, ep, usb_vcom[instance].rx_buf, g_cdcVcomDicEndpoints[instance][0].maxPacketSize);
 
-                    /*if (uxSemaphoreGetCount(usb_vcom[instance].txs) && !uxQueueMessagesWaiting(usb_vcom[instance].txq)) {
-                        // TODO: test this and determine if it is needed
-                        //itm_puts(0, "<itm> usb: post-tx flush\r\n");
-                        ep = ((u8 []){USB_CDC_VCOM0_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_IN_ENDPOINT})[instance];
-                        error = USB_DeviceCdcAcmSend(handle, ep, NULL, 0);
-                    }*/
-
-                    if (usb_vcom[instance].sending) {
-                        usb_vcom[instance].sending = false;
-                        xSemaphoreGive(usb_vcom[instance].txs);
-                    }
-                }
-                else {
-                    itm_printf(0, "usb[%i] tx done, but wtf\r\n", instance);
-                }
+            if ((1 == g_deviceComposite->cdcVcom[instance].attach) && (1 == g_deviceComposite->cdcVcom[instance].startTransactions)) {
+                error = kStatus_USB_Success;
             }
         }
         break;
         case kUSB_DeviceCdcEventRecvResponse:
         {
-            //usb_vcom[instance].receiving = false;
-
             if ((1 == g_deviceComposite->cdcVcom[instance].attach) && (1 == g_deviceComposite->cdcVcom[instance].startTransactions))
             {
-                uint32_t s_recvSize = epCbParam->length;
+                const u32 recv_size = epCbParam->length;
 
-                if (s_recvSize) {
-                    //flush_needed = true;
+                if (recv_size && recv_size != UINT32_MAX) {
 
-                    if (s_recvSize != UINT32_MAX) {
-                        // phillip: copy out to queue
-                        const usb_io_t io = {
-                                .len = s_recvSize,
-                                .buf = malloc(s_recvSize)
-                        };
+                    const usb_io_t io = {
+                            .len = recv_size,
+                            .buf = malloc(recv_size)
+                    };
 
-                        if (s_recvSize) {
-                            assert(io.buf);
-                            memcpy(io.buf, usb_vcom[instance].rx_buf, s_recvSize);
-                        }
+                    assert(io.buf);
+                    memcpy(io.buf, usb_vcom[instance].rx_buf, recv_size);
 
-                        //itm_printf(0, "usb[%i]: queue %u bytes @%p\r\n", instance, s_recvSize, io.buf);
-                        if (!xQueueSend(usb_vcom[instance].rxq, &io, portMAX_DELAY/*pdMS_TO_TICKS(10)*/)) {
-                            itm_puts(0, "usb: rx queue fail\r\n");
-                            free(io.buf);
-                        }
-
-                        s_recvSize = 0;
+                    if (!xQueueSend(usb_vcom[instance].rxq, &io, pdMS_TO_TICKS(10))) {
+                        itm_puts(0, "usb: rx queue fail\r\n");
+                        free(io.buf);
                     }
-
-
-                    //if (uxSemaphoreGetCount(usb_tx_s) && !uxQueueMessagesWaiting(usb_tx_q)) {
-                    //    // TODO: test this and determine if it is needed
-                    //    //itm_puts(0, "<itm> usb: post-rx flush\r\n");
-                    //    error = USB_DeviceCdcAcmSend(handle, USB_CDC_VCOM_BULK_IN_ENDPOINT, NULL, 0);
-                    //}
                 }
 
-                //if (!usb_vcom[instance].receiving) {
-                //    usb_vcom[instance].receiving = true;
-                    /* Schedule buffer for next receive event */
-                    ep = ((u8 []){USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT})[instance];
-                    error = USB_DeviceCdcAcmRecv(handle, ep, usb_vcom[instance].rx_buf, g_cdcVcomDicEndpoints[instance][0].maxPacketSize);
-                //}
+                error = kStatus_USB_Success;
             }
         }
         break;
@@ -311,7 +270,10 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
             break;
         case kUSB_DeviceCdcEventSetControlLineState:
         {
-            usb_vcom[instance].acm.dteStatus = acmReqParam->setupValue;
+            error = kStatus_USB_Success;
+
+            usb_vcom[instance].acm.dteStatus = (u8) acmReqParam->setupValue;
+
             /* activate/deactivate Tx carrier */
             if (acmInfo->dteStatus & USB_DEVICE_CDC_CONTROL_SIG_BITMAP_CARRIER_ACTIVATION)
             {
@@ -349,11 +311,15 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
             /* Lower byte of UART BITMAP */
             uartBitmap = (uint16_t *)&acmInfo->serialStateBuf[NOTIF_PACKET_SIZE + UART_BITMAP_SIZE - 2];
             *uartBitmap = acmInfo->uartState;
-            len = (uint32_t)(NOTIF_PACKET_SIZE + UART_BITMAP_SIZE);
-            if (0 == ((usb_device_cdc_acm_struct_t *)handle)->hasSentState)
-            {
+
+
+            if (0 == ((usb_device_cdc_acm_struct_t *)handle)->hasSentState) {
+                len = (uint32_t)(NOTIF_PACKET_SIZE + UART_BITMAP_SIZE);
+
                 ep = ((u8 []){USB_CDC_VCOM0_CIC_INTERRUPT_IN_ENDPOINT, USB_CDC_VCOM1_CIC_INTERRUPT_IN_ENDPOINT, USB_CDC_VCOM2_CIC_INTERRUPT_IN_ENDPOINT})[instance];
+
                 error = USB_DeviceCdcAcmSend(handle, ep, acmInfo->serialStateBuf, len);
+
                 if (kStatus_USB_Success != error)
                 {
                     usb_echo("kUSB_DeviceCdcEventSetControlLineState error!");
@@ -361,30 +327,26 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                 ((usb_device_cdc_acm_struct_t *)handle)->hasSentState = 1;
             }
 
-            /* Update status */
-            if (acmInfo->dteStatus & USB_DEVICE_CDC_CONTROL_SIG_BITMAP_CARRIER_ACTIVATION)
-            {
-                /*  To do: CARRIER_ACTIVATED */
-            }
-            else
-            {
-                /* To do: CARRIER_DEACTIVATED */
-            }
-            if (acmInfo->dteStatus & USB_DEVICE_CDC_CONTROL_SIG_BITMAP_DTE_PRESENCE)
-            {
+
+            if (acmInfo->dteStatus & USB_DEVICE_CDC_CONTROL_SIG_BITMAP_DTE_PRESENCE) {
                 /* DTE_ACTIVATED */
-                if (1 == g_deviceComposite->cdcVcom[instance].attach)
-                {
+                if (1 == g_deviceComposite->cdcVcom[instance].attach) {
                     g_deviceComposite->cdcVcom[instance].startTransactions = 1;
                 }
-            }
-            else
-            {
+            } else {
                 /* DTE_DEACTIVATED */
-                if (1 == g_deviceComposite->cdcVcom[instance].attach)
-                {
+                if (1 == g_deviceComposite->cdcVcom[instance].attach) {
                     g_deviceComposite->cdcVcom[instance].startTransactions = 0;
                 }
+            }
+
+            if (acmInfo->dteStatus & USB_DEVICE_CDC_CONTROL_SIG_BITMAP_CARRIER_ACTIVATION) {
+                /* CARRIER_ACTIVATED */
+                ep = ((u8 []){USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT})[instance];
+                USB_DeviceCdcAcmRecv(handle, ep, usb_vcom[instance].rx_buf, g_cdcVcomDicEndpoints[instance][0].maxPacketSize);
+
+            } else {
+                /* TODO: CARRIER_DEACTIVATED */
             }
         }
         break;
@@ -392,6 +354,10 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
             break;
         default:
             break;
+    }
+
+    if (error) {
+        itm_printf(0, "ev=%u er=%u\n", event, error);
     }
 
     return error;
@@ -403,10 +369,19 @@ static void usb_vcom_rx_task(void *param)
     const struct usb_vcom *const vcom = (struct usb_vcom *)param;
     const xQueueHandle rxq = vcom->rxq;
     const u8 instance = vcom->instance;
+    class_handle_t const cdc = g_deviceComposite->cdcVcom[instance].cdcAcmHandle;
+    const u8 ep = ((u8 []){USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT})[instance];
+
     usb_io_t io;
 
     while (1) {
         if (xQueueReceive(rxq, &io, portMAX_DELAY)) {
+            if (uxQueueMessagesWaiting(rxq) < USB_VCOM_RX_QUEUE_LEN) {
+                if ((1 == g_deviceComposite->cdcVcom[instance].attach) && (1 == g_deviceComposite->cdcVcom[instance].startTransactions)) {
+                    USB_DeviceCdcAcmRecv(cdc, ep, usb_vcom[instance].rx_buf, g_cdcVcomDicEndpoints[instance][0].maxPacketSize);
+                }
+            }
+
             vcom_rx(instance, io.len, io.buf);
             free(io.buf);
         }
@@ -418,29 +393,38 @@ static void usb_vcom_task(void *param)
 {
     struct usb_vcom *const vcom = (struct usb_vcom *)param;
     const u8 instance = vcom->instance;
-    usb_status_t error = kStatus_USB_Error;
+    class_handle_t const cdc = g_deviceComposite->cdcVcom[instance].cdcAcmHandle;
     const u8 ep = ((u8[]){USB_CDC_VCOM0_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_IN_ENDPOINT})[instance];
+
+    usb_status_t error = kStatus_USB_Error;
 
     usb_io_t io;
 
+    vcom->sending = 0;
+
     while (1) {
         if (!xQueueReceive(vcom->txq, &io, portMAX_DELAY)) continue;
-        xSemaphoreTake(vcom->txs, portMAX_DELAY);
-        vcom->sending = true;
+        ++vcom->sending;
         //itm_printf(0, "<itm> usb: send io=0x%08X size=%lu receiving=%u\n", io, io.len, receiving);
 
-        if ((error = USB_DeviceCdcAcmSend(g_deviceComposite->cdcVcom[instance].cdcAcmHandle, ep, io.buf, io.len))) {
-            itm_printf(0, "<itm> usb: tx error=%u\r\n", error);
-            xSemaphoreGive(vcom->txs);
+        if ((error = USB_DeviceCdcAcmSend(cdc, ep, io.buf, io.len))) {
+            --vcom->sending;
+            itm_printf(0, "usb: tx error=%u\r\n", error);
+
+            free(io.buf);
+            io.buf = NULL;
             continue;
+
         }
 
-        xSemaphoreTake(vcom->txs, portMAX_DELAY);
+        if (!xSemaphoreTake(vcom->txs, portMAX_DELAY /*pdMS_TO_TICKS(100)*/)) {
+            //error = USB_DeviceCdcAcmSendCancel(cdc, ep);
+            --vcom->sending;
+            itm_printf(0, "usb: tx timeout, len=%u\r\n", io.len);
+        }
 
         free(io.buf);
         io.buf = NULL;
-
-        xSemaphoreGive(vcom->txs);
     }
 }
 
@@ -456,7 +440,7 @@ bool vcom_init(vcom_rx_t rx_cb)
         usb_vcom[i].txq = xQueueCreateStatic(USB_VCOM_TX_QUEUE_LEN, sizeof(usb_vcom[i].txq_buf[0]), (u8 *)usb_vcom[i].txq_buf, &usb_vcom[i].txq_static);
         usb_vcom[i].rxq = xQueueCreateStatic(USB_VCOM_RX_QUEUE_LEN, sizeof(usb_vcom[i].rxq_buf[0]), (u8 *)usb_vcom[i].rxq_buf, &usb_vcom[i].rxq_static);
         usb_vcom[i].txs = xSemaphoreCreateBinaryStatic(&usb_vcom[i].txs_static);
-        xSemaphoreGive(usb_vcom[i].txs);
+        //xSemaphoreGive(usb_vcom[i].txs);
         usb_vcom[i].task = xTaskCreateStatic(usb_vcom_task, "usb:tx", USB_VCOM_TASK_STACK_SIZE, &usb_vcom[i], TASK_PRIO_HIGH - 1 - i, usb_vcom[i].task_stack, &usb_vcom[i].task_static); assert(usb_vcom[i].task);
         usb_vcom[i].rx_task = xTaskCreateStatic(usb_vcom_rx_task, "usb:rx", USB_VCOM_RX_TASK_STACK_SIZE, &usb_vcom[i], TASK_PRIO_HIGH - 2 - i, usb_vcom[i].rx_task_stack, &usb_vcom[i].rx_task_static); assert(usb_vcom[i].rx_task);
     }
@@ -474,14 +458,12 @@ bool usb_attached(u8 port)
     return g_deviceComposite->cdcVcom[port].attach && g_deviceComposite->cdcVcom[port].startTransactions;
 }
 
-extern size_t frame_encode(u8 code, size_t size, u8 data[], u8 **frame);
-
 void usb_write(u8 port, u8 *buf, size_t len)
 {
     if (!usb_attached(port) || !buf) return;
 
     u8 *frame = NULL;
-    size_t size = frame_encode(0x00, len, buf, &frame);
+    size_t size = serf_encode(0x00, buf, len, &frame);
 
     if (frame) {
         usb_write_direct(port, frame, size);
@@ -540,7 +522,7 @@ usb_status_t USB_DeviceCdcVcomSetConfigure(class_handle_t handle, uint8_t config
 
         const u8 ep = ((u8[]){USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT})[instance];
 
-        //itm_printf(0, "usb: attach com #%i\r\n", instance);
+        //itm_printf(0, "usb: attach com #%i p=%u\r\n", instance, g_deviceComposite->cdcVcom[instance].attach);
 
         g_deviceComposite->cdcVcom[instance].attach = 1;
         /* Schedule buffer for receive */

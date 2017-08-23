@@ -348,9 +348,9 @@ void USB_DeviceApplicationInit(void)
 
 
 #if defined(__GIC_PRIO_BITS)
-    GIC_SetPriority((IRQn_Type)irqNumber, USB_DEVICE_INTERRUPT_PRIORITY);
+    GIC_SetPriority((IRQn_Type)irqNumber, configMAX_SYSCALL_INTERRUPT_PRIORITY + USB_DEVICE_INTERRUPT_PRIORITY);
 #else
-    NVIC_SetPriority((IRQn_Type)irqNumber, USB_DEVICE_INTERRUPT_PRIORITY);
+    NVIC_SetPriority((IRQn_Type)irqNumber, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + USB_DEVICE_INTERRUPT_PRIORITY);
 #endif
     EnableIRQ((IRQn_Type)irqNumber);
 

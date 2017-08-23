@@ -700,6 +700,48 @@ usb_status_t USB_DeviceCdcAcmSend(class_handle_t handle, uint8_t ep, uint8_t *bu
     return error;
 }
 
+
+usb_status_t USB_DeviceCdcAcmSendCancel(class_handle_t handle, uint8_t ep)
+{
+    usb_device_cdc_acm_struct_t *cdcAcmHandle;
+    usb_status_t error = kStatus_USB_Error;
+    usb_device_cdc_acm_pipe_t *cdcAcmPipe = NULL;
+
+    if (!handle)
+    {
+        return kStatus_USB_InvalidHandle;
+    }
+    cdcAcmHandle = (usb_device_cdc_acm_struct_t *)handle;
+
+    if (cdcAcmHandle->bulkIn.ep == ep)
+    {
+        cdcAcmPipe = &(cdcAcmHandle->bulkIn);
+    }
+    else if (cdcAcmHandle->interruptIn.ep == ep)
+    {
+        cdcAcmPipe = &(cdcAcmHandle->interruptIn);
+    }
+    else
+    {
+    }
+
+    if (NULL != cdcAcmPipe)
+    {
+        if (1 == cdcAcmPipe->isBusy)
+        {
+            USB_CDC_ACM_ENTER_CRITICAL();
+            error = USB_DeviceCancel(cdcAcmHandle->handle, ep);
+            if (kStatus_USB_Success == error)
+            {
+                cdcAcmPipe->isBusy = 0;
+            }
+            USB_CDC_ACM_EXIT_CRITICAL();
+
+        }
+    }
+    return error;
+}
+
 /*!
  * @brief Prime the endpoint to receive packet from host.
  *
