@@ -3,6 +3,8 @@ set(NAME fw_project_cloudchaser)
 add_executable(
         ${NAME}
         main.c
+        led.c
+        lp5562.c
         cloudchaser.c
         usb/composite.c
         usb/usb_device_cdc_acm.c

@@ -29,7 +29,7 @@
 
 #define PHY_TXQ_LEN             3
 
-#define PHY_TASK_STACK_SIZE     (TASK_STACK_SIZE_HUGE / sizeof(StackType_t))
+#define PHY_TASK_STACK_SIZE     (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
 
 #define NOTIFY_MASK_ISR         (1<<1)
 #define NOTIFY_MASK_TX          (1<<2)
@@ -40,6 +40,7 @@
 #define CALLER_NOTIFY_TX_FAIL   (1<<5)
 #define CALLER_NOTIFY_TX_MASK   (CALLER_NOTIFY_TX_DONE | CALLER_NOTIFY_TX_FAIL)
 
+#define PHY_SYNC_MAGIC          ((u8) 0x69)
 
 typedef struct __packed {
     u8 size;
@@ -75,7 +76,7 @@ typedef struct __packed {
 
 typedef struct __packed {
     phy_pkt_hdr_t hdr;
-    u8 padding[1];
+    u8 magic;
 
 } phy_sync_pkt_t;
 
@@ -258,14 +259,14 @@ bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
 
         } else {
 
-            if (xQueueSendToFront(phy->txq, &sq.pkt, portMAX_DELAY)) {
+            if (xQueueSendToFront(phy->txq, &sq, pdMS_TO_TICKS(10))) {
                 xTaskNotify(phy->task, NOTIFY_MASK_TX, eSetBits);
             } else {
                 phy_trace_error("tx pkt queue immediate fail");
             }
         }
 
-    } else if (xQueueSend(phy->txq, &sq.pkt, portMAX_DELAY)) {
+    } else if (xQueueSend(phy->txq, &sq, pdMS_TO_TICKS(10))) {
         xTaskNotify(phy->task, NOTIFY_MASK_TX, eSetBits);
     } else {
         phy_trace_error("tx pkt queue fail");
@@ -275,7 +276,7 @@ bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
         u32 notify;
 
         do {
-            if (!xTaskNotifyWait(CALLER_NOTIFY_TX_MASK, CALLER_NOTIFY_TX_MASK, &notify, portMAX_DELAY))
+            if (!xTaskNotifyWait(CALLER_NOTIFY_TX_MASK, CALLER_NOTIFY_TX_MASK, &notify, pdMS_TO_TICKS(5)))
                 notify = 0;
 
         } while (!(notify & CALLER_NOTIFY_TX_MASK));
@@ -301,19 +302,22 @@ static void phy_task(phy_t const restrict phy)
     u32 notify;
 
     volatile chan_id_t chan_cur = (chan_id_t) -1;
+
     u16 cca_fail_count = 0;
+    rdio_ccac_t ccac = 0;
 
     phy_sync_pkt_t pkt_sync = {
             .hdr = {
                     .size = sizeof(phy_sync_pkt_t) - 1,
                     .flag = (u8)(PHY_PKT_FLAG_IMMEDIATE | PHY_PKT_FLAG_SYNC)
             },
+            .magic = PHY_SYNC_MAGIC
     };
 
     phy->sync_needed = false;
     phy->sync_time = 0;
 
-    ccrf_amp_mode_rx(phy->rdio, true);
+    ///ccrf_amp_mode_rx(phy->rdio, true);
 
     if (phy->boss) {
         xTaskNotify(xTaskGetCurrentTaskHandle(), NOTIFY_MASK_HOP, eSetBits);
@@ -353,27 +357,45 @@ static void phy_task(phy_t const restrict phy)
 
                 switch (ms) {
                     case CC1200_MARC_STATUS1_RX_FINISHED:
-                        if (phy_recv(phy, true) && tx_next && (phy->sync_time || phy->boss)) {
-                            tx_next = 0;
+                        if (phy_recv(phy, true)) {
+                            if (tx_next && (phy->sync_time || phy->boss)) tx_next = 0;
+                        } else {
+                            //const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
+                            //tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1) + pdMS_TO_TICKS(rand % 9);
                         }
 
+                        if (pkt) goto _cca_fail;
+                        break;
+
+                    case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
+                    case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
+                    case CC1200_MARC_STATUS1_ADDRESS:
+                    case CC1200_MARC_STATUS1_CRC:
+                        rdio_mode_idle(phy->rdio);
+                        rdio_strobe_rxfl(phy->rdio);
+                        if (pkt) goto _cca_fail;
                         break;
 
                     case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
+                    _cca_fail:
                         if (pkt) {
                             ++cca_fail_count;
-                            phy_trace_debug("cca fail #%u\n", cca_fail_count);
-                            rdio_strobe_tx(phy->rdio);
+                            //phy_trace_debug("cca fail #%u\n", cca_fail_count);
+
+                            assert(pkt == (rf_pkt_t *)&sq.pkt);
+                            assert(!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE));
+
+                            //const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
+                            //tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(3) + pdMS_TO_TICKS(rand % 8);
                         }
-                        break;
 
                     case CC1200_MARC_STATUS1_TX_FIFO_UNDERFLOW:
                     case CC1200_MARC_STATUS1_TX_FIFO_OVERFLOW:
-                        rdio_strobe_txfl(phy->rdio);
                         rdio_mode_idle(phy->rdio);
+                        rdio_strobe_txfl(phy->rdio);
 
                     case CC1200_MARC_STATUS1_TX_FINISHED:
-                        ccrf_amp_mode_tx(phy->rdio, false);
+                        ///ccrf_amp_mode_tx(phy->rdio, false);
 
                         if (pkt) {
                             cca_fail_count = 0;
@@ -399,7 +421,10 @@ static void phy_task(phy_t const restrict phy)
                                 }
 
                             } else {
-                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(10);
+                                rdio_cca_end(phy->rdio, ccac);
+
+                                const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
+                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(5) + pdMS_TO_TICKS(rand % 6);
                             }
 
                             pkt = NULL;
@@ -408,16 +433,6 @@ static void phy_task(phy_t const restrict phy)
                             phy_trace_debug("tx completion indicated but no packet pending");
                         }
 
-                        break;
-
-                    case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
-                    case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
-                        rdio_strobe_rxfl(phy->rdio);
-                        break;
-
-                    case CC1200_MARC_STATUS1_ADDRESS:
-                    case CC1200_MARC_STATUS1_CRC:
-                        rdio_strobe_txfl(phy->rdio);
                         break;
 
                     default:
@@ -457,31 +472,31 @@ static void phy_task(phy_t const restrict phy)
 
                 if (pkt) {
                     const u8 tx_bytes = rdio_reg_get(phy->rdio, CC1200_NUM_TXBYTES, NULL);
-                    // May have been done sending, TXBYTES will be zero if so.
 
-                    if (!tx_bytes) {
-                        if (pkt == (rf_pkt_t *)&sq.pkt && sq.task) {
-                            xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);
-                        }
+                    /*if (tx_bytes == pkt->size + 1) {
 
-                        pkt = NULL;
-                        phy_trace_debug("chan: hop tx-done-clear\r\n");
+                    }*/
 
-                    } else if ((tx_bytes == pkt->size + 1) && (chan_cur || (phy->boss && !phy->sync_needed))) {
-                        phy_trace_debug("chan: hop re-tx\r\n");
-                        rdio_strobe_tx(phy->rdio);
+                    rdio_strobe_txfl(phy->rdio);
 
-                    } else {
-                        rdio_strobe_txfl(phy->rdio);
+                    phy_trace_debug("chan: hop tx canned: len=%u txbytes=%u", pkt->size, tx_bytes);
 
-                        phy_trace_debug("chan: hop tx canned: len=%u txbytes=%u", pkt->size, tx_bytes);
-
-                        if (pkt == (rf_pkt_t *)&sq.pkt && sq.task) {
-                            xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);
-                        }
-
-                        pkt = NULL;
+                    if (pkt == (rf_pkt_t *)&sq.pkt && sq.task) {
+                        xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);
                     }
+
+                    // TODO: Need common post-tx handler
+
+                    ///ccrf_amp_mode_tx(phy->rdio, false);
+
+                    cca_fail_count = 0;
+
+                    if ((void *) pkt == &phy->pkt_ack) {
+                        phy->pkt_ack.hdr.flag = 0;
+                        phy->pkt_ack.hdr.size = 0;
+                    }
+
+                    pkt = NULL;
                 }
             }
 
@@ -502,12 +517,11 @@ static void phy_task(phy_t const restrict phy)
             assert(!pkt);
             pkt = (rf_pkt_t *) &pkt_sync;
 
-            rdio_mode_idle(phy->rdio);
-
             pkt_sync.hdr.cell = phy->cell;
 
+            rdio_mode_idle(phy->rdio); // TODO: Perhaps always strobing here would be better/more predictable
             rdio_fifo_write(phy->rdio, (u8 *) pkt, pkt->size + (u8)1);
-            ccrf_amp_mode_tx(phy->rdio, true);
+            ///ccrf_amp_mode_tx(phy->rdio, true);
             rdio_strobe_tx(phy->rdio);
 
         } else if (!pkt && ((volatile u8)phy->pkt_ack.hdr.flag || xQueuePeek(phy->txq, &sq, 0))) {
@@ -525,11 +539,29 @@ static void phy_task(phy_t const restrict phy)
                 }
             }
 
+            /*if (!imm) {
+                // Manual CCA.
+
+                ///ccrf_amp_mode_rx(phy->rdio, true);
+                s16 rssi;
+                rdio_rssi_read(phy->rdio, &rssi);
+
+                if (rssi >= -97) {
+                    phy_trace_debug("rb\t%i", rssi);
+                    pkt = NULL;
+
+                    const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
+                    tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(5) + pdMS_TO_TICKS(rand % 6);
+
+                    goto _loop_end;
+                }
+            }*/
+
             if (synced) {
                 remaining = ccrf_timer_remaining(phy->hop_timer);
                 chan_elapsed = CHAN_TIME - remaining;
 
-                u32 lead_time = 250 + ((!phy->boss && !chan_cur) ? 500 + tx_times[pkt_sync.hdr.size] : 0);
+                u32 lead_time = 200 + ((!phy->boss && !chan_cur) ? 500 + tx_times[pkt_sync.hdr.size] : 0);
 
                 if (chan_elapsed < lead_time) {
                     tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(lead_time);
@@ -553,18 +585,18 @@ static void phy_task(phy_t const restrict phy)
                 }
             }
 
-            /*if (imm) {
+            if (imm) {
                 rdio_mode_idle(phy->rdio);
-            }*/
+            }
 
             rdio_fifo_write(phy->rdio, (u8 *) pkt, pkt->size + (u8)1);
 
-            // For when CCA mode isn't ALWAYS, but seems useful for NOT_RX
-            /*if (!imm) {
-                rdio_cca_run(phy->rdio, true);
-            }*/
+            if (!imm) {
+                ///ccrf_amp_mode_rx(phy->rdio, true);
+                rdio_cca_begin(phy->rdio, &ccac);
+            }
 
-            ccrf_amp_mode_tx(phy->rdio, true);
+            ///ccrf_amp_mode_tx(phy->rdio, true);
             rdio_strobe_tx(phy->rdio);
             tx_next = 0;
 
@@ -588,11 +620,11 @@ static void phy_task(phy_t const restrict phy)
 
             } else {
                 tx_next = 0;
-                loop_wait = portMAX_DELAY;
+                loop_wait = portMAX_DELAY; //phy->sync_time ? portMAX_DELAY : pdUS_TO_TICKS(CHAN_TIME);
             }
 
         } else {
-            loop_wait = portMAX_DELAY;
+            loop_wait = portMAX_DELAY; //phy->sync_time ? portMAX_DELAY : pdUS_TO_TICKS(CHAN_TIME);
         }
     }
 }
@@ -662,11 +694,13 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
     }
 
     if (ppkt->hdr.flag & PHY_PKT_FLAG_SYNC) {
-        //const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *) pkt;
+        const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *) pkt;
 
-        if (!phy->boss) {
-            phy->sync_time = ccrf_clock();
-            ccrf_timer_restart(phy->hop_timer);
+        if (spkt->magic == PHY_SYNC_MAGIC) {
+            if (!phy->boss) {
+                phy->sync_time = ccrf_clock();
+                ccrf_timer_restart(phy->hop_timer);
+            }
         }
 
         return false;

@@ -6,7 +6,8 @@
 
 
 static inline void amp_init_gpio(const sys_gpio_t *const gpio);
-static inline bool amp_ctrl_gpio(const sys_gpio_t *const gpio, const bool enable);
+static inline bool amp_read_gpio(const sys_gpio_t *const gpio);
+static inline void amp_ctrl_gpio(const sys_gpio_t *const gpio, const bool enable);
 
 void ccrf_amp_init(rdio_t rdio)
 {
@@ -17,12 +18,12 @@ void ccrf_amp_init(rdio_t rdio)
 
 void ccrf_amp_ctrl(rdio_t rdio, ccrf_amp_t amp, bool enable)
 {
-    if (amp_ctrl_gpio(&cc_interface[rdio_id(rdio)].amp.gpio[amp], enable)) {
-        /*cc_dbg_v("[%u] %s: %s", rdio_id(rdio),
-               ((const char *[]){"hgm", "lna", "pa"})[amp],
-               enable ? "on" : "off"
-        );*/
-    }
+    return amp_ctrl_gpio(&cc_interface[rdio_id(rdio)].amp.gpio[amp], enable);
+}
+
+bool ccrf_amp_stat(rdio_t rdio, ccrf_amp_t amp)
+{
+    return amp_read_gpio(&cc_interface[rdio_id(rdio)].amp.gpio[amp]);
 }
 
 static inline void amp_init_gpio(const sys_gpio_t *const gpio)
@@ -39,17 +40,19 @@ static inline void amp_init_gpio(const sys_gpio_t *const gpio)
     }
 }
 
-static inline bool amp_ctrl_gpio(const sys_gpio_t *const gpio, const bool enable)
+static inline bool amp_read_gpio(const sys_gpio_t *const gpio)
 {
-    const bool enabled = GPIO_ReadPinInput(SYS_PORT_GPION(gpio->port), gpio->pin) != 0;
+    return GPIO_ReadPinInput(SYS_PORT_GPION(gpio->port), gpio->pin) != 0;
+}
 
-    if (!(enable ^ enabled))
-        return false;
+static inline void amp_ctrl_gpio(const sys_gpio_t *const gpio, const bool enable)
+{
+    const bool enabled = amp_read_gpio(gpio);
 
-    if (enable)
-        GPIO_SetPinsOutput(SYS_PORT_GPION(gpio->port), 1u << gpio->pin);
-    else
-        GPIO_ClearPinsOutput(SYS_PORT_GPION(gpio->port), 1u << gpio->pin);
-
-    return true;
+    if (enable ^ enabled) {
+        if (enable)
+            GPIO_SetPinsOutput(SYS_PORT_GPION(gpio->port), 1u << gpio->pin);
+        else
+            GPIO_ClearPinsOutput(SYS_PORT_GPION(gpio->port), 1u << gpio->pin);
+    }
 }

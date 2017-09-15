@@ -1,6 +1,5 @@
 source /home/jq/evo/intel/pr/rf/cloudchaser/etc/gdb/freertos-helper.gdb
 
-target remote :2331
 monitor speed 1000
 monitor clrbp
 monitor reset

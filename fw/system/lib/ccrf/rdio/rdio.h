@@ -4,8 +4,12 @@
 
 #include <usr/type.h>
 
-
+#if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
+#define CC_XOSC_FREQ            38400000u       /* External oscillator frequency in Hz. */
+#else
 #define CC_XOSC_FREQ            40000000u       /* External oscillator frequency in Hz. */
+#endif
+
 #define CC_MULTIBAND            0               /* Enable multiband support. Otherwise fixed at 820-960MHz. */
 #define CC_PA_SUPPORT           1               /* Enable functions for using power amplifier */
 
@@ -36,7 +40,7 @@ typedef void (* rdio_isr_t)(void *param);
 
 typedef struct __packed rdio {
     rdio_id_t id;
-    volatile u8 flag[2];
+    //volatile u8 flag[2];
 
 } *rdio_t;
 
@@ -57,16 +61,19 @@ typedef struct __packed {
 
 } rdio_config_t;
 
+typedef u8 rdio_ccac_t;
+
 
 rdio_t rdio_init(const rdio_config_t *config);
 
 rdio_state_t rdio_state_read(rdio_t rdio);
-//volatile rdio_state_t rdio_state(rdio_t rdio);
-static inline volatile rdio_state_t rdio_state(rdio_t rdio) { return (rdio_state_t) ((rdio->flag[1] << 1) | rdio->flag[0]); }
+//static inline volatile rdio_state_t rdio_state(rdio_t rdio) { return (rdio_state_t) ((rdio->flag[1] << 1) | rdio->flag[0]); }
 
 rdio_status_t rdio_mode_idle(rdio_t rdio);
 rdio_status_t rdio_mode_rx(rdio_t rdio);
-rdio_status_t rdio_cca_run(rdio_t rdio, bool check);
+rdio_status_t rdio_cca_begin(rdio_t rdio, rdio_ccac_t *ccac);
+rdio_status_t rdio_cca_end(rdio_t rdio, rdio_ccac_t ccac);
+rdio_status_t rdio_rssi_read(rdio_t rdio, s16 *rssi);
 
 bool rdio_reg_config(rdio_t rdio, const rdio_reg_config_t config[], size_t size);
 
@@ -90,6 +97,6 @@ u8 rdio_reg_get(rdio_t rdio, u16 addr, rdio_status_t *status);
 rdio_status_t rdio_reg_set(rdio_t rdio, u16 addr, u8 value);
 u16 rdio_reg_get16(rdio_t rdio, u16 addr, rdio_status_t *status);
 rdio_status_t rdio_reg_set16(rdio_t rdio, u16 addr, u16 value);
-rdio_status_t rdio_reg_update(rdio_t rdio, u16 addr, u8 mask, u8 value);
-rdio_status_t rdio_reg_update16(rdio_t rdio, u16 addr, u16 mask, u16 value);
+rdio_status_t rdio_reg_update(rdio_t rdio, u16 addr, u8 mask, u8 value, u8 *prev);
+rdio_status_t rdio_reg_update16(rdio_t rdio, u16 addr, u16 mask, u16 value, u16 *prev);
 

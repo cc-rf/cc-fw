@@ -1,4 +1,5 @@
 #include "cloudchaser.h"
+#include "led.h"
 
 #include <board.h>
 #include <virtual_com.h>
@@ -123,15 +124,19 @@ void cloudchaser_main(void)
     };
 
     if (uflag1_set()) {
-        LED_A_TOGGLE();
-        LED_C_TOGGLE();
+        led_toggle(LED_0);
+        led_toggle(LED_3);
 
     } else {
         mac_config.sync = sync_hook;
     }
 
 
-    mac_config.boss = pflag_set();
+    #if BOARD_REVISION == 2
+        mac_config.boss = /*false;*/ status.node == 0x4BDB; //pflag_set();
+    #else
+        mac_config.boss = pflag_set();
+    #endif
 
     if (uflag1_set())       mac_config.cell = 0xA1;
     else if (uflag2_set())  mac_config.cell = 0xA2;
@@ -194,8 +199,8 @@ static void uart_relay_run(void)
         //itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
         if (mac_send(macs[0], MAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
             if (!uflag2_set()) {
-                LED_C_TOGGLE();
-                LED_D_TOGGLE();
+                led_toggle(LED_2);
+                led_toggle(LED_3);
             }
         }
     }
@@ -215,8 +220,8 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
 
         if (uart_pkt->type == 0x2a) {
             if (!uflag2_set()) {
-                LED_A_TOGGLE();
-                LED_B_TOGGLE();
+                led_toggle(LED_0);
+                led_toggle(LED_1);
             }
 
             size -= sizeof(uart_pkt_t);
@@ -234,7 +239,7 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
     }
 
     if (uflag2_set()) {
-        if (rssi >= -34) {  // 60 dB down
+        /*if (rssi >= -34) {  // 60 dB down
             LED_A_ON();
             LED_B_ON();
             LED_C_ON();
@@ -254,7 +259,7 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
             LED_A_OFF();
             LED_B_OFF();
             LED_C_OFF();
-        }
+        }*/
 
         if (!mac_boss(mac)) {
             mac_send(mac, MAC_SEND_STRM, 0x0000, size, data);
@@ -271,17 +276,15 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
 static void sync_hook(chan_id_t chan)
 {
     if (uflag2_set()) {
-        if (chan == 11 || chan == 13 || chan == 15 || chan == 17) LED_D_ON();
-        else LED_D_OFF();
+        //if (chan == 11 || chan == 13 || chan == 15 || chan == 17) LED_D_ON();
+        //else LED_D_OFF();
     } else {
-        if (chan == 11) LED_A_ON();
-        else LED_A_OFF();
-        if (chan == 13) LED_B_ON();
-        else LED_B_OFF();
-        if (chan == 15) LED_C_ON();
-        else LED_C_OFF();
-        if (chan == 17) LED_D_ON();
-        else LED_D_OFF();
+        //led_set(LED_0, (chan == 0) || (chan == 2) || (chan == 4) ? LED_ON : LED_OFF);
+        //led_set(LED_1, (chan == 1) || (chan == 1) || (chan == 3) ? LED_ON : LED_OFF);
+        led_set(LED_0, (chan == 11) ? LED_ON : LED_OFF);
+        led_set(LED_2, (chan == 13) ? LED_ON : LED_OFF);
+        led_set(LED_1, (chan == 15) ? LED_ON : LED_OFF);
+        led_set(LED_3, (chan == 17) ? LED_ON : LED_OFF);
     }
 }
 

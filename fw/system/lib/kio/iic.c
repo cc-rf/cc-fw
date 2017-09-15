@@ -7,9 +7,24 @@ static void iic_dma_callback(I2C_Type *base, i2c_master_edma_handle_t *handle, s
 static void iic_irq_callback(I2C_Type *base, i2c_master_handle_t *handle, status_t status, void *userData);
 #endif
 
+
+static struct iic iics[IIC_MAX_BUS_COUNT] = {NULL};
+
+
 iic_t iic_init(u8 bus, u32 baud)
 {
-    iic_t iic = calloc(1, sizeof(struct iic)); assert(iic);
+    iic_t iic = NULL;
+
+    for (u8 i = 0; i < IIC_MAX_BUS_COUNT; ++i) {
+        if (!iics[i].base) {
+            iic = &iics[i];
+            break;
+        } else if (bus == iics[i].bus) {
+            return &iics[i];
+        }
+    }
+
+    if (!iic) return NULL;
 
     iic->base = ((I2C_Type *[])I2C_BASE_PTRS)[bus];
     iic->bus = bus;
@@ -40,7 +55,7 @@ iic_t iic_init(u8 bus, u32 baud)
         status = DMAMGR_RequestChannel(iic->dmam_handle, dreq, DMAMGR_DYNAMIC_ALLOCATE, &iic->dma_handle);
         assert(status == kStatus_Success);
 
-        NVIC_SetPriority(((IRQn_Type [][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][iic->dma_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+        NVIC_SetPriority(((IRQn_Type [][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][iic->dma_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
         #ifdef IIC_NOTIFY
             I2C_MasterCreateEDMAHandle(
@@ -62,7 +77,7 @@ iic_t iic_init(u8 bus, u32 baud)
 
         #ifndef IIC_POLL
             const IRQn_Type irqn = ((IRQn_Type [])I2C_IRQS)[iic->bus];
-            NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+            NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
         #endif
 
     #endif

@@ -89,11 +89,12 @@ class Serf(object):
 
         return ord(data[0]) & Serf.SERF_CODE_M, data[1:]
 
-    def open(self, tty, baud):
+    def open(self, tty, baud=115200):
         if self.serial is not None:
             self.close()
         else:
             import serial
+            # self.serial = serial.Serial(timeout=0.01)
             self.serial = serial.Serial()
 
         self.serial.port = tty
@@ -137,7 +138,7 @@ class Serf(object):
 
     def _write(self, code, data):
         self.serial.write(Serf.encode(code, data))
-        self.serial.flush()
+        # self.serial.flush()
 
     def on_frame(self, code, data):
         print >>sys.stderr, "unhandled: code=0x%02X len=%u" % (code, len(data))
@@ -160,8 +161,7 @@ class Serf(object):
             while self.serial.isOpen():
                 in_data = self.serial.read()
 
-                if not in_data or not len(in_data):
-                    print >> sys.stderr, "input: empty"
+                if not len(in_data):
                     continue
 
                 data = data + in_data

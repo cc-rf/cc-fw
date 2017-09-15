@@ -42,29 +42,93 @@ void BOARD_InitPins(void)
 {
     /* Ports */
     CLOCK_EnableClock(kCLOCK_PortA);                // UART0, JTAG
-    CLOCK_EnableClock(BOARD_LED_ABCD_PORT_CLOCK);   // LED
+    CLOCK_EnableClock(kCLOCK_PortB);                // UART/GPIO, LED
     CLOCK_EnableClock(kCLOCK_PortC);                // SPI0, GPIO_RF1
-    CLOCK_EnableClock(kCLOCK_PortD);                // SPI2, GPIO_RF2
-    CLOCK_EnableClock(kCLOCK_PortE);                // GPIO_PA1, GPIO_PA1, GPIO_MULTI
+    CLOCK_EnableClock(kCLOCK_PortD);                // SPI2, GPIO_RF2, I2C0
+    CLOCK_EnableClock(kCLOCK_PortE);                // GPIO_PA1, GPIO_PA2, GPIO_MULTI
 
     /* LED */
-    CLOCK_EnableClock(BOARD_LED_ABCD_PORT_CLOCK);
-    PORT_SetPinMux(BOARD_LED_ABCD_PORT, BOARD_LED_A_GPIO_PIN, kPORT_MuxAsGpio);
-    PORT_SetPinMux(BOARD_LED_ABCD_PORT, BOARD_LED_B_GPIO_PIN, kPORT_MuxAsGpio);
-    PORT_SetPinMux(BOARD_LED_ABCD_PORT, BOARD_LED_C_GPIO_PIN, kPORT_MuxAsGpio);
-    PORT_SetPinMux(BOARD_LED_ABCD_PORT, BOARD_LED_D_GPIO_PIN, kPORT_MuxAsGpio);
-    LED_ABCD_INIT(A, LOGIC_LED_OFF);
-    LED_ABCD_INIT(B, LOGIC_LED_OFF);
-    LED_ABCD_INIT(C, LOGIC_LED_OFF);
-    LED_ABCD_INIT(D, LOGIC_LED_OFF);
+    #if BOARD_REVISION == 1
+
+        const port_pin_config_t port_pin_config = {
+                kPORT_PullDisable,
+                kPORT_FastSlewRate,
+                kPORT_PassiveFilterDisable,
+                kPORT_OpenDrainDisable,
+                kPORT_LowDriveStrength,
+                kPORT_MuxAsGpio,
+                kPORT_LockRegister,
+        };
+
+        const gpio_pin_config_t gpio_pin_config = {
+                .pinDirection = kGPIO_DigitalOutput,
+                .outputLogic = 0
+        };
+
+        PORT_SetPinConfig(BOARD_LED_PORT, BOARD_LED_GPIO_0, &port_pin_config);  // LED_GREEN_0
+        PORT_SetPinConfig(BOARD_LED_PORT, BOARD_LED_GPIO_1, &port_pin_config);  // LED_GREEN_1
+        PORT_SetPinConfig(BOARD_LED_PORT, BOARD_LED_GPIO_2, &port_pin_config);  // LED_GREEN_2
+        PORT_SetPinConfig(BOARD_LED_PORT, BOARD_LED_GPIO_3, &port_pin_config);  // LED_GREEN_3
+
+        GPIO_PinInit(BOARD_LED_GPIO, BOARD_LED_GPIO_0, &gpio_pin_config);
+        GPIO_PinInit(BOARD_LED_GPIO, BOARD_LED_GPIO_1, &gpio_pin_config);
+        GPIO_PinInit(BOARD_LED_GPIO, BOARD_LED_GPIO_2, &gpio_pin_config);
+        GPIO_PinInit(BOARD_LED_GPIO, BOARD_LED_GPIO_3, &gpio_pin_config);
+
+    #elif BOARD_REVISION == 2
+
+        const port_pin_config_t port_pin_config = {
+                kPORT_PullDisable,
+                kPORT_FastSlewRate,
+                kPORT_PassiveFilterDisable,
+                kPORT_OpenDrainEnable,
+                kPORT_LowDriveStrength,
+                kPORT_MuxAsGpio,
+                kPORT_LockRegister,
+        };
+
+        const gpio_pin_config_t gpio_pin_config = {
+                .pinDirection = kGPIO_DigitalOutput,
+                .outputLogic = 0
+        };
+
+        PORT_SetPinConfig(BOARD_LED_PORT, BOARD_LED_GPIO_0, &port_pin_config);  // LED_BLUE_0
+        PORT_SetPinConfig(BOARD_LED_PORT, BOARD_LED_GPIO_1, &port_pin_config);  // LED_BLUE_1
+
+        GPIO_PinInit(BOARD_LED_GPIO, BOARD_LED_GPIO_0, &gpio_pin_config);
+        GPIO_PinInit(BOARD_LED_GPIO, BOARD_LED_GPIO_1, &gpio_pin_config);
+
+    #endif
+
+    /* LP5562 LED x2 on I2C0 */
+    #if BOARD_REVISION == 2
+
+    const port_pin_config_t port_pin_config_i2c0 = {
+            .pullSelect = kPORT_PullUp,
+            .slewRate = kPORT_FastSlewRate,
+            .passiveFilterEnable = kPORT_PassiveFilterDisable,
+            .openDrainEnable = kPORT_OpenDrainEnable,
+            .driveStrength = kPORT_LowDriveStrength,
+            .mux = kPORT_MuxAlt7,
+            .lockRegister = kPORT_LockRegister,
+    };
+
+
+    PORT_SetPinConfig(PORTD, 2u, &port_pin_config_i2c0);      // I2C0_SCL
+    PORT_SetPinConfig(PORTD, 3u, &port_pin_config_i2c0);      // I2C0_SDA
+    #endif
 
     /* UART0 */
     PORT_SetPinMux(PORTA, 14u, kPORT_MuxAlt3);      // UART_HDR #3      UART0_TX
     PORT_SetPinMux(PORTA, 15u, kPORT_MuxAlt3);      // UART_HDR #5      UART0_RX
-    PORT_SetPinMux(PORTA, 16u, kPORT_MuxAsGpio);    // UART_HDR #4      ** uflag1 pwr
-    PORT_SetPinMux(PORTA, 17u, kPORT_MuxAsGpio);    // UART_HDR #6      ** uflag1 input
-    //PORT_SetPinMux(PORTA, 16u, kPORT_MuxAlt3);      // UART_HDR #4      UART0_RTS_b
-    //PORT_SetPinMux(PORTA, 17u, kPORT_MuxAlt3);      // UART_HDR #6      UART0_CTS_b
+    #if BOARD_REVISION == 1
+    PORT_SetPinMux(PORTA, 16u, kPORT_MuxAlt3);      // UART_HDR #4      UART0_RTS_b
+    PORT_SetPinMux(PORTA, 17u, kPORT_MuxAlt3);      // UART_HDR #6      UART0_CTS_b
+    #endif
+    #if BOARD_REVISION == 2
+    PORT_SetPinMux(PORTB,  2u, kPORT_MuxAlt3);      // UART_HDR #X      UART0_RTS_b
+    PORT_SetPinMux(PORTB,  3u, kPORT_MuxAlt3);      // UART_HDR #X      UART0_CTS_b
+    #endif
 
     /* SPI0 */
     PORT_SetPinMux(PORTC,  4u, kPORT_MuxAlt2);      // SPI0_PCS0
@@ -72,27 +136,32 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTC,  6u, kPORT_MuxAlt2);      // SPI0_SOUT
     PORT_SetPinMux(PORTC,  7u, kPORT_MuxAlt2);      // SPI0_SIN
 
+    #if BOARD_REVISION <= 1
     /* SPI2 */
     PORT_SetPinMux(PORTD, 11u, kPORT_MuxAlt2);      // SPI2_PCS0
     PORT_SetPinMux(PORTD, 12u, kPORT_MuxAlt2);      // SPI2_SCK
     PORT_SetPinMux(PORTD, 13u, kPORT_MuxAlt2);      // SPI2_SOUT
     PORT_SetPinMux(PORTD, 14u, kPORT_MuxAlt2);      // SPI2_SIN
+    #endif
 
     /* CC1200 (RF1) Interrupts */
     PORT_SetPinMux(PORTC, 10u, kPORT_MuxAsGpio);    // RF1_GPIO3
     PORT_SetPinMux(PORTC, 11u, kPORT_MuxAsGpio);    // RF1_GPIO2
     PORT_SetPinMux(PORTC, 12u, kPORT_MuxAsGpio);    // RF1_GPIO0
 
+    #if BOARD_REVISION <= 1
     /* CC1200 (RF2) Interrupts */
     PORT_SetPinMux(PORTD,  7u, kPORT_MuxAsGpio);    // RF2_GPIO3
     PORT_SetPinMux(PORTD,  8u, kPORT_MuxAsGpio);    // RF2_GPIO2
     PORT_SetPinMux(PORTD,  9u, kPORT_MuxAsGpio);    // RF2_GPIO0
+    #endif
 
     /* CC1190 (PA1) Control */
     PORT_SetPinMux(PORTE,  6u, kPORT_MuxAsGpio);    // PA1_HGM
     PORT_SetPinMux(PORTE,  8u, kPORT_MuxAsGpio);    // PA1_LNA_EN
     PORT_SetPinMux(PORTE,  9u, kPORT_MuxAsGpio);    // PA1_PA_EN
 
+    #if BOARD_REVISION <= 1
     /* CC1190 (PA2) Control */
     PORT_SetPinMux(PORTE,  7u, kPORT_MuxAsGpio);    // PA2_HGM
     PORT_SetPinMux(PORTE, 10u, kPORT_MuxAsGpio);    // PA2_LNA_EN
@@ -107,53 +176,5 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTE,  5u, kPORT_PinDisabledOrAnalog);      // GPIO_HDR #2                                      2:SPI1_PCS2 3:UART3_TX
     PORT_SetPinMux(PORTB,  4u, kPORT_MuxAsGpio);                // GPIO_HDR #8   ** extra pwr
     PORT_SetPinMux(PORTB,  5u, kPORT_MuxAsGpio);                // GPIO_HDR #9   ** pflag input
-
-    /**
-     * Enable I2C1 SCL/SDA on GPIO header pins 4/6
-     */
-    /*PORT_SetPinMux(PORTE,  0u, kPORT_MuxAlt6);
-    PORT_SetPinMux(PORTE,  1u, kPORT_MuxAlt6);*/
-
-    const port_pin_config_t port_pin_config = {
-            .pullSelect = kPORT_PullUp,
-            .slewRate = kPORT_FastSlewRate,
-            .passiveFilterEnable = kPORT_PassiveFilterDisable,
-            .openDrainEnable = kPORT_OpenDrainEnable,
-            .driveStrength = kPORT_LowDriveStrength,
-            .mux = kPORT_MuxAlt6,
-            .lockRegister = kPORT_LockRegister,
-    };
-
-    PORT_SetPinConfig(PORTE, 0u, &port_pin_config);
-    PORT_SetPinConfig(PORTE, 1u, &port_pin_config);
-
-
-    /**
-     * Pull-up for SPI slave PCS
-     */
-    /*const port_pin_config_t port_pin_config = {
-            kPORT_PullUp,
-            kPORT_FastSlewRate,
-            kPORT_PassiveFilterDisable,
-            kPORT_OpenDrainDisable,
-            kPORT_HighDriveStrength,
-            kPORT_MuxAlt2,
-            kPORT_LockRegister,
-    };
-
-    PORT_SetPinConfig(PORTE, 4u, &port_pin_config);*/
-
-
-    /**
-     * Enable extra power pin (NOT high drive, 50mA limit?)
-     */
-    const gpio_pin_config_t gpio_pin_config_out = {
-            .pinDirection = kGPIO_DigitalOutput,
-            .outputLogic = 1
-    };
-
-    GPIO_PinInit(GPIOB, 4u, &gpio_pin_config_out);
-
-    //((volatile port_pin_config_t *)(&PORTE->PCR[0]))->openDrainEnable = 1;
-    //((volatile port_pin_config_t *)(&PORTE->PCR[1]))->openDrainEnable = 1;
+    #endif
 }

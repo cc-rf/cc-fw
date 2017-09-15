@@ -19,9 +19,9 @@
 #define MAC_PEER_MAX            10
 
 #define MAC_PEND_TIME           7
-#define MAC_PEND_RETRY          3
+#define MAC_PEND_RETRY          5
 
-#define MAC_TXQ_COUNT           3 // This should eventually reflect the number of threads waiting on messages
+#define MAC_TXQ_COUNT           7 // This should eventually reflect the number of threads waiting on messages
 #define MAC_TXQ_SIZE            (MAC_TXQ_COUNT)
 #define MAC_RXQ_SIZE            7
 
@@ -269,7 +269,7 @@ static bool mac_send_packet(mac_t mac, mac_static_pkt_t *pkt)
     u8 retry = MAC_PEND_RETRY;
 
     if (!(pkt->flag & MAC_FLAG_PKT_BLK)) {
-        if (!xQueueSend(mac->txq, pkt, portMAX_DELAY)) {
+        if (!xQueueSend(mac->txq, pkt, pdMS_TO_TICKS(100)/*portMAX_DELAY*/)) {
             mac_trace_debug("mac/tx: queue failed");
             return false;
         }
@@ -292,7 +292,7 @@ static bool mac_send_packet(mac_t mac, mac_static_pkt_t *pkt)
     if (!phy_send(mac->phy, phy_flag, (u8 *)pkt, pkt_len)) {
 
         if (--retry) {
-            mac_trace_warn("retry 0x%02X/%u [tx fail]", pkt->seqn, pkt->size);
+            //mac_trace_warn("retry 0x%02X/%u [tx fail]", pkt->seqn, pkt->size);
             goto _retry_tx;
 
         } else {
@@ -310,7 +310,7 @@ static bool mac_send_packet(mac_t mac, mac_static_pkt_t *pkt)
     }
 
     if (needs_ack) {
-        const u32 tx_time = MAC_PEND_TIME + phy_delay(pkt->size + (u8)MAC_PKT_OVERHEAD) / 1000;
+        const u32 tx_time = MAC_PEND_TIME + phy_delay(1 + (u8)MAC_PKT_OVERHEAD) / 1000;
         //sclk_t elaps = sclk_time();
 
         if (!xTaskNotifyWait(MAC_NOTIFY_ACK, MAC_NOTIFY_ACK, NULL, pdMS_TO_TICKS(tx_time))) {

@@ -85,10 +85,6 @@ class CloudChaser(Serf):
         print
 
     def handle_recv(self, node, peer, dest, size, rssi, lqi, data):
-        # print("recv: @{:04X}:{:04X}->{:04X} #{:02X} \t {}".format(
-        #     node, peer, dest, len(data), ''  # '' '.join('{:02X}'.format(ord(ch)) for ch in data)
-        # ))
-
         if self.stats is not None:
             self.stats.lock()
             if not self.stats.recv_count:
@@ -102,12 +98,6 @@ class CloudChaser(Serf):
 
         if self.handler is not None:
             self.handler(self, node, peer, dest, rssi, lqi, data)
-
-        # if node == 0x3b23:
-        #     self.io.send(CloudChaser.NMAC_SEND_STRM, peer, '1'*8)
-
-        # data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
-        # self.io.send(CloudChaser.NMAC_SEND_MESG, peer, data)
 
 
 class Stats:
@@ -211,10 +201,10 @@ def send_frames(cc):
 
     while 1:
         count += 1
-        # data = '\x3A' * 24
-        data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(1, 114))])
-        cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x3b35, data)
-        # time.sleep(.015)
+        data = '\x3A' * 20
+        # data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(24, 114))])
+        cc.io.send(CloudChaser.NMAC_SEND_STRM, 0x4BD5, data)
+        time.sleep(.010)
 
 
 def main(args):

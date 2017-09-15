@@ -11,7 +11,7 @@
 #include <fsl_port.h>
 
 #include "cloudchaser.h"
-
+#include "led.h"
 
 #define MAIN_TASK_STACK_SIZE    (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
 
@@ -85,7 +85,9 @@ __attribute__((constructor, used)) void __init(void)
 
 int main(void)
 {
+    #if BOARD_REVISION <= 1
     pin_flag_init();
+    #endif
 
     xTaskCreateStatic(
             main_task, "main", MAIN_TASK_STACK_SIZE, NULL, TASK_PRIO_DEFAULT,
@@ -95,17 +97,17 @@ int main(void)
     vTaskStartScheduler();
 }
 
-
 static void main_task(void *param)
 {
     (void)param;
+
+    led_init();
 
     if (!usb_composite_init(usb_recv)) {
         itm_puts(0, "usb: init fail\r\n");
         goto _end;
     }
 
-    LED_ABCD_ALL_OFF();
 
     /**
      * SPI interconnect (mcuc) testing
@@ -355,8 +357,8 @@ _READ_WRITE_RETURN_TYPE _EXFUN(_write, (int __fd, const void *__buf, size_t __nb
         xHigherPriorityTaskWokenAll |= xHigherPriorityTaskWoken;
     }*/
 
-    itm_write(0, (const u8 *)__buf, (size_t)__nbyte);
-    //usb_write(0, (u8 *)buffer, (size_t)size);
+    itm_write(0, (const u8 *) __buf, __nbyte);
+    usb_write(0, (u8 *) __buf, __nbyte);
 
     /*if (!is_interrupt) xSemaphoreGive(write_sem);
     else {

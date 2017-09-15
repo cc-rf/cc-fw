@@ -21,4 +21,5 @@ target_link_libraries(
 target_compile_definitions(
         ${NAME}
         PUBLIC BOARD_CLOUDCHASER=1
+        PUBLIC BOARD_REVISION=${CONFIG_FW_BOARD_REV}
 )

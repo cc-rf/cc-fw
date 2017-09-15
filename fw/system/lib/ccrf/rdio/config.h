@@ -6,9 +6,9 @@
 /**
  * Standard medium-rate long range configuration.
  *
- * Deviation        62.5 kHz
+ * Deviation        50 kHz
  * Modulation       2-GFSK
- * Symbol Rate      250 ksps
+ * Symbol Rate      200 ksps
  *
  * Notes:
  *
@@ -89,6 +89,19 @@
  * AGC_CFG1: 0x0C->0x12->0x08->0x1D->0x1E->0x27->0x1E. AGC settle/64->settle/40. AGC win/32->win/16,settle/24->64/80->64/96->128/127->64/80. 64/80 improves RSSI measurement accuracy.
  * PREAMBLE_CFG1: 0x18->0x20. Preamble size 4->6 bytes. To help with synchronization and support greter packet-to-packet size variation.
  * DEVIATION_M/DEV_E: 0x48/0x0D->0x9A/0x0C. Deviation 100kHz->62.5kHz. I forgot that this is MSK when the rate is 250kbps (NOT 200!).
+ * ---
+ * --- 2017-08-05: Tuning for V2 and crystal @38.4MHz.
+ * ---
+ * DEVIATION_M/DEV_E: 0x9A/0x0C->0xAB/0x0C. Same deviation but value given by SmartRF for new xtal.
+ * IQIC: 0x80->0x58. Back to SmartRF recommended, which is disabled. Brought LQI from 23 to 5 and no more drops for simple xfers!
+ * FS_DIG1/0: 0x07/0xA0->0x04/0x55. From SmartRF.
+ * FS_CAL3: 0x40->0x00 (default). SmartRF.
+ * TOC_CFG: Default->0x03. SmartRF (Timing Offset Correction). LQI 5->4.
+ * FREQOFF_CFG: 0x2C->0x0C. Disable Frequency Offset Correction, has little impact.
+ * IQIC,DEVIATION_M: Change based on xtal freq to SmartRF values.
+ * Changing rate to 200ksps, deviation to 50kHz. Makes for a solid high-quality signal, works @4GFSK with dev=100 nicely (when rxbw=800).
+ * ^ SYNC_CFG0: Trying to unset RX_CONFIG_LIMITATION brings LQI from 1->4.
+ * PREAMBLE_CFG1: 0x20->0x18->0x28->0x30->0x28. Preamble 6->4->8->24->8 bytes.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -103,18 +116,29 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_SYNC0,             0x66},
         {CC1200_SYNC_CFG1,         0xAA},
         {CC1200_SYNC_CFG0,         0x33},
-        {CC1200_DEVIATION_M,       0x9A},
+        #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
+        {CC1200_IQIC,              0x58},
+        {CC1200_DEVIATION_M,       0x55},
+        #else
+        {CC1200_IQIC,              0xD8},
+        {CC1200_DEVIATION_M,       0x47},
+        #endif
         {CC1200_MODCFG_DEV_E,      0x0C},
-        {CC1200_DCFILT_CFG,        0x5D},
-        {CC1200_PREAMBLE_CFG1,     0x20},
+        {CC1200_DCFILT_CFG,        0x4B},
+        {CC1200_PREAMBLE_CFG1,     0x28},
         {CC1200_PREAMBLE_CFG0,     0x8F},
-        {CC1200_IQIC,              0x80},
         {CC1200_CHAN_BW,           0x03},
         {CC1200_MDMCFG1,           0x42},
         {CC1200_MDMCFG0,           0x05},
-        {CC1200_SYMBOL_RATE2,      0xB9},
-        {CC1200_SYMBOL_RATE1,      0x99},
-        {CC1200_SYMBOL_RATE0,      0x9A},
+        #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
+        {CC1200_SYMBOL_RATE2,      0xB5},
+        {CC1200_SYMBOL_RATE1,      0x55},
+        {CC1200_SYMBOL_RATE0,      0x55},
+        #else
+        {CC1200_SYMBOL_RATE2,      0xB4},
+        {CC1200_SYMBOL_RATE1,      0x7A},
+        {CC1200_SYMBOL_RATE0,      0xE1},
+        #endif
         {CC1200_AGC_REF,           0x35},
         {CC1200_AGC_CFG3,          0x31},
         {CC1200_AGC_CFG2,          0x00},
@@ -125,16 +149,16 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_PA_CFG1,           0x77}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_IF_MIX_CFG,        0x18},
-        {CC1200_FREQOFF_CFG,       0x2C},
+        {CC1200_FREQOFF_CFG,       0x0C},
+        {CC1200_TOC_CFG,           0x03},
         {CC1200_MDMCFG2,           0x02},
         {CC1200_FREQ2,             0x5C},
         {CC1200_FREQ1,             0x0F},
         {CC1200_FREQ0,             0x5C},
         {CC1200_IF_ADC1,           0xEE},
         {CC1200_IF_ADC0,           0x10},
-        {CC1200_FS_DIG1,           0x07},
-        {CC1200_FS_DIG0,           0xA0},
-        {CC1200_FS_CAL3,           0x40},
+        {CC1200_FS_DIG1,           0x04},
+        {CC1200_FS_DIG0,           0x55},
         {CC1200_FS_CAL1,           0x40},
         {CC1200_FS_CAL0,           0x0E},
         {CC1200_FS_DIVTWO,         0x03},
@@ -245,6 +269,11 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_1[] = {
  * SYMBOL_RATE: 0xC9/0x99/0x9A->0xCE/0xB8/0x52. 500ksps->600ksps.
  * DEVIATION_M/DEV_E: 0x9A/0x2F->0xEC/0x2F. dev 500kHz->600kHz.
  * PA_CFG1: 0x77->0x47. PA power +10dBm -> -14dBm. Should produce -1dBm with HGM off.
+ * PA_CFG0: Default->0x50. SmartRF.
+ * AGC_CFG2: 0x00->0x60. SmartRF (Zero-IF).
+ * AGC_REF: 0x33->0x39.
+ * PREAMBLE_CFG1: 0x20->0x18->0x28->0x30->0x28. Preamble 6->4->8->24->8 bytes.
+ *
  */
 static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_MAXRATE[] = {
         {CC1200_SYNC3,             0x5A},
@@ -255,25 +284,36 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_MAXRATE[] = {
 
         {CC1200_SYNC_CFG1,         0xAA},
         {CC1200_SYNC_CFG0,         0x03},
+        #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
+        {CC1200_DEVIATION_M,       0xFF},
+        #else
         {CC1200_DEVIATION_M,       0xEC},
+        #endif
         {CC1200_MODCFG_DEV_E,      0x2F},
         {CC1200_DCFILT_CFG,        0x1E},
-        {CC1200_PREAMBLE_CFG1,     0x20},
+        {CC1200_PREAMBLE_CFG1,     0x28},
         {CC1200_PREAMBLE_CFG0,     0x8A},
         {CC1200_IQIC,              0x00},
         {CC1200_CHAN_BW,           0x01},
         {CC1200_MDMCFG1,           0x42},
         {CC1200_MDMCFG0,           0x05},
+        #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
+        {CC1200_SYMBOL_RATE2,      0xD0},
+        {CC1200_SYMBOL_RATE1,      0x00},
+        {CC1200_SYMBOL_RATE0,      0x00},
+        #else
         {CC1200_SYMBOL_RATE2,      0xCE},
         {CC1200_SYMBOL_RATE1,      0xB8},
         {CC1200_SYMBOL_RATE0,      0x52},
-        {CC1200_AGC_REF,           0x33},
-        {CC1200_AGC_CFG2,          0x00},
+        #endif
+        {CC1200_AGC_REF,           0x39},
+        {CC1200_AGC_CFG2,          0x60},
         {CC1200_AGC_CFG1,          0x12},
         {CC1200_AGC_CFG0,          0x84},
         {CC1200_FIFO_CFG,          0x00},
         {CC1200_FS_CFG,            0x12},
         {CC1200_IF_MIX_CFG,        0x00},
+        {CC1200_PA_CFG0,           0x50},
         {CC1200_FREQOFF_CFG,       0x23},
         {CC1200_MDMCFG2,           0x00},
         {CC1200_FREQ2,             0x5C},

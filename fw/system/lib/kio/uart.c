@@ -49,8 +49,8 @@ uart_t uart_init(const uart_id_t id, const baud_t baud)
     status = DMAMGR_RequestChannel(dmaManagerHandle, SYSTEM_UART_RX_DMA_REQ_SRCS[id], DMAMGR_DYNAMIC_ALLOCATE, &uart->rx_handle);
     assert(status == kStatus_Success);
 
-    NVIC_SetPriority(((IRQn_Type[][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][uart->tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
-    NVIC_SetPriority(((IRQn_Type[][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][uart->rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
+    NVIC_SetPriority(((IRQn_Type[][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][uart->tx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+    NVIC_SetPriority(((IRQn_Type[][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][uart->rx_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
     UART_TransferCreateHandleEDMA(
             uart->base, &uart->edma_handle, uart_dma_callback, uart,

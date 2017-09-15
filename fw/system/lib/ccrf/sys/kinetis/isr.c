@@ -144,7 +144,7 @@ void ccrf_isr_configure(rdio_t rdio, ccrf_isr_src_t src, ccrf_isr_edge_t edge, c
 
     PORT_SetPinInterruptConfig(ports[port], pin, type);
 
-    NVIC_SetPriority(irqns[port], (u32)(configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY+1));
+    NVIC_SetPriority(irqns[port], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
 
     EnableIRQ(irqns[port]);
 

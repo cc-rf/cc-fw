@@ -155,8 +155,7 @@ bool ccrf_spi_init(rdio_t rdio)
             #endif
 
             if (irqn == NotAvail_IRQn) {
-                cc_dbg("[%u] irq for SPI@%p unavailable", rdio_id(rdio), cfg->spi);
-                return;
+                return false;
             }
 
             NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
@@ -208,11 +207,6 @@ rdio_status_t ccrf_spi_io(rdio_t rdio, u8 flag, u16 addr, u8 *tx, u8 *rx, size_t
             .dataSize = xlen,
             .configFlags = kDSPI_MasterCtar0 | (cfg->pcs << DSPI_MASTER_PCS_SHIFT) | kDSPI_MasterPcsContinuous
     };
-
-    #if CC_DEBUG_VERBOSE
-        cc_dbg_v("flag=0x%x addr=0x%x size=%lu hlen=%u", flag, addr, size, hlen);
-        cc_dbg_printf_v("tx="); print_hex(xbuf, xlen);
-    #endif
 
     #ifdef CC_SPI_DMA
         #ifdef CC_SPI_LOCK
@@ -267,7 +261,7 @@ rdio_status_t ccrf_spi_io(rdio_t rdio, u8 flag, u16 addr, u8 *tx, u8 *rx, size_t
     }
 
     u8 st = xbuf[0];
-    return st;
+    return (rdio_status_t) st;
 }
 
 #ifdef CC_SPI_DMA

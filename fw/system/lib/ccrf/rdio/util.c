@@ -425,7 +425,7 @@ u64 rdio_util_set_wor_event0(rdio_t rdio, u64 ns)
         else ev = 1;
     }
 
-    rdio_reg_update(rdio, CC1200_WOR_CFG1, CC1200_WOR_CFG1_WOR_RES_M, wr << CC1200_WOR_CFG1_WOR_RES_S);
+    rdio_reg_update(rdio, CC1200_WOR_CFG1, CC1200_WOR_CFG1_WOR_RES_M, wr << CC1200_WOR_CFG1_WOR_RES_S, NULL);
     rdio_reg_set16(rdio, CC1200_WOR_EVENT0_MSB, (u16)ev);
 
     /* NOTE: This rounds .5 to the next integer away from zero. However,
@@ -465,9 +465,9 @@ u64 rdio_util_set_rx_timeout(rdio_t rdio, u64 ns)
         rt = CC1200_RFEND_CFG1_RX_TIME_FOREVER;
     }
 
-    rdio_reg_update(rdio, CC1200_WOR_CFG1, CC1200_WOR_CFG1_WOR_RES_M, wr << CC1200_WOR_CFG1_WOR_RES_S);
+    rdio_reg_update(rdio, CC1200_WOR_CFG1, CC1200_WOR_CFG1_WOR_RES_M, wr << CC1200_WOR_CFG1_WOR_RES_S, NULL);
     rdio_reg_set16(rdio, CC1200_WOR_EVENT0_MSB, (u16)ev);
-    rdio_reg_update(rdio, CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RX_TIME_M, rt << CC1200_RFEND_CFG1_RX_TIME_S);
+    rdio_reg_update(rdio, CC1200_RFEND_CFG1, CC1200_RFEND_CFG1_RX_TIME_M, rt << CC1200_RFEND_CFG1_RX_TIME_S, NULL);
 
     if (!ns) return 0;
 
@@ -489,8 +489,8 @@ u32 rdio_util_get_tx_time(rdio_t rdio, u32 len)
     // TODO: Make this smarter and base it off of preamble, sync word, crc and others.
     //       The current assumption is: preamble/6, sync/4, len/1, data/len, crc/2,
     //         symbol rate = 250ksps * modmul/1 (=1 for 2-ary, 0.25 for DSSS, 2 for 4-ary)
-    const static u32 overhead = 6/*preamble*/ + 4/*sync*/ + 1/*len*/ + 2/*crc*/;
-    const static u32 symbol_rate = 250000 * 1/*modmul*/;
+    const static u32 overhead = 8/*preamble*/ + 4/*sync*/ + 1/*len*/ + 2/*crc*/;
+    const static u32 symbol_rate = 200000 * 1/*modmul*/;
 
     // Note for later: with 4-ary modulation the preamble is still sent as 2-ary.
 

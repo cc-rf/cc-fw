@@ -14,9 +14,11 @@
 #include <task.h>
 
 
+#define IIC_MAX_BUS_COUNT   1
+
 #define IIC_DMA
 //#define IIC_LOCK
-#define IIC_NOTIFY   (1u<<30)
+#define IIC_NOTIFY          (1u<<30)
 //#define IIC_POLL
 
 

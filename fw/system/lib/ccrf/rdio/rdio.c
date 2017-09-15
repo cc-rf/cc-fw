@@ -1,10 +1,12 @@
 #include "rdio/rdio.h"
 #include "rdio/config.h"
+#include "sys/amp.h"
 #include "sys/spi.h"
 #include "sys/clock.h"
 #include "sys/isr.h"
 #include "sys/local.h"
 #include "sys/trace.h"
+#include "util.h"
 
 
 #define rdio_trace_info     ccrf_trace_info
@@ -21,9 +23,10 @@
 #endif
 
 
-static void rdio_isr_status_1(rdio_t rdio);
-static void rdio_isr_status_0(rdio_t rdio);
-
+/*static void rdio_isr_status_1(rdio_t rdio);
+static void rdio_isr_status_0(rdio_t rdio);*/
+static void rdio_isr_status_lna(rdio_t rdio);
+static void rdio_isr_status_pa(rdio_t rdio);
 
 static struct rdio rdios[CCRF_CONFIG_RDIO_COUNT];
 
@@ -69,11 +72,17 @@ rdio_t rdio_init(const rdio_config_t *config)
         ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO3, CCRF_ISR_EDGE_RISING, config->isr, config->isr_param);
     }
 
-    rdio_reg_set(rdio, CC1200_IOCFG2, CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1);
+    /*rdio_reg_set(rdio, CC1200_IOCFG2, CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1);
     ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO2, CCRF_ISR_EDGE_BOTH, (ccrf_isr_t) rdio_isr_status_1, rdio);
 
     rdio_reg_set(rdio, CC1200_IOCFG0, CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS0);
-    ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO0, CCRF_ISR_EDGE_BOTH, (ccrf_isr_t) rdio_isr_status_0, rdio);
+    ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO0, CCRF_ISR_EDGE_BOTH, (ccrf_isr_t) rdio_isr_status_0, rdio);*/
+
+    rdio_reg_set(rdio, CC1200_IOCFG2, CC1200_IOCFG_GPIO_CFG_LNA_PD);
+    ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO2, CCRF_ISR_EDGE_BOTH, (ccrf_isr_t) rdio_isr_status_lna, rdio);
+
+    rdio_reg_set(rdio, CC1200_IOCFG0, CC1200_IOCFG_GPIO_CFG_PA_PD);
+    ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO0, CCRF_ISR_EDGE_BOTH, (ccrf_isr_t) rdio_isr_status_pa, rdio);
 
     goto _done;
     _fail:
@@ -87,7 +96,7 @@ rdio_t rdio_init(const rdio_config_t *config)
 }
 
 
-static void rdio_isr_status_1(rdio_t rdio)
+/*static void rdio_isr_status_1(rdio_t rdio)
 {
     rdio->flag[1] = (u8)ccrf_isr_state(rdio, CCRF_ISR_SRC_GPIO2);
 }
@@ -96,8 +105,18 @@ static void rdio_isr_status_1(rdio_t rdio)
 static void rdio_isr_status_0(rdio_t rdio)
 {
     rdio->flag[0] = (u8)ccrf_isr_state(rdio, CCRF_ISR_SRC_GPIO0);
+}*/
+
+static void rdio_isr_status_lna(rdio_t rdio)
+{
+    ccrf_amp_ctrl(rdio, CCRF_AMP_LNA, !ccrf_isr_state(rdio, CCRF_ISR_SRC_GPIO2));
 }
 
+
+static void rdio_isr_status_pa(rdio_t rdio)
+{
+    ccrf_amp_ctrl(rdio, CCRF_AMP_PA, !ccrf_isr_state(rdio, CCRF_ISR_SRC_GPIO0));
+}
 
 rdio_state_t rdio_state_read(rdio_t rdio)
 {
@@ -116,28 +135,35 @@ rdio_state_t rdio_state_read(rdio_t rdio)
 }
 
 
-/*volatile rdio_state_t rdio_state(rdio_t rdio)
-{
-    return (rdio_state_t) ((rdio->flag[1] << 1) | rdio->flag[0]);
-}*/
-
-
 rdio_status_t rdio_mode_idle(rdio_t rdio)
 {
-    rdio_status_t status = RDIO_STATUS_IDLE;
+    rdio_status_t status;
+
+    do {
+        status = rdio_strobe_noop(rdio) & RDIO_STATUS_MASK;
+
+    } while (status == RDIO_STATUS_SETTLING || status == RDIO_STATUS_CALIBRATE);
+
+    if (status != RDIO_STATUS_IDLE) {
+        status = rdio_strobe_idle(rdio);
+    }
+
+    return status;
+
+    /*rdio_status_t status = RDIO_STATUS_IDLE;
 
     if (rdio_state(rdio) != RDIO_STATE_IDLE) {
         status = rdio_strobe_idle(rdio);
     }
 
-    return status;
+    return status;*/
 }
 
 
 rdio_status_t rdio_mode_rx(rdio_t rdio)
 {
-    rdio_status_t status = RDIO_STATUS_RX;
-    
+    rdio_status_t status;/* = RDIO_STATUS_RX;
+
     switch (rdio_state(rdio)) {
         case RDIO_STATE_SETTLE:
             goto _full_check;
@@ -157,7 +183,8 @@ rdio_status_t rdio_mode_rx(rdio_t rdio)
     status = rdio_strobe_rx(rdio);
 
     goto _done;
-    _full_check:
+
+    _full_check:*/
     
     do {
         status = rdio_strobe_noop(rdio) & RDIO_STATUS_MASK;
@@ -196,12 +223,15 @@ rdio_status_t rdio_mode_rx(rdio_t rdio)
     return status;
 }
 
-rdio_status_t rdio_cca_run(rdio_t rdio, bool check)
+rdio_status_t rdio_cca_begin(rdio_t rdio, rdio_ccac_t *ccac)
 {
     rdio_status_t st;
     u8 reg;
 
-    if (check) st = rdio_mode_rx(rdio);
+    //*ccac = rdio_reg_get(rdio, CC1200_SYNC_CFG1, NULL);
+    //rdio_reg_update(rdio, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, 0, ccac);
+
+    rdio_mode_rx(rdio);
 
     do {
         reg = rdio_reg_get(rdio, CC1200_RSSI0, &st) & (CC1200_RSSI0_RSSI_VALID | CC1200_RSSI0_CARRIER_SENSE_VALID);
@@ -211,6 +241,28 @@ rdio_status_t rdio_cca_run(rdio_t rdio, bool check)
     return st;
 }
 
+rdio_status_t rdio_cca_end(rdio_t rdio, rdio_ccac_t ccac)
+{
+    //return rdio_reg_update(rdio, CC1200_SYNC_CFG1, CC1200_SYNC_CFG1_SYNC_THR_M, ccac, NULL);
+    return 0;
+}
+
+rdio_status_t rdio_rssi_read(rdio_t rdio, s16 *rssi)
+{
+    rdio_status_t st;
+    u8 reg;
+
+    st = rdio_mode_rx(rdio);
+
+    do {
+        reg = rdio_reg_get(rdio, CC1200_RSSI0, &st) & CC1200_RSSI0_RSSI_VALID;
+
+    } while (reg != CC1200_RSSI0_RSSI_VALID);
+
+    *rssi = rdio_util_get_rssi(rdio);
+
+    return st;
+}
 
 bool rdio_reg_config(rdio_t rdio, const rdio_reg_config_t config[], size_t size)
 {
@@ -282,7 +334,7 @@ rdio_status_t rdio_reg_set16(rdio_t rdio, u16 addr, u16 value)
 }
 
 
-rdio_status_t rdio_reg_update(rdio_t rdio, u16 addr, u8 mask, u8 value)
+rdio_status_t rdio_reg_update(rdio_t rdio, u16 addr, u8 mask, u8 value, u8 *prev)
 {
     rdio_status_t status;
 
@@ -294,11 +346,13 @@ rdio_status_t rdio_reg_update(rdio_t rdio, u16 addr, u8 mask, u8 value)
         status = rdio_reg_set(rdio, addr, value);
     }
 
+    if (prev) *prev = current;
+
     return status;
 }
 
 
-rdio_status_t rdio_reg_update16(rdio_t rdio, u16 addr, u16 mask, u16 value)
+rdio_status_t rdio_reg_update16(rdio_t rdio, u16 addr, u16 mask, u16 value, u16 *prev)
 {
     rdio_status_t status;
 
@@ -309,6 +363,8 @@ rdio_status_t rdio_reg_update16(rdio_t rdio, u16 addr, u16 mask, u16 value)
     if (value != current) {
         status = rdio_reg_set16(rdio, addr, value);
     }
+
+    if (prev) *prev = current;
 
     return status;
 }
