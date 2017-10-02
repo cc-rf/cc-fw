@@ -8,7 +8,7 @@ static void iic_irq_callback(I2C_Type *base, i2c_master_handle_t *handle, status
 #endif
 
 
-static struct iic iics[IIC_MAX_BUS_COUNT] = {NULL};
+static struct iic iics[IIC_MAX_BUS_COUNT] = { [ 0 ... (IIC_MAX_BUS_COUNT-1)] .base = NULL };
 
 
 iic_t iic_init(u8 bus, u32 baud)
@@ -29,14 +29,14 @@ iic_t iic_init(u8 bus, u32 baud)
     iic->base = ((I2C_Type *[])I2C_BASE_PTRS)[bus];
     iic->bus = bus;
 
-    #ifdef IIC_LOCK
-        iic->mtx = xSemaphoreCreateBinaryStatic(&iic->mtx_static);
+#ifdef IIC_LOCK
+    iic->mtx = xSemaphoreCreateBinaryStatic(&iic->mtx_static);
         xSemaphoreGive(iic->mtx);
-    #endif
+#endif
 
-    #if !defined(IIC_NOTIFY) && !defined(IIC_POLL)
-        iic->sem = xSemaphoreCreateBinaryStatic(&iic->sem_static);
-    #endif
+#if !defined(IIC_NOTIFY) && !defined(IIC_POLL)
+    iic->sem = xSemaphoreCreateBinaryStatic(&iic->sem_static);
+#endif
 
     i2c_master_config_t iic_config;
     I2C_MasterGetDefaultConfig(&iic_config);
@@ -47,7 +47,7 @@ iic_t iic_init(u8 bus, u32 baud)
 
 #ifdef IIC_DMA
 
-        dma_request_source_t dreq = ((dma_request_source_t []){kDmaRequestMux0I2C0, kDmaRequestMux0I2C1, kDmaRequestMux0I2C2, kDmaRequestMux0I2C3})[iic->bus];
+    dma_request_source_t dreq = ((dma_request_source_t []){kDmaRequestMux0I2C0, kDmaRequestMux0I2C1, kDmaRequestMux0I2C2, kDmaRequestMux0I2C3})[iic->bus];
         status_t status;
 
         iic->dmam_handle = DMAMGR_Handle();
@@ -67,20 +67,20 @@ iic_t iic_init(u8 bus, u32 baud)
             );
         #endif
 
-    #else
+#else
 
-        #ifdef IIC_NOTIFY
-            I2C_MasterTransferCreateHandle(iic->base, &iic->master_handle, iic_irq_callback, NULL);
-        #elif !defined(IIC_POLL)
-            I2C_MasterTransferCreateHandle(iic->base, &iic->master_handle, iic_irq_callback, (void *)iic->sem);
-        #endif
+#ifdef IIC_NOTIFY
+    I2C_MasterTransferCreateHandle(iic->base, &iic->master_handle, iic_irq_callback, NULL);
+#elif !defined(IIC_POLL)
+    I2C_MasterTransferCreateHandle(iic->base, &iic->master_handle, iic_irq_callback, (void *)iic);
+#endif
 
-        #ifndef IIC_POLL
-            const IRQn_Type irqn = ((IRQn_Type [])I2C_IRQS)[iic->bus];
-            NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
-        #endif
+#ifndef IIC_POLL
+    const IRQn_Type irqn = ((IRQn_Type [])I2C_IRQS)[iic->bus];
+    NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+#endif
 
-    #endif
+#endif
 
     return iic;
 }
@@ -110,61 +110,65 @@ status_t iic_io(iic_t iic, iic_rw_t rw, u8 addr, u8 cmd, void *data, size_t size
             .dataSize = size,
     };
 
-    #ifdef IIC_DMA
-        #ifdef IIC_LOCK
-            xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
-        #endif
+#ifdef IIC_LOCK
+    xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
+#endif
 
-        #ifdef IIC_NOTIFY
-            iic->iic_dma_handle.userData = xTaskGetCurrentTaskHandle();
-        #endif
+#ifdef IIC_NOTIFY
+    iic->master_handle.userData = xTaskGetCurrentTaskHandle();
+#endif
 
-        status = I2C_MasterTransferEDMA(iic->base, &iic->iic_dma_handle, &xfer);
+#if defined(IIC_DMA)
+    status = I2C_MasterTransferEDMA(iic->base, &iic->iic_dma_handle, &xfer);
+#elif defined(IIC_POLL)
+    status = I2C_MasterTransferBlocking(iic->base, &xfer);
+#else
+    status = I2C_MasterTransferNonBlocking(iic->base, &iic->master_handle, &xfer);
+#endif
 
-        if (status == kStatus_Success) {
-            if (size > 1) {
-                #ifdef IIC_NOTIFY
-                    while (!xTaskNotifyWait(IIC_NOTIFY, IIC_NOTIFY, NULL, portMAX_DELAY));
-                #elif !defined(IIC_POLL)
-                    xSemaphoreTake(iic->sem, portMAX_DELAY);
-                #endif
+    if (status == kStatus_Success) {
+#ifdef IIC_DMA
+        if (size > 1) {
+#endif
+
+#ifdef IIC_NOTIFY
+        // TODO: reconcile diffs with cloudchaser driver
+
+            u32 notify = 0;
+
+            do {
+                if (!xTaskNotifyWait(IIC_NOTIFY, IIC_NOTIFY, &notify, pdMS_TO_TICKS(100)))
+                    notify = 0;
+
+            } while (!(notify & IIC_NOTIFY));
+
+            if (notify & IIC_NOTIFY_FAIL) {
+                status = kStatus_Fail;
             }
+}
+#elif !defined(IIC_POLL)
+
+        if (!xSemaphoreTake(iic->sem, pdMS_TO_TICKS(100))) {
+            status = kStatus_Fail;
+#ifdef IIC_DMA
+            I2C_MasterTransferAbortEDMA(iic->base, &iic->iic_dma_handle);
+#else
+            I2C_MasterTransferAbort(iic->base, &iic->master_handle);
+#endif
         } else {
-            //itm_puts(0, "iic: edma transfer failed\r\n");
+            status = iic->status;
         }
 
-        #ifdef IIC_LOCK
-            xSemaphoreGive(spi[dev].mtx);
-        #endif
+#endif
 
-    #else
-        #ifdef IIC_LOCK
-            xSemaphoreTake(iic->mtx, portMAX_DELAY);
-        #endif
-
-        #ifdef IIC_NOTIFY
-            iic->master_handle.userData = xTaskGetCurrentTaskHandle();
-        #endif
-
-        #ifdef IIC_POLL
-            status = I2C_MasterTransferBlocking(iic->base, &xfer);
-        #else
-            status = I2C_MasterTransferNonBlocking(iic->base, &iic->master_handle, &xfer);
-        #endif
-
-        if (status == kStatus_Success) {
-            #ifdef IIC_NOTIFY
-                while (!xTaskNotifyWait(IIC_NOTIFY, IIC_NOTIFY, NULL, portMAX_DELAY));
-            #elif !defined(IIC_POLL)
-                xSemaphoreTake(iic->sem, portMAX_DELAY);
-            #endif
+#ifdef IIC_DMA
         }
+#endif
+    }
 
-        #ifdef IIC_LOCK
-            xSemaphoreGive(iic->mtx);
-        #endif
-
-    #endif
+#ifdef IIC_LOCK
+    xSemaphoreGive(iic->mtx);
+#endif
 
     return status;
 }
@@ -176,7 +180,9 @@ static void iic_dma_callback(I2C_Type *base, i2c_master_edma_handle_t *handle, s
     BaseType_t xHigherPriorityTaskWoken;
 
     #ifndef IIC_NOTIFY
-        xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
+        iic_t iic = (iic_t) userData;
+        iic->status = status;
+        xSemaphoreGiveFromISR(iic->sem, &xHigherPriorityTaskWoken);
     #else
         xTaskNotifyFromISR((xTaskHandle)userData, IIC_NOTIFY, eSetBits, &xHigherPriorityTaskWoken);
     #endif
@@ -190,11 +196,13 @@ static void iic_irq_callback(I2C_Type *base, i2c_master_handle_t *handle, status
 {
     BaseType_t xHigherPriorityTaskWoken;
 
-    #ifndef IIC_NOTIFY
-        xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
-    #else
-        xTaskNotifyFromISR((xTaskHandle)userData, IIC_NOTIFY, eSetBits, &xHigherPriorityTaskWoken);
-    #endif
+#ifndef IIC_NOTIFY
+    iic_t iic = (iic_t) userData;
+    iic->status = status;
+    xSemaphoreGiveFromISR(iic->sem, &xHigherPriorityTaskWoken);
+#else
+    xTaskNotifyFromISR((xTaskHandle)userData, IIC_NOTIFY, eSetBits, &xHigherPriorityTaskWoken);
+#endif
 
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
