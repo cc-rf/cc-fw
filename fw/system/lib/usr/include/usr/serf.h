@@ -1,3 +1,5 @@
+#pragma once
+
 #include <usr/type.h>
 
 

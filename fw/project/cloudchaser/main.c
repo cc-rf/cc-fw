@@ -13,19 +13,38 @@
 #include "cloudchaser.h"
 #include "led.h"
 
-#define MAIN_TASK_STACK_SIZE    (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
+#define MAIN_TASK_STACK_SIZE    (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
 
-#define PFLAG_PORT          PORTB
-#define PFLAG_GPIO          GPIOB
-#define PFLAG_PIN           5
 
-#define UFLAG1_ON_PORT      PORTA
-#define UFLAG1_ON_GPIO      GPIOA
-#define UFLAG1_ON_PIN       16
+#if BOARD_REVISION <= 1
 
-#define UFLAG1_PORT         PORTA
-#define UFLAG1_GPIO         GPIOA
-#define UFLAG1_PIN          17
+    #define PFLAG_PORT          PORTB
+    #define PFLAG_GPIO          GPIOB
+    #define PFLAG_PIN           5
+
+    #define UFLAG1_ON_PORT      PORTA
+    #define UFLAG1_ON_GPIO      GPIOA
+    #define UFLAG1_ON_PIN       16
+
+    #define UFLAG1_PORT         PORTA
+    #define UFLAG1_GPIO         GPIOA
+    #define UFLAG1_PIN          17
+
+#else
+
+    #define PFLAG_PORT          PORTD
+    #define PFLAG_GPIO          GPIOD
+    #define PFLAG_PIN           11
+
+    #define UFLAG1_ON_PORT      PORTB
+    #define UFLAG1_ON_GPIO      GPIOB
+    #define UFLAG1_ON_PIN       2
+
+    #define UFLAG1_PORT         PORTB
+    #define UFLAG1_GPIO         GPIOB
+    #define UFLAG1_PIN          3
+
+#endif
 
 #define UFLAG2_ON_PORT      PORTE
 #define UFLAG2_ON_GPIO      GPIOE
@@ -35,14 +54,6 @@
 #define UFLAG2_PORT         PORTE
 #define UFLAG2_GPIO         GPIOE
 #define UFLAG2_PIN          4
-
-#define CHAN_CLOCK_PORT     PORTA
-#define CHAN_CLOCK_GPIO     GPIOA
-#define CHAN_CLOCK_PIN      16
-
-#define CHAN_CYCLE_PORT     PORTA
-#define CHAN_CYCLE_GPIO     GPIOA
-#define CHAN_CYCLE_PIN      17
 
 
 static void main_task(void *param);
@@ -54,7 +65,6 @@ StackType_t main_task_stack[MAIN_TASK_STACK_SIZE];
 StaticTask_t main_task_static;
 
 bool __pflag_set, __uflag1_set/*, __uflag2_set*/;
-static volatile bool __chan_clock, __chan_cycle;
 
 
 __attribute__((constructor, used)) void __init(void)
@@ -85,9 +95,7 @@ __attribute__((constructor, used)) void __init(void)
 
 int main(void)
 {
-    #if BOARD_REVISION <= 1
     pin_flag_init();
-    #endif
 
     xTaskCreateStatic(
             main_task, "main", MAIN_TASK_STACK_SIZE, NULL, TASK_PRIO_DEFAULT,
@@ -215,15 +223,6 @@ static void pin_flag_init(void)
     __uflag2_set = GPIO_ReadPinInput(UFLAG2_GPIO, UFLAG2_PIN) != 0;
     GPIO_WritePinOutput(UFLAG2_ON_GPIO, UFLAG2_ON_PIN, 0);
     PORT_SetPinMux(UFLAG2_ON_PORT, UFLAG2_ON_PIN, UFLAG2_ON_MUX_ORIG);*/
-
-    PORT_SetPinConfig(CHAN_CLOCK_PORT, CHAN_CLOCK_PIN, &port_pin_config_out);
-    GPIO_PinInit(CHAN_CLOCK_GPIO, CHAN_CLOCK_PIN, &gpio_pin_config_out);
-    __chan_clock = true;
-
-    PORT_SetPinConfig(CHAN_CYCLE_PORT, CHAN_CYCLE_PIN, &port_pin_config_out);
-    GPIO_PinInit(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, &gpio_pin_config_out);
-    GPIO_WritePinOutput(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, 0);
-    __chan_cycle = false;
 }
 
 bool pflag_set(void)
@@ -239,16 +238,6 @@ bool uflag1_set(void)
 bool uflag2_set(void)
 {
     return false; //__uflag2_set;
-}
-
-void chan_clock_trig(void)
-{
-    GPIO_WritePinOutput(CHAN_CLOCK_GPIO, CHAN_CLOCK_PIN, (u8)(__chan_clock = !__chan_clock));
-}
-
-void chan_cycle_trig(void)
-{
-    GPIO_WritePinOutput(CHAN_CYCLE_GPIO, CHAN_CYCLE_PIN, (u8)(__chan_cycle = !__chan_cycle));
 }
 
 

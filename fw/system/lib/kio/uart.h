@@ -9,6 +9,12 @@
 
 #include <FreeRTOS.h>
 #include <semphr.h>
+#include <task.h>
+
+
+//#define UART_LOCK
+//#define UART_DMA
+//#define UART_NOTIFY ((1u << 28) | (1u << 27))
 
 
 #ifndef CONFIG_KIO_UART_COUNT
@@ -18,22 +24,46 @@
 #define SYSTEM_UARTS        ((UART_Type *[])UART_BASE_PTRS)
 #define SYSTEM_UART_COUNT   (sizeof(SYSTEM_UARTS)/sizeof(SYSTEM_UARTS[0]))
 
+#if defined(UART_NOTIFY)
+#define UART_NOTIFY_SUCCESS     ((UART_NOTIFY << 1) & UART_NOTIFY)
+#define UART_NOTIFY_FAIL        ((UART_NOTIFY >> 1) & UART_NOTIFY)
+#endif
 
 typedef struct uart {
     UART_Type *base;
-    uart_edma_handle_t edma_handle;
-    edma_handle_t tx_handle;
-    edma_handle_t rx_handle;
 
-    xSemaphoreHandle rx_mtx;
-    StaticSemaphore_t rx_mtx_static;
-    xSemaphoreHandle rx_sem;
-    StaticSemaphore_t rx_sem_static;
-    xSemaphoreHandle tx_sem;
-    StaticSemaphore_t tx_sem_static;
+    #ifdef UART_DMA
+        uart_edma_handle_t edma_handle;
+        edma_handle_t tx_handle;
+        edma_handle_t rx_handle;
+    #else
+        uart_handle_t handle;
+    #endif
 
-    volatile bool rx_pending;
-    volatile u8 *tx_buf;
+    #if defined(UART_LOCK)
+
+        xSemaphoreHandle rx_mtx;
+        StaticSemaphore_t rx_mtx_static;
+        xSemaphoreHandle tx_mtx;
+        StaticSemaphore_t tx_mtx_static;
+
+    #endif
+
+    #if !defined(UART_NOTIFY)
+
+        xSemaphoreHandle rx_sem;
+        StaticSemaphore_t rx_sem_static;
+        xSemaphoreHandle tx_sem;
+        StaticSemaphore_t tx_sem_static;
+
+        volatile bool rx_pending;
+
+    #else
+
+        volatile TaskHandle_t rx_task;
+        volatile TaskHandle_t tx_task;
+
+    #endif
 
 } *uart_t;
 

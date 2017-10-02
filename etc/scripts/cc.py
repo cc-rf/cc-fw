@@ -19,6 +19,7 @@ class CloudChaser(Serf):
     CODE_ID_SEND = 2
     CODE_ID_RECV = 3
     CODE_ID_RESET = 9
+    CODE_ID_UART = 26
 
     RESET_MAGIC = 0xD1E00D1E
 
@@ -36,8 +37,8 @@ class CloudChaser(Serf):
         self.add(
             name='echo',
             code=CloudChaser.CODE_ID_ECHO,
-            encode=lambda mesg: struct.pack("%is" % (len(mesg) + 1), mesg + '\x00'),
-            decode=lambda data: struct.unpack("%is" % len(data), data),
+            encode=lambda mesg: struct.pack("<%is" % (len(mesg) + 1), mesg + '\x00'),
+            decode=lambda data: struct.unpack("<%is" % len(data), data),
             handle=lambda mesg: sys.stdout.write(mesg)
         )
 
@@ -70,6 +71,14 @@ class CloudChaser(Serf):
             )
         )
 
+        self.add(
+            name='uart',
+            code=CloudChaser.CODE_ID_UART,
+            encode=lambda data, code=0x00: struct.pack("<B", code & 0xFF) + data,
+            decode=lambda data: struct.unpack("<B%is" % (len(data) - 1), data),
+            handle=self.handle_uart
+        )
+
     def reset(self, reopen=True):
         self.io.reset()
 
@@ -98,6 +107,9 @@ class CloudChaser(Serf):
 
         if self.handler is not None:
             self.handler(self, node, peer, dest, rssi, lqi, data)
+
+    def handle_uart(self, code, data):
+        pass
 
 
 class Stats:
@@ -201,10 +213,11 @@ def send_frames(cc):
 
     while 1:
         count += 1
-        data = '\x3A' * 20
+        data = '\x00' * 1
         # data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(24, 114))])
-        cc.io.send(CloudChaser.NMAC_SEND_STRM, 0x4BD5, data)
-        time.sleep(.010)
+        cc.io.send(CloudChaser.NMAC_SEND_DGRM, 0x0000, data)
+        break
+        # time.sleep(.010 - .00368)
 
 
 def main(args):

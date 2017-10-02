@@ -455,7 +455,7 @@ static inline bool isInterrupt()
 
 bool usb_attached(u8 port)
 {
-    return g_deviceComposite->cdcVcom[port].attach && g_deviceComposite->cdcVcom[port].startTransactions;
+    return port < USB_CDC_INSTANCE_COUNT && g_deviceComposite->cdcVcom[port].attach && g_deviceComposite->cdcVcom[port].startTransactions;
 }
 
 void usb_write(u8 port, u8 *buf, size_t len)

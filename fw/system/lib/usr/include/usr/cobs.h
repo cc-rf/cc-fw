@@ -3,6 +3,8 @@
  *
  * Redistribution and use in source and binary forms are permitted, with or without modification.
  */
+#pragma once
+
 #include <stdint.h>
 #include <stddef.h>
 

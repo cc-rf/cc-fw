@@ -424,7 +424,7 @@ static void phy_task(phy_t const restrict phy)
                                 rdio_cca_end(phy->rdio, ccac);
 
                                 const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
-                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(5) + pdMS_TO_TICKS(rand % 6);
+                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1) + pdMS_TO_TICKS(rand % 6);
                             }
 
                             pkt = NULL;

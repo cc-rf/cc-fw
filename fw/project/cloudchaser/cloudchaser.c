@@ -23,6 +23,7 @@
 #define CODE_ID_SEND        2
 #define CODE_ID_RECV        3
 #define CODE_ID_RESET       9
+#define CODE_ID_UART        26
 
 #define RESET_MAGIC         0xD1E00D1E
 
@@ -66,7 +67,14 @@ typedef struct __packed {
 } code_send_t;
 
 typedef struct __packed {
-    u8 type; // == 0x2a
+    u8 code;
+    u8 data[];
+
+} code_uart_t;
+
+typedef struct __packed {
+    u8 type; // == CODE_ID_UART
+    u8 code;
     u8 data[];
 
 } uart_pkt_t;
@@ -87,9 +95,12 @@ static void handle_code_send(u8 port, size_t size, u8 *data);
 static void handle_code_reset(u8 port, size_t size, u8 *data);
 static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
+static void handle_code_uart(size_t size, u8 *data);
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi);
 static void write_code_status(u8 port, code_status_t *code_status);
+
+static void write_code_uart(code_uart_t *code_uart, size_t size);
 
 
 static mac_t macs[CLOUDCHASER_RDIO_COUNT];
@@ -123,17 +134,10 @@ void cloudchaser_main(void)
             .sync = NULL
     };
 
-    if (uflag1_set()) {
-        led_toggle(LED_0);
-        led_toggle(LED_3);
-
-    } else {
-        mac_config.sync = sync_hook;
-    }
-
+    mac_config.sync = sync_hook;
 
     #if BOARD_REVISION == 2
-        mac_config.boss = /*false;*/ status.node == 0x4BDB; //pflag_set();
+        mac_config.boss = /*status.node == 0x4BDB;*/ pflag_set();
     #else
         mac_config.boss = pflag_set();
     #endif
@@ -182,26 +186,42 @@ void cloudchaser_main(void)
 
 static void uart_relay_run(void)
 {
-    struct __packed {
-        uart_pkt_t pkt;
-        u8 input[1];
-
-    } message = {
-            .pkt.type = 0x2a
-    };
+    serf_t *frame = alloca(UINT8_MAX);
+    size_t frame_size;
+    size_t uart_pkt_size;
+    uart_pkt_t *uart_pkt = alloca(UINT8_MAX - sizeof(uart_pkt_t));
 
     itm_puts(0, "uart: relay enabled\r\n");
 
-    uart = uart_init(0, 115200);
+    uart = uart_init(0, 96000);
 
     while (1) {
-        uart_read(uart, (u8 *)message.input, 1);
-        //itm_printf(0, "uart: send 0x%02X\r\n", message.input[0]);
-        if (mac_send(macs[0], MAC_SEND_DGRM, 0x0000, sizeof(message), (u8 *)&message)) {
-            if (!uflag2_set()) {
-                led_toggle(LED_2);
-                led_toggle(LED_3);
+        frame_size = uart_read_frame(uart, frame, UINT8_MAX);
+
+        if (frame_size) {
+            if ((frame->code & SERF_CODE_PROTO_M) != SERF_CODE_PROTO_VAL) {
+                printf("uart: (frame) invalid proto bits: size=%u code=0x%02x\r\n", frame_size, frame->code);
+                continue;
             }
+
+            frame->code &= SERF_CODE_M;
+
+            frame_size -= sizeof(serf_t);
+            uart_pkt_size = sizeof(uart_pkt_t) + frame_size; assert(uart_pkt_size < UINT8_MAX);
+            uart_pkt->type = CODE_ID_UART;
+            uart_pkt->code = frame->code;
+            memcpy(uart_pkt->data, frame->data, frame_size);
+
+            if (mac_send(macs[0], MAC_SEND_STRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt)) {
+                ++status.send_count;
+                status.send_bytes += uart_pkt_size;
+                led_toggle(LED_RGB0_BLUE);
+                led_off(LED_RGB0_RED);
+            } else {
+                led_on(LED_RGB0_RED);
+            }
+        } else {
+            itm_puts(0, "uart: empty frame\n");
         }
     }
 }
@@ -215,25 +235,14 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
     //LED_A_TOGGLE();
     //LED_B_TOGGLE();
 
-    if (uflag1_set() && size > sizeof(uart_pkt_t) && uart) {
-        uart_pkt_t *const uart_pkt = (uart_pkt_t *)data;
+    if (uflag1_set() && size >= sizeof(uart_pkt_t) && uart) {
+        uart_pkt_t *const uart_pkt = (uart_pkt_t *) data;
 
-        if (uart_pkt->type == 0x2a) {
-            if (!uflag2_set()) {
-                led_toggle(LED_0);
-                led_toggle(LED_1);
-            }
-
-            size -= sizeof(uart_pkt_t);
-            //itm_printf(0, "uart: rf rx %u byte(s)\r\n", size);
-            uart_write(uart, uart_pkt->data, size);
-
-            // TODO: Find a suitable code for passthrough data
-            /*if (usb_attached(0)) {
-                u8 *buf = malloc(size); assert(buf);
-                usb_write_direct(0, buf, size);
-            }*/
-
+        if (uart_pkt->type == CODE_ID_UART) {
+            led_toggle(LED_RGB1_GREEN);
+            code_uart_t *code_uart = (code_uart_t *) &uart_pkt->code;
+            size = size - sizeof(uart_pkt_t);
+            write_code_uart(code_uart, size);
             return;
         }
     }
@@ -336,6 +345,9 @@ static void frame_recv(u8 port, serf_t *frame, size_t size)
         case CODE_ID_RESET:
             return handle_code_reset(port, size, frame->data);
 
+        case CODE_ID_UART:
+            return handle_code_uart(size, frame->data);
+
         default:
             printf("(frame) unknown code: size=%u code=0x%02x\r\n", size, frame->code);
             break;
@@ -419,6 +431,31 @@ static void handle_code_echo(u8 port, size_t size, u8 *data)
 }
 
 
+static void handle_code_uart(size_t size, u8 *data)
+{
+    code_uart_t *code_uart = (code_uart_t *) data;
+
+    if (size >= sizeof(code_uart_t)) {
+        const size_t uart_pkt_size = sizeof(uart_pkt_t) + size - sizeof(code_uart_t);
+        uart_pkt_t *uart_pkt = alloca(uart_pkt_size);
+        uart_pkt->type = CODE_ID_UART;
+        uart_pkt->code = code_uart->code;
+        memcpy(uart_pkt->data, code_uart->data, size - sizeof(code_uart_t));
+
+        //itm_printf(0, "uart: rf relay %lu byte(s), packet size = %lu\r\n", size - sizeof(code_uart_t), uart_pkt_size);
+
+        if (mac_send(macs[0], MAC_SEND_DGRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt)) {
+            ++status.send_count;
+            status.send_bytes += uart_pkt_size;
+            led_toggle(LED_RGB0_BLUE);
+            led_off(LED_RGB0_RED);
+        } else {
+            led_on(LED_RGB0_RED);
+        }
+    }
+}
+
+
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi)
 {
     code_recv_t *code_recv = alloca(sizeof(code_recv_t) + size); assert(code_recv);
@@ -447,4 +484,27 @@ static void write_code_status(u8 port, code_status_t *code_status)
     u8 *frame;
     const size_t size = serf_encode(CODE_ID_STATUS, (u8 *)code_status, sizeof(code_status_t), &frame);
     if (frame) usb_write_direct(port, frame, size);
+}
+
+static void write_code_uart(code_uart_t *code_uart, size_t size)
+{
+    u8 *frame;
+    size_t frame_size;
+
+    if (uart) {
+        frame_size = serf_encode(code_uart->code, code_uart->data, size, &frame);
+
+        if (frame) {
+            uart_write(uart, frame, frame_size);
+            free(frame);
+        }
+    }
+
+    if (usb_attached(0)) {
+        frame_size = serf_encode(CODE_ID_UART, &code_uart->code, size + sizeof(code_uart->code), &frame);
+
+        if (frame) {
+            usb_write_direct(0, frame, frame_size);
+        }
+    }
 }

@@ -151,7 +151,7 @@ mac_t mac_init(mac_config_t *config)
     mac->rxq = xQueueCreateStatic(MAC_RXQ_SIZE, sizeof(mac->rxq_buf[0]), (u8 *)mac->rxq_buf, &mac->rxq_static);
 
     mac->task = xTaskCreateStatic(
-            (TaskFunction_t) mac_task_send, "mac:send", MAC_TX_TASK_STACK_SIZE, mac, TASK_PRIO_HIGHEST - 1, mac->task_stack, &mac->task_static
+            (TaskFunction_t) mac_task_send, "mac:send", MAC_TX_TASK_STACK_SIZE, mac, TASK_PRIO_HIGHEST - 2, mac->task_stack, &mac->task_static
     );
     
     mac->rx_task = xTaskCreateStatic(
@@ -216,7 +216,7 @@ bool mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 d
 {
     switch (type) {
         case MAC_SEND_DGRM:
-            return mac_send_base(mac, dest, 0, size, data);
+            return mac_send_base(mac, dest, MAC_FLAG_PKT_BLK/* NOTE: Experimental, plays better with UART relay. */, size, data);
 
         case MAC_SEND_MESG:
             return mac_send_base(mac, dest, MAC_FLAG_ACK_REQ, size, data);
@@ -312,8 +312,9 @@ static bool mac_send_packet(mac_t mac, mac_static_pkt_t *pkt)
     if (needs_ack) {
         const u32 tx_time = MAC_PEND_TIME + phy_delay(1 + (u8)MAC_PKT_OVERHEAD) / 1000;
         //sclk_t elaps = sclk_time();
+        u32 notify = 0;
 
-        if (!xTaskNotifyWait(MAC_NOTIFY_ACK, MAC_NOTIFY_ACK, NULL, pdMS_TO_TICKS(tx_time))) {
+        if (!xTaskNotifyWait(MAC_NOTIFY_ACK, MAC_NOTIFY_ACK, &notify, pdMS_TO_TICKS(tx_time)) || !(notify & MAC_NOTIFY_ACK)) {
             //elaps = sclk_time() - elaps;
 
             if (((volatile u8)pkt->flag & MAC_FLAG_ACK_RSP)) {

@@ -23,12 +23,13 @@ class Serf(object):
     SERF_CODE_M         = 0b00011111
     SERF_DECODE_ERROR   = (0, None)
 
-    def __init__(self):
+    def __init__(self, write=None):
         self.io = AttrDict()
         self.codes = {}
         self.serial = None
         self._sync = {}
         self._thread_input = None
+        self.write = write
 
     def add(self, name, code, encode=None, decode=None, handle=None, response=None):
         if encode is None:
@@ -137,13 +138,17 @@ class Serf(object):
         self._write(code, encode(*args, **kwds))
 
     def _write(self, code, data):
-        self.serial.write(Serf.encode(code, data))
-        # self.serial.flush()
+        if self.serial is not None:
+            self.serial.write(Serf.encode(code, data))
+        elif self.write is not None:
+            self.write(Serf.encode(code, data))
+        else:
+            print >>sys.stderr, "no output method: code=0x%02X len=%u" % (code, len(data))
 
     def on_frame(self, code, data):
         print >>sys.stderr, "unhandled: code=0x%02X len=%u" % (code, len(data))
 
-    def _handle_frame(self, code, data):
+    def process(self, code, data):
         encode, decode, handler = self.codes.get(code, (None, lambda data: (code, data), self.on_frame))
 
         sync = self._sync.get(code, None)
@@ -161,7 +166,7 @@ class Serf(object):
             while self.serial.isOpen():
                 in_data = self.serial.read()
 
-                if not len(in_data):
+                if not in_data or not len(in_data):
                     continue
 
                 data = data + in_data
@@ -175,7 +180,7 @@ class Serf(object):
 
                 if result is not Serf.SERF_DECODE_ERROR:
                     try:
-                        self._handle_frame(*result)
+                        self.process(*result)
                     except:
                         traceback.print_exc()
 
