@@ -220,7 +220,13 @@ rdio_status_t ccrf_spi_io(rdio_t rdio, u8 flag, u16 addr, u8 *tx, u8 *rx, size_t
         DSPI_MasterTransferEDMA(cfg->spi, &spi[rdio_id(rdio)].edma_handle, &xfer);
 
         #ifdef CC_SPI_NOTIFY
-            while (!xTaskNotifyWait(CC_SPI_NOTIFY, CC_SPI_NOTIFY, NULL, portMAX_DELAY));
+            u32 notify;
+
+            do {
+                if (!xTaskNotifyWait(CC_SPI_NOTIFY, CC_SPI_NOTIFY, &notify, pdMS_TO_TICKS(100)))
+                    notify = 0;
+
+            } while (!(notify & CC_SPI_NOTIFY));
         #else
             xSemaphoreTake(spi[rdio_id(rdio)].sem, portMAX_DELAY);
         #endif
@@ -245,7 +251,15 @@ rdio_status_t ccrf_spi_io(rdio_t rdio, u8 flag, u16 addr, u8 *tx, u8 *rx, size_t
         #endif
 
         #ifdef CC_SPI_NOTIFY
-            while (!xTaskNotifyWait(CC_SPI_NOTIFY, CC_SPI_NOTIFY, NULL, portMAX_DELAY));
+
+            u32 notify;
+
+            do {
+                if (!xTaskNotifyWait(CC_SPI_NOTIFY, CC_SPI_NOTIFY, &notify, pdMS_TO_TICKS(100)))
+                    notify = 0;
+
+            } while (!(notify & CC_SPI_NOTIFY));
+
         #elif !defined(CC_SPI_POLL)
             xSemaphoreTake(spi[rdio_id(rdio)].sem, portMAX_DELAY);
         #endif
