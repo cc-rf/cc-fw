@@ -62,7 +62,7 @@ MEMORY
   m_text                (RX)  : ORIGIN = 0x00000410, LENGTH = 0x001FEBF0 /* 0x001FFBF0 */
   m_user                (RW)  : ORIGIN = 0x001FF000, LENGTH = 0x00001000
   m_data                (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00020000
-  m_data_2              (RW)  : ORIGIN = 0x20000000, LENGTH = 0x00030000
+  m_data_2              (RW)  : ORIGIN = 0x20010000, LENGTH = 0x00020000
 }
 
 /* Define output sections */
