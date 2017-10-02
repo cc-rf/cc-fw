@@ -18,12 +18,12 @@
 
 //#define IIC_DMA
 //#define IIC_LOCK
-//#define IIC_NOTIFY              ((1u << 31) | (1u << 30))
+#define IIC_NOTIFY              ((1u << 31) | (1u << 30))
 //#define IIC_POLL
 
 #if defined(IIC_NOTIFY)
-#define IIC_NOTIFY_SUCCESS      ((UART_NOTIFY << 1) & UART_NOTIFY)
-#define IIC_NOTIFYY_FAIL        ((UART_NOTIFY >> 1) & UART_NOTIFY)
+#define IIC_NOTIFY_SUCCESS      ((IIC_NOTIFY << 1) & IIC_NOTIFY)
+#define IIC_NOTIFY_FAIL         ((IIC_NOTIFY >> 1) & IIC_NOTIFY)
 #endif
 
 #if defined(IIC_POLL) && (defined(IIC_DMA) || defined(IIC_NOTIFY) || defined(IIC_LOCK))
@@ -34,21 +34,21 @@ typedef struct iic {
     I2C_Type *base;
     u8 bus;
 
-#ifdef IIC_DMA
-    dmamanager_handle_t *dmam_handle;
+    #ifdef IIC_DMA
+        dmamanager_handle_t *dmam_handle;
         i2c_master_edma_handle_t iic_dma_handle;
         edma_handle_t dma_handle;
-#elif !defined(IIC_POLL)
-    i2c_master_handle_t master_handle;
-#endif
-#ifdef IIC_LOCK
-    xSemaphoreHandle mtx;
+    #elif !defined(IIC_POLL)
+        i2c_master_handle_t master_handle;
+    #endif
+    #ifdef IIC_LOCK
+        xSemaphoreHandle mtx;
         StaticQueue_t mtx_static;
-#endif
-#if !defined(IIC_NOTIFY) && !defined(IIC_POLL)
-    xSemaphoreHandle sem;
-    StaticQueue_t sem_static;
-    status_t status;
-#endif
+    #endif
+    #if !defined(IIC_NOTIFY) && !defined(IIC_POLL)
+        xSemaphoreHandle sem;
+        StaticQueue_t sem_static;
+        status_t status;
+    #endif
 
 } *iic_t;
