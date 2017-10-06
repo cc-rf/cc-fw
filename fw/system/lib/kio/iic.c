@@ -111,7 +111,7 @@ status_t iic_io(iic_t iic, iic_rw_t rw, u8 addr, u8 cmd, void *data, size_t size
     };
 
     #ifdef IIC_LOCK
-        xSemaphoreTake(spi[dev].mtx, portMAX_DELAY);
+        xSemaphoreTake(iic->mtx, portMAX_DELAY);
     #endif
 
     #ifdef IIC_NOTIFY

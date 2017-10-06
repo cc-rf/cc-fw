@@ -151,6 +151,20 @@ void cloudchaser_main(void)
             (u32)(status.serial >> 32), (u32)status.serial, mac_config.cell, status.node
     );
 
+    led_on(LED_RGB0_GREEN);
+    led_on(LED_RGB0_RED);
+    led_on(LED_RGB1_GREEN);
+    led_on(LED_RGB1_RED);
+    led_on(LED_BLUE_0);
+    led_on(LED_BLUE_1);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    led_off(LED_RGB0_GREEN);
+    led_off(LED_RGB0_RED);
+    led_off(LED_RGB1_GREEN);
+    led_off(LED_RGB1_RED);
+    led_off(LED_BLUE_0);
+    led_off(LED_BLUE_1);
+
     if (!(macs[0] = mac_init(&mac_config))) {
         return;
     }
