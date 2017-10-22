@@ -4,6 +4,10 @@
 #include "rdio/util.h"
 
 
+#define CHAN_FREQ_PRECISION 1000
+#define CHAN_FREQ_ROUND(freq) ((((freq) + (CHAN_FREQ_PRECISION>>1)) / CHAN_FREQ_PRECISION) * CHAN_FREQ_PRECISION)
+
+
 typedef u16 chan_id_t;
 
 typedef struct __packed {

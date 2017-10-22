@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <fsl_rnga.h>
 #include <stdlib.h>
+#include <sys/trace.h>
 
 
 static void chan_calibrate(chan_group_t *group, chan_info_t *chan);
@@ -14,21 +15,22 @@ void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
     assert(group); assert(group->size); assert(group->rdio);
 
     const u32 step = group->freq.bw;
-    u32 freq = group->freq.base + step / 2;
+
+    u32 freq = CHAN_FREQ_ROUND(group->freq.base + step / 2);
 
     /**
      * Degraded sensitivity in RX at multiples of XOSC/2 and in TX at multiples of XOSC.
      */
+    #define BAD_FREQ_GAP        500000
+    #define IS_TOO_CLOSE(freq)  (((freq) % (CC_XOSC_FREQ / 2)) < BAD_FREQ_GAP) || (((CC_XOSC_FREQ / 2) - ((freq) % (CC_XOSC_FREQ / 2))) < BAD_FREQ_GAP)
 
-    #define IS_TOO_CLOSE(freq)  ((freq % (CC_XOSC_FREQ / 2)) < 1000000) || (((CC_XOSC_FREQ / 2) - (freq % (CC_XOSC_FREQ / 2))) < 1000000)
-
-    for (chan_id_t c = 0; c < group->size; ++c, freq += step) {
+    for (chan_id_t c = 0; c < group->size; ++c, freq = CHAN_FREQ_ROUND(freq+step)) {
         group->chan[c].id = c;
         group->chan[c].cal.valid = false;
 
         while (IS_TOO_CLOSE(freq)) {
-            //cc_dbg("chan: adjust freq %lu -> %lu", freq, freq + step);
-            freq += step;
+            //ccrf_trace_debug("chan: adjust freq %lu -> %lu", freq, freq + BAD_FREQ_GAP / 10);
+            freq += BAD_FREQ_GAP / 10;
         }
 
         group->chan[c].freq = rdio_util_map_freq(group->rdio, freq, &group->chan[c].cal.reg.freq);

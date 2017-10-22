@@ -19,8 +19,8 @@
 #define phy_trace_verbose   ccrf_trace_verbose
 
 
-#define FREQ_BASE       902125000u
-#define FREQ_BW         950000u
+#define FREQ_BASE       902000000u
+#define FREQ_BW         1001000u
 #define CHAN_COUNT      25u
 #define CHAN_TIME       40000u
 
