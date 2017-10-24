@@ -50,8 +50,7 @@ typedef struct __packed {
     u16 peer;
     u16 dest;
     u16 size;
-    s8 rssi;
-    u8 lqi;
+    pkt_meta_t meta;
     u8 data[];
 
 } code_recv_t;
@@ -86,7 +85,7 @@ extern bool uflag2_set(void);
 
 static void uart_relay_run(void);
 
-static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], s8 rssi, u8 lqi);
+static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
 static void sync_hook(chan_id_t chan);
 
 static void frame_recv(u8 port, serf_t *frame, size_t size);
@@ -97,7 +96,7 @@ static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
 static void handle_code_uart(size_t size, u8 *data);
 
-static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi);
+static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
 static void write_code_status(u8 port, code_status_t *code_status);
 
 static void write_code_uart(code_uart_t *code_uart, size_t size);
@@ -241,7 +240,7 @@ static void uart_relay_run(void)
 }
 
 
-static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], s8 rssi, u8 lqi)
+static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta)
 {
     ++status.recv_count;
     status.recv_bytes += size;
@@ -292,7 +291,7 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
         return;
     }
 
-    write_code_recv(mac_addr(mac), peer, dest, size, data, rssi, lqi);
+    write_code_recv(mac_addr(mac), peer, dest, size, data, meta);
 }
 
 
@@ -470,7 +469,7 @@ static void handle_code_uart(size_t size, u8 *data)
 }
 
 
-static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], s8 rssi, u8 lqi)
+static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
 {
     code_recv_t *code_recv = alloca(sizeof(code_recv_t) + size); assert(code_recv);
 
@@ -478,8 +477,7 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     code_recv->peer = peer;
     code_recv->dest = dest;
     code_recv->size = (u16)size;
-    code_recv->rssi = rssi;
-    code_recv->lqi = lqi;
+    code_recv->meta = meta;
 
     memcpy(code_recv->data, data, size);
     size += sizeof(code_recv_t);

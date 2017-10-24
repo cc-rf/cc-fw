@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ccrf/ccrf.h>
-
+#include <ccrf/phy.h>
 
 #define MAC_PKT_OVERHEAD    7
 #define MAC_PKT_SIZE_MAX    (/*PHY_FRAME_SIZE_MAX*/123 - MAC_PKT_OVERHEAD)
@@ -12,7 +12,7 @@ typedef struct mac *mac_t;
 typedef u16 mac_addr_t;
 typedef u16 mac_size_t;
 
-typedef void (* mac_recv_t)(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], s8 rssi, u8 lqi);
+typedef void (* mac_recv_t)(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
 
 typedef enum __packed {
     MAC_SEND_DGRM,

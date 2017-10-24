@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ccrf/phy.h>
 #include "rdio/rdio.h"
 #include "phy/chan.h"
 
@@ -14,10 +15,7 @@
 
 typedef struct phy *phy_t;
 
-typedef u8 phy_cell_t;
-
-typedef void (* phy_sync_t)(chan_id_t chan);
-typedef bool (* phy_recv_t)(void *param, u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
+typedef bool (* phy_recv_t)(void *param, u8 flag, u8 size, u8 data[], pkt_meta_t meta);
 
 typedef struct __packed {
     rdio_id_t rdid;
@@ -26,7 +24,6 @@ typedef struct __packed {
     phy_sync_t sync;
     phy_recv_t recv;
     void *recv_param;
-
 
 } phy_config_t;
 

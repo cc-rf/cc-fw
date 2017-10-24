@@ -56,13 +56,6 @@ typedef struct __packed {
 } phy_pkt_hdr_t;
 
 typedef struct __packed {
-    u8 chan;
-    s8 rssi;
-    u8 lqi;
-
-} phy_pkt_meta_t;
-
-typedef struct __packed {
     phy_pkt_hdr_t hdr;
     u8 data[];
 
@@ -104,7 +97,6 @@ struct __packed phy {
     ccrf_timer_t hop_timer;
     volatile phy_static_pkt_t pkt_ack;
     volatile ccrf_clock_t sync_time;
-    bool sync_needed;
 
     TaskHandle_t task;
     StaticTask_t task_static;
@@ -187,7 +179,7 @@ phy_t phy_init(phy_config_t *config)
     }
 
     phy->txq = xQueueCreateStatic(
-            PHY_TXQ_LEN, sizeof(phy->txq_buf[0]), (u8 *)phy->txq_buf, &phy->txq_static); assert(phy->txq
+            PHY_TXQ_LEN, sizeof(phy->txq_buf[0]), (u8 *)phy->txq_buf, &phy->txq_static
     );
 
     phy->task = xTaskCreateStatic(
@@ -276,8 +268,7 @@ bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
         u32 notify;
 
         do {
-            if (!xTaskNotifyWait(CALLER_NOTIFY_TX_MASK, CALLER_NOTIFY_TX_MASK, &notify, pdMS_TO_TICKS(5)))
-                notify = 0;
+            xTaskNotifyWait(CALLER_NOTIFY_TX_MASK, CALLER_NOTIFY_TX_MASK, &notify, portMAX_DELAY);
 
         } while (!(notify & CALLER_NOTIFY_TX_MASK));
 
@@ -303,7 +294,6 @@ static void phy_task(phy_t const restrict phy)
 
     volatile chan_id_t chan_cur = (chan_id_t) -1;
 
-    u16 cca_fail_count = 0;
     rdio_ccac_t ccac = 0;
 
     phy_sync_pkt_t pkt_sync = {
@@ -314,7 +304,7 @@ static void phy_task(phy_t const restrict phy)
             .magic = PHY_SYNC_MAGIC
     };
 
-    phy->sync_needed = false;
+    bool sync_needed = false;
     phy->sync_time = 0;
 
     ///ccrf_amp_mode_rx(phy->rdio, true);
@@ -379,9 +369,6 @@ static void phy_task(phy_t const restrict phy)
                     case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
                     _cca_fail:
                         if (pkt) {
-                            ++cca_fail_count;
-                            //phy_trace_debug("cca fail #%u\n", cca_fail_count);
-
                             assert(pkt == (rf_pkt_t *)&sq.pkt);
                             assert(!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE));
 
@@ -398,8 +385,6 @@ static void phy_task(phy_t const restrict phy)
                         ///ccrf_amp_mode_tx(phy->rdio, false);
 
                         if (pkt) {
-                            cca_fail_count = 0;
-
                             if (pkt == (rf_pkt_t *)&sq.pkt && sq.task) {
                                 xTaskNotify(
                                         sq.task,
@@ -465,7 +450,7 @@ static void phy_task(phy_t const restrict phy)
                         ccrf_timer_start(phy->hop_timer);
                     }
 
-                    phy->sync_needed = true;
+                    sync_needed = true;
                 }
 
                 if (phy->sync) phy->sync(chan_cur);
@@ -489,8 +474,6 @@ static void phy_task(phy_t const restrict phy)
 
                     ///ccrf_amp_mode_tx(phy->rdio, false);
 
-                    cca_fail_count = 0;
-
                     if ((void *) pkt == &phy->pkt_ack) {
                         phy->pkt_ack.hdr.flag = 0;
                         phy->pkt_ack.hdr.size = 0;
@@ -511,8 +494,8 @@ static void phy_task(phy_t const restrict phy)
 
         _inner_loop:;
 
-        if (phy->sync_needed) {
-            phy->sync_needed = false;
+        if (sync_needed) {
+            sync_needed = false;
 
             assert(!pkt);
             pkt = (rf_pkt_t *) &pkt_sync;
@@ -538,24 +521,6 @@ static void phy_task(phy_t const restrict phy)
                     goto _restart_rx;
                 }
             }
-
-            /*if (!imm) {
-                // Manual CCA.
-
-                ///ccrf_amp_mode_rx(phy->rdio, true);
-                s16 rssi;
-                rdio_rssi_read(phy->rdio, &rssi);
-
-                if (rssi >= -97) {
-                    phy_trace_debug("rb\t%i", rssi);
-                    pkt = NULL;
-
-                    const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
-                    tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(5) + pdMS_TO_TICKS(rand % 6);
-
-                    goto _loop_end;
-                }
-            }*/
 
             if (synced) {
                 remaining = ccrf_timer_remaining(phy->hop_timer);
@@ -620,11 +585,11 @@ static void phy_task(phy_t const restrict phy)
 
             } else {
                 tx_next = 0;
-                loop_wait = portMAX_DELAY; //phy->sync_time ? portMAX_DELAY : pdUS_TO_TICKS(CHAN_TIME);
+                loop_wait = portMAX_DELAY;
             }
 
         } else {
-            loop_wait = portMAX_DELAY; //phy->sync_time ? portMAX_DELAY : pdUS_TO_TICKS(CHAN_TIME);
+            loop_wait = portMAX_DELAY;
         }
     }
 }
@@ -708,7 +673,7 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
 
     ppkt->hdr.size -= (sizeof(phy_pkt_t) - sizeof(rf_pkt_t));
 
-    return phy->recv(phy->recv_param, ppkt->hdr.flag, ppkt->hdr.size, ppkt->data, rssi, lqi);
+    return phy->recv(phy->recv_param, ppkt->hdr.flag, ppkt->hdr.size, ppkt->data, {rssi, lqi});
 }
 
 

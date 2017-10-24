@@ -61,8 +61,7 @@ typedef struct __packed {
 } mac_static_pkt_t;
 
 typedef struct __packed {
-    s8 rssi;
-    u8 lqi;
+    pkt_meta_t meta;
     mac_addr_t peer;
     mac_addr_t dest;
     mac_size_t size;
@@ -117,7 +116,7 @@ static bool mac_send_packet(mac_t mac, mac_static_pkt_t *pkt);
 static void mac_task_send(mac_t mac);
 static void mac_task_recv(mac_t mac);
 
-static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi);
+static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta);
 
 
 static struct mac macs[CCRF_CONFIG_RDIO_COUNT];
@@ -369,13 +368,13 @@ static void mac_task_recv(mac_t mac)
 
     while (1) {
         if (xQueueReceive(rxq, &recv, portMAX_DELAY)) {
-            mac->recv(mac, recv.peer, recv.dest, recv.size, recv.data, recv.rssi, recv.lqi);
+            mac->recv(mac, recv.peer, recv.dest, recv.size, recv.data, recv.meta);
         }
     }
 }
 
 
-static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi)
+static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta)
 {
     mac_pkt_t *const pkt = (mac_pkt_t *)data;
     bool unblock = false;
@@ -433,8 +432,7 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], s8 rssi, u8 lqi
                         peer->seqn = pkt->seqn;
 
                         mac_recv_data_t recv = {
-                                .rssi = rssi,
-                                .lqi = lqi,
+                                .meta = meta,
                                 .peer = pkt->addr,
                                 .dest = pkt->dest,
                                 .size = pkt->size,
