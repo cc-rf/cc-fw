@@ -673,7 +673,7 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
 
     ppkt->hdr.size -= (sizeof(phy_pkt_t) - sizeof(rf_pkt_t));
 
-    return phy->recv(phy->recv_param, ppkt->hdr.flag, ppkt->hdr.size, ppkt->data, {rssi, lqi});
+    return phy->recv(phy->recv_param, ppkt->hdr.flag, ppkt->hdr.size, ppkt->data, (pkt_meta_t){rssi, lqi});
 }
 
 

@@ -3,6 +3,9 @@
 #include <ccrf/ccrf.h>
 
 
+#define PHY_FRAME_SIZE_MAX  123
+
+
 typedef u8 phy_cell_t;
 
 typedef struct __packed {

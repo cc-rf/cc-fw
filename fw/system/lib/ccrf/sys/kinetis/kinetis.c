@@ -14,6 +14,7 @@ const interface_t cc_interface[CCRF_CONFIG_RDIO_COUNT] = {
             {SYS_PORT_C, 11},
             {SYS_PORT_C, 12},
         }
+#if BOARD_CLOUDCHASER && BOARD_REVISION == 1
     },{
         .spi = {SPI2, 0},
         .amp = {
@@ -26,6 +27,7 @@ const interface_t cc_interface[CCRF_CONFIG_RDIO_COUNT] = {
             {SYS_PORT_D,  8},
             {SYS_PORT_D,  9},
         }
+#endif
     }/*,{
         .spi = {SPI1, 1},
         .amp = {

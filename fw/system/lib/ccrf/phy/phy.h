@@ -5,8 +5,6 @@
 #include "phy/chan.h"
 
 
-#define PHY_FRAME_SIZE_MAX  123
-
 #define PHY_PKT_FLAG_IMMEDIATE  (0x04)  // send without tx-gap delay and put at front of queue
 #define PHY_PKT_FLAG_BLOCK      (0x08)  // [local] return when packet is sent or fails
 #define PHY_PKT_FLAG_USER_MASK  (0xF0)
