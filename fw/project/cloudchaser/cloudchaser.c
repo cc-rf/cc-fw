@@ -16,7 +16,7 @@
 #define CLOUDCHASER_RDIO_COUNT  1
 
 
-#define USB_IN_DATA_MAX     (MAC_PKT_SIZE_MAX + 64)
+#define USB_IN_DATA_MAX     (8192 + 64)
 
 #define CODE_ID_ECHO        0
 #define CODE_ID_STATUS      1
@@ -326,12 +326,14 @@ void usb_recv(u8 port, size_t size, u8 *data)
     memcpy(&usb_in_data[port][usb_in_size[port]], data, size);
     usb_in_size[port] += size;
 
-    serf_t *frame = alloca(sizeof(serf_t) + USB_IN_DATA_MAX);
-    size_t frame_size = serf_decode(usb_in_data[port], &usb_in_size[port], frame, USB_IN_DATA_MAX);
+    serf_t *frame = malloc(sizeof(serf_t) + usb_in_size[port] + 1); assert(frame);
+    size_t frame_size = serf_decode(usb_in_data[port], &usb_in_size[port], frame, usb_in_size[port] + 1);
 
     if (frame_size) {
         frame_recv(port, frame, frame_size);
     }
+
+    free(frame);
 }
 
 
@@ -377,11 +379,6 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
     if (code_send->size != (size - sizeof(code_send_t))) {
         printf("(send) error: size mismatch: %u != %u\r\n", code_send->size, size - sizeof(code_send_t));
         return;
-    }
-
-    if (code_send->size > MAC_PKT_SIZE_MAX) {
-        printf("(send) warning: truncating size from %u to %u\r\n", size, MAC_PKT_SIZE_MAX);
-        code_send->size = MAC_PKT_SIZE_MAX;
     }
 
     for (u8 i = 0; i < CLOUDCHASER_RDIO_COUNT; ++i) {
@@ -471,7 +468,7 @@ static void handle_code_uart(size_t size, u8 *data)
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
 {
-    code_recv_t *code_recv = alloca(sizeof(code_recv_t) + size); assert(code_recv);
+    code_recv_t *code_recv = malloc(sizeof(code_recv_t) + size); assert(code_recv);
 
     code_recv->node = node;
     code_recv->peer = peer;
@@ -484,6 +481,8 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
 
     u8 *frame;
     size = serf_encode(CODE_ID_RECV, (u8 *)code_recv, size, &frame);
+
+    free(code_recv);
 
     if (frame) {
         usb_write_direct(0, frame, size);

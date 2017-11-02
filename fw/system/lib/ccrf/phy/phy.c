@@ -24,8 +24,9 @@
 #define CHAN_COUNT      25u
 #define CHAN_TIME       40000u
 
+#define PHY_RF_FRAME_SIZE_MAX   (PHY_FRAME_SIZE_MAX + sizeof(phy_pkt_hdr_t) - 1)
 
-#define PHY_PKT_FLAG_SYNC       (0x01)   // is a sync packet
+#define PHY_PKT_FLAG_SYNC       (0x01)   // Is a sync packet. Same value as local block flag, as this is non-local.
 
 #define PHY_TXQ_LEN             3
 
@@ -120,7 +121,7 @@ static void phy_rdio_isr(phy_t phy);
 static void hop_timer_handler(ccrf_timer_t timer, phy_t phy);
 
 
-u32 tx_times[PHY_FRAME_SIZE_MAX+1] = {0};
+u32 tx_times[PHY_RF_FRAME_SIZE_MAX+1] = {0};
 
 static struct phy phys[CCRF_CONFIG_RDIO_COUNT];
 
@@ -172,8 +173,8 @@ phy_t phy_init(phy_config_t *config)
         goto _fail;
     }
 
-    if (!tx_times[PHY_FRAME_SIZE_MAX]) {
-        for (u8 i = 0; i <= PHY_FRAME_SIZE_MAX; ++i) {
+    if (!tx_times[PHY_RF_FRAME_SIZE_MAX]) {
+        for (u8 i = 0; i <= PHY_RF_FRAME_SIZE_MAX; ++i) {
             tx_times[i] = rdio_util_get_tx_time(phy->rdio, i);
         }
     }
@@ -251,14 +252,14 @@ bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
 
         } else {
 
-            if (xQueueSendToFront(phy->txq, &sq, pdMS_TO_TICKS(10))) {
+            if (xQueueSendToFront(phy->txq, &sq, pdMS_TO_TICKS(100))) {
                 xTaskNotify(phy->task, NOTIFY_MASK_TX, eSetBits);
             } else {
                 phy_trace_error("tx pkt queue immediate fail");
             }
         }
 
-    } else if (xQueueSend(phy->txq, &sq, pdMS_TO_TICKS(10))) {
+    } else if (xQueueSend(phy->txq, &sq, pdMS_TO_TICKS(100))) {
         xTaskNotify(phy->task, NOTIFY_MASK_TX, eSetBits);
     } else {
         phy_trace_error("tx pkt queue fail");
@@ -281,7 +282,7 @@ bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
 
 static void phy_task(phy_t const restrict phy)
 {
-    phy_send_queue_t sq;
+    phy_send_queue_t sq = {0};
     rf_pkt_t *pkt = NULL;
     u8 ms = 0;
 
@@ -616,7 +617,7 @@ static bool phy_recv(phy_t phy, bool flush)
     while (len > PKT_OVERHEAD) {
         spkt = (rf_pkt_t *)buf;
 
-        if (spkt->size > PHY_FRAME_SIZE_MAX) {
+        if (spkt->size > PHY_RF_FRAME_SIZE_MAX) {
             break;
         }
 

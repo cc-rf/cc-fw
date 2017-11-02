@@ -5,10 +5,15 @@
 #include "phy/chan.h"
 
 
-#define PHY_PKT_FLAG_IMMEDIATE  (0x04)  // send without tx-gap delay and put at front of queue
-#define PHY_PKT_FLAG_BLOCK      (0x08)  // [local] return when packet is sent or fails
-#define PHY_PKT_FLAG_USER_MASK  (0xF0)
-#define PHY_PKT_FLAG_USER_SHIFT (0x04)
+#define PHY_PKT_FLAG_IMMEDIATE  (0x02)  // Send without tx-gap delay (or CCA) and put at front of queue.
+#define PHY_PKT_FLAG_BLOCK      (0x01)  // Return when packet is sent or fails (Local).
+#define PHY_PKT_FLAG_USER_MASK  (0xFC)
+#define PHY_PKT_FLAG_USER_0     (0x04)
+#define PHY_PKT_FLAG_USER_1     (0x08)
+#define PHY_PKT_FLAG_USER_2     (0x10)
+#define PHY_PKT_FLAG_USER_3     (0x20)
+#define PHY_PKT_FLAG_USER_4     (0x40)
+#define PHY_PKT_FLAG_USER_5     (0x80)
 
 
 typedef struct phy *phy_t;

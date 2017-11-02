@@ -3,8 +3,8 @@
 #include <ccrf/ccrf.h>
 #include <ccrf/phy.h>
 
-#define MAC_PKT_OVERHEAD    7
-#define MAC_PKT_SIZE_MAX    (PHY_FRAME_SIZE_MAX - MAC_PKT_OVERHEAD)
+#define MAC_PKT_OVERHEAD    8
+#define MAC_PKT_SIZE_MAX    ((mac_size_t)(PHY_FRAME_SIZE_MAX - MAC_PKT_OVERHEAD))
 
 
 typedef struct mac *mac_t;

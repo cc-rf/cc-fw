@@ -108,6 +108,8 @@ class CloudChaser(Serf):
         if self.handler is not None:
             self.handler(self, node, peer, dest, rssi, lqi, data)
 
+        # print("{:04X}->{:04X}: ({}) {}".format(peer, dest, len(data), " ".join("{:02X}".format(ord(ch)) for ch in data)))
+
     def handle_uart(self, code, data):
         pass
 
@@ -213,10 +215,10 @@ def send_frames(cc):
 
     while 1:
         count += 1
-        data = '\x00' * 1
+        data = ''.join(chr(n % 255) for n in range(115))  # '\x00' * 2400
         # data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(24, 114))])
-        cc.io.send(CloudChaser.NMAC_SEND_DGRM, 0x0000, data)
-        break
+        cc.io.send(CloudChaser.NMAC_SEND_MESG, 0x4BDE, data)
+        # break
         # time.sleep(.010 - .00368)
 
 
