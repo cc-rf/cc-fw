@@ -102,6 +102,7 @@
  * Changing rate to 200ksps, deviation to 50kHz. Makes for a solid high-quality signal, works @4GFSK with dev=100 nicely (when rxbw=800).
  * ^ SYNC_CFG0: Trying to unset RX_CONFIG_LIMITATION brings LQI from 1->4.
  * PREAMBLE_CFG1: 0x20->0x18->0x28->0x30->0x28. Preamble 6->4->8->24->8 bytes.
+ * PREAMBLE_CFG1: 0x28->0x18. Preamble 8->4 bytes.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -125,7 +126,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         #endif
         {CC1200_MODCFG_DEV_E,      0x0C},
         {CC1200_DCFILT_CFG,        0x4B},
-        {CC1200_PREAMBLE_CFG1,     0x28},
+        {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
         {CC1200_CHAN_BW,           0x03},
         {CC1200_MDMCFG1,           0x42},
