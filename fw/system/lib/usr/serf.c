@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <FreeRTOS.h>
 
 
 size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame)
@@ -14,17 +15,17 @@ size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame)
 
     size_t frame_size = sizeof(serf_t) + size;
 
-    serf_t *raw_frame = malloc(frame_size); assert(raw_frame);
-    *frame = malloc(sizeof(serf_t) + cobs_encode_size_max(frame_size) + 1); assert(*frame);
+    serf_t *raw_frame = pvPortMalloc(frame_size); assert(raw_frame);
+    *frame = pvPortMalloc(sizeof(serf_t) + cobs_encode_size_max(frame_size) + 1); assert(*frame);
 
     raw_frame->code = code;
     memcpy(raw_frame->data, data, size);
 
     frame_size = cobs_encode((u8 *)raw_frame, frame_size, *frame);
-    free(raw_frame);
+    vPortFree(raw_frame);
 
     if (!frame_size) {
-        free(*frame);
+        vPortFree(*frame);
         return 0;
     }
 

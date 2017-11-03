@@ -18,7 +18,7 @@
 
 #define MAC_PEER_MAX            10
 
-#define MAC_PEND_TIME           7
+#define MAC_PEND_TIME           3
 #define MAC_PEND_RETRY          5
 
 #define MAC_TXQ_COUNT           7 // This should eventually reflect the number of threads waiting on messages
@@ -50,7 +50,7 @@ typedef struct __packed {
     mac_addr_t addr;
     mac_addr_t dest;
     mac_seq_t seq;
-    u16 size;
+    mac_size_t size;
     u8  data[];
 
 } mac_pkt_t;
@@ -59,7 +59,7 @@ typedef struct __packed {
     mac_addr_t addr;
     mac_addr_t dest;
     mac_seq_t seq;
-    u16 size;
+    mac_size_t size;
     u8  data[MAC_PKT_SIZE_MAX];
 
 } mac_static_pkt_t;
@@ -236,18 +236,22 @@ static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr)
 
 bool mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 data[])
 {
+    // TODO: Add block flag. Also return number of actua packets sent?
+
     switch (type) {
         case MAC_SEND_DGRM:
             return mac_send_base(mac, dest, 0, size, data);
 
         case MAC_SEND_MESG:
-            return mac_send_base(mac, dest, MAC_FLAG_ACK_REQ | MAC_FLAG_PKT_BLK, size, data);
+            if (!dest) return false;
+            return mac_send_base(mac, dest, MAC_FLAG_ACK_REQ, size, data);
 
         case MAC_SEND_TRXN:
-            return mac_send_base(mac, dest, MAC_FLAG_ACK_REQ | MAC_FLAG_PKT_BLK, size, data);
+            if (!dest) return false;
+            return mac_send_base(mac, dest, MAC_FLAG_ACK_REQ, size, data);
 
         case MAC_SEND_STRM:
-            return mac_send_base(mac, dest, MAC_FLAG_PKT_IMM | MAC_FLAG_PKT_BLK, size, data);
+            return mac_send_base(mac, dest, MAC_FLAG_PKT_IMM, size, data);
 
         default:
             return false;
@@ -364,7 +368,8 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
     }
 
     if (needs_ack) {
-        const u32 tx_time = MAC_PEND_TIME + phy_delay(1 + (u8)MAC_PKT_OVERHEAD) / 1000;
+        // TODO: Test this below
+        const u32 tx_time = MAC_PEND_TIME + phy_delay(2 + (u8)MAC_PKT_OVERHEAD) / 1000;
         //sclk_t elaps = sclk_time();
         u32 notify = 0;
 
@@ -438,14 +443,14 @@ static void mac_task_recv(mac_t mac)
                     continue;
                 }
 
-                recv.peer->part = malloc(sizeof(mac_part_t) + recv.size); assert(recv.peer->part);
+                recv.peer->part = pvPortMalloc(sizeof(mac_part_t) + recv.size); assert(recv.peer->part);
                 recv.peer->part->dest = recv.dest;
                 recv.peer->part->size = recv.size;
                 recv.peer->part->seq = recv.seq;
                 memcpy(recv.peer->part->data, recv.data, MIN(recv.size, MAC_PKT_SIZE_MAX));
             } else if (recv.size >= recv.peer->part->size || recv.seq.msg != recv.peer->part->seq.msg || recv.dest != recv.peer->part->dest) {
                 mac_trace_warn("(rx) multi-packet stream error");
-                free(recv.peer->part);
+                vPortFree(recv.peer->part);
                 recv.peer->part = NULL;
                 continue;
             } else {
@@ -453,17 +458,20 @@ static void mac_task_recv(mac_t mac)
 
                 if (recv.seq.idx != recv.peer->part->seq.idx) {
                     mac_trace_warn("(rx) multi-packet stream lost");
-                    free(recv.peer->part);
+                    vPortFree(recv.peer->part);
                     recv.peer->part = NULL;
                     continue;
                 }
+
+                // TODO: Save running total received bytes so far, compare against total size
+                //   and remaining as indicated by this packet.
 
                 memcpy(&recv.peer->part->data[recv.peer->part->size - recv.size], recv.data, MIN(recv.size, MAC_PKT_SIZE_MAX));
             }
 
             if (recv.seq.end) {
                 mac->recv(mac, recv.peer->addr, recv.peer->part->dest, recv.peer->part->size, recv.peer->part->data, recv.meta);
-                free(recv.peer->part);
+                vPortFree(recv.peer->part);
                 recv.peer->part = NULL;
             }
 
@@ -484,6 +492,9 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
         mac_trace_debug("(rx) bad length: len=%u != size=%u + base=%u", size, MIN(pkt->size, MAC_PKT_SIZE_MAX), sizeof(mac_pkt_t));
 
     } else {
+        if (pkt->seq.msg && !pkt->seq.end)
+            unblock = false;
+
         if (pkt->dest == 0 || pkt->dest == mac->addr) {
             mac_peer_t *const peer = mac_peer_get(mac, pkt->addr);
 
@@ -503,8 +514,6 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
                             mac, pkt->addr, MAC_FLAG_PKT_BLK | MAC_FLAG_PKT_IMM | MAC_FLAG_ACK_RSP,
                             sizeof(seqn), &seqn
                     );
-
-                    unblock = false;
                 }
 
                 if (pkt->dest == mac->addr && (flag & MAC_FLAG_ACK_RSP)) {
@@ -531,7 +540,7 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
                     if (!(flag & MAC_FLAG_ACK_RQR) || (peer->seq.num != pkt->seq.num)) {
                         peer->seq.num = pkt->seq.num;
 
-                        if (unblock && ((flag & PHY_PKT_FLAG_IMMEDIATE) || (pkt->seq.msg && !pkt->seq.end)))
+                        if (unblock && (flag & PHY_PKT_FLAG_IMMEDIATE))
                             unblock = false;
 
                         mac_recv_data_t recv = {

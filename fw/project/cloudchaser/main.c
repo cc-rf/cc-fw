@@ -402,7 +402,7 @@ caddr_t _sbrk(int incr)
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
 {
-    itm_printf(0, "stack overflow in task 0x%08p '%s'\r\n", xTask, pcTaskName);
+    itm_printf(0, "stack overflow in task %p '%s'\r\n", xTask, pcTaskName);
     while (1) asm("nop");
 }
 

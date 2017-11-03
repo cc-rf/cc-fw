@@ -38,6 +38,8 @@ typedef struct __packed {
     u32 send_count;
     u32 send_bytes;
 
+    // TODO: Add error stats, maybe fragment stats, and heap stats
+
 } code_status_t;
 
 typedef struct __packed {
@@ -64,6 +66,12 @@ typedef struct __packed {
     u8 data[];
 
 } code_send_t;
+
+typedef struct __packed {
+    u16 node;
+    u32 stat;
+
+} code_send_stat_t;
 
 typedef struct __packed {
     u8 code;
@@ -98,6 +106,7 @@ static void handle_code_uart(size_t size, u8 *data);
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
 static void write_code_status(u8 port, code_status_t *code_status);
+static void write_code_send_stat(u8 port, code_send_stat_t *code_send_stat);
 
 static void write_code_uart(code_uart_t *code_uart, size_t size);
 
@@ -326,14 +335,14 @@ void usb_recv(u8 port, size_t size, u8 *data)
     memcpy(&usb_in_data[port][usb_in_size[port]], data, size);
     usb_in_size[port] += size;
 
-    serf_t *frame = malloc(sizeof(serf_t) + usb_in_size[port] + 1); assert(frame);
+    serf_t *frame = pvPortMalloc(sizeof(serf_t) + usb_in_size[port] + 1); assert(frame);
     size_t frame_size = serf_decode(usb_in_data[port], &usb_in_size[port], frame, usb_in_size[port] + 1);
 
     if (frame_size) {
         frame_recv(port, frame, frame_size);
     }
 
-    free(frame);
+    vPortFree(frame);
 }
 
 
@@ -398,6 +407,13 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
                 //LED_C_TOGGLE();
                 //LED_D_TOGGLE();
             }
+
+            /*code_send_stat_t code_send_stat = {
+                    .node =  mac_addr(macs[i]),
+                    .stat = (u32) result
+            };
+
+            write_code_send_stat(port, &code_send_stat);*/
 
             break;
         }
@@ -468,7 +484,7 @@ static void handle_code_uart(size_t size, u8 *data)
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
 {
-    code_recv_t *code_recv = malloc(sizeof(code_recv_t) + size); assert(code_recv);
+    code_recv_t *code_recv = pvPortMalloc(sizeof(code_recv_t) + size); assert(code_recv);
 
     code_recv->node = node;
     code_recv->peer = peer;
@@ -482,7 +498,7 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     u8 *frame;
     size = serf_encode(CODE_ID_RECV, (u8 *)code_recv, size, &frame);
 
-    free(code_recv);
+    vPortFree(code_recv);
 
     if (frame) {
         usb_write_direct(0, frame, size);
@@ -497,6 +513,15 @@ static void write_code_status(u8 port, code_status_t *code_status)
     if (frame) usb_write_direct(port, frame, size);
 }
 
+
+static void write_code_send_stat(u8 port, code_send_stat_t *code_send_stat)
+{
+    u8 *frame;
+    const size_t size = serf_encode(CODE_ID_SEND, (u8 *)code_send_stat, sizeof(code_send_stat_t), &frame);
+    if (frame) usb_write_direct(port, frame, size);
+}
+
+
 static void write_code_uart(code_uart_t *code_uart, size_t size)
 {
     u8 *frame;
@@ -507,7 +532,7 @@ static void write_code_uart(code_uart_t *code_uart, size_t size)
 
         if (frame) {
             uart_write(uart, frame, frame_size);
-            free(frame);
+            vPortFree(frame);
         }
     }
 

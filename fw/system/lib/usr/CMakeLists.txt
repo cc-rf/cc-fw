@@ -9,3 +9,8 @@ target_include_directories(
         ${NAME}
         PUBLIC include
 )
+
+target_link_libraries(
+        ${NAME}
+        PRIVATE freertos
+)

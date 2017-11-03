@@ -351,10 +351,15 @@ static void phy_task(phy_t const restrict phy)
                         if (phy_recv(phy, true)) {
                             if (tx_next && (phy->sync_time || phy->boss)) tx_next = 0;
                         } else {
-                            // Only unblock, do not block.
-                            /*if (!tx_next) {
-                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() & 3));
-                            }*/
+                            if (!tx_next) {
+                                /**
+                                 * This is meant for rare cases when we want to force
+                                 * back into rx at the clear expectation of more packets.
+                                 * In some cases, this does not matter, such as when an
+                                 * immediate (e.g. ack) is sent after this.
+                                 */
+                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 6));
+                            }
                         }
 
                         if (pkt) goto _cca_fail;

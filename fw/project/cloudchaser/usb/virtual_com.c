@@ -182,7 +182,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 
                     const usb_io_t io = {
                             .len = recv_size,
-                            .buf = malloc(recv_size)
+                            .buf = pvPortMalloc(recv_size)
                     };
 
                     assert(io.buf);
@@ -190,7 +190,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 
                     if (!xQueueSend(usb_vcom[instance].rxq, &io, pdMS_TO_TICKS(10))) {
                         itm_puts(0, "usb: rx queue fail\r\n");
-                        free(io.buf);
+                        vPortFree(io.buf);
                     }
                 }
 
@@ -383,7 +383,7 @@ static void usb_vcom_rx_task(void *param)
             }
 
             vcom_rx(instance, io.len, io.buf);
-            free(io.buf);
+            vPortFree(io.buf);
         }
     }
 }
@@ -411,7 +411,7 @@ static void usb_vcom_task(void *param)
             --vcom->sending;
             itm_printf(0, "usb: tx error=%u\r\n", error);
 
-            free(io.buf);
+            vPortFree(io.buf);
             io.buf = NULL;
             continue;
 
@@ -423,7 +423,7 @@ static void usb_vcom_task(void *param)
             itm_printf(0, "usb: tx timeout, len=%u\r\n", io.len);
         }
 
-        free(io.buf);
+        vPortFree(io.buf);
         io.buf = NULL;
     }
 }
@@ -473,13 +473,9 @@ void usb_write(u8 port, u8 *buf, size_t len)
 void usb_write_direct(u8 port, u8 *buf, size_t len)
 {
     if (!usb_attached(port) || !buf) {
-        if (buf) free(buf);
+        if (buf) vPortFree(buf);
         return;
     }
-
-    //usb_io_t *io = malloc(sizeof(usb_io_t) + len); assert(io);
-    //io->len = len;
-    //memcpy(io->buf, buf, len);
 
     usb_io_t io = { len, buf };
 
@@ -488,12 +484,12 @@ void usb_write_direct(u8 port, u8 *buf, size_t len)
     if (!isInterrupt()) {
         if (!xQueueSend(usb_vcom[port].txq, &io, pdMS_TO_TICKS(1000))) {
             itm_puts(0, "usb: queue failed\r\n");
-            free(buf);
+            vPortFree(buf);
         }
     } else {
         if (!xQueueSendFromISR(usb_vcom[port].txq, &io, NULL)) {
             itm_puts(0, "usb: queue failed\r\n");
-            free(buf);
+            vPortFree(buf);
         }
     }
 }

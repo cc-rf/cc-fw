@@ -118,12 +118,8 @@
 #define configTICK_RATE_HZ ((TickType_t)10000U)
 #define configMAX_PRIORITIES (18U)
 #define configMINIMAL_STACK_SIZE ((unsigned short) 192U)
+#define configTOTAL_HEAP_SIZE ((size_t)(95U * 1024U))
 
-#if defined(USB_STACK_FREERTOS_HEAP_SIZE) && (USB_STACK_FREERTOS_HEAP_SIZE > 0)
-#define configTOTAL_HEAP_SIZE ((size_t)(USB_STACK_FREERTOS_HEAP_SIZE))
-#else
-#define configTOTAL_HEAP_SIZE ((size_t)(0U * 1024U))
-#endif
 #define configMAX_TASK_NAME_LEN (10U)
 #define configUSE_TRACE_FACILITY 1U
 #define configUSE_16_BIT_TICKS 0U
@@ -132,7 +128,7 @@
 #define configQUEUE_REGISTRY_SIZE 8U
 #define configCHECK_FOR_STACK_OVERFLOW 2U
 #define configUSE_RECURSIVE_MUTEXES 1U
-#define configUSE_MALLOC_FAILED_HOOK 0U
+#define configUSE_MALLOC_FAILED_HOOK 1U
 #define configUSE_APPLICATION_TASK_TAG 0U
 #define configUSE_COUNTING_SEMAPHORES 1U
 #define configUSE_TIME_SLICING 0U

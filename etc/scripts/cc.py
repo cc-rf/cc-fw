@@ -45,13 +45,13 @@ class CloudChaser(Serf):
         self.add(
             name='reset',
             code=CloudChaser.CODE_ID_RESET,
-            encode=lambda: struct.pack("<L", CloudChaser.RESET_MAGIC)
+            encode=lambda: struct.pack("<I", CloudChaser.RESET_MAGIC)
         )
 
         self.add(
             name='status',
             code=CloudChaser.CODE_ID_STATUS,
-            decode=lambda data: struct.unpack("<LQLHLLLL%is" % (len(data) - 34), data)[:-1],
+            decode=lambda data: struct.unpack("<IQIHIIII%is" % (len(data) - 34), data)[:-1],
             handle=self.handle_status,
             response=CloudChaser.CODE_ID_STATUS
         )
@@ -68,7 +68,9 @@ class CloudChaser(Serf):
             code=CloudChaser.CODE_ID_SEND,
             encode=lambda typ, dest, data, flag=0, node=0: struct.pack(
                 "<BBHHH%is" % len(data), typ & 0xFF, flag & 0xFF, node & 0xFFFF, dest & 0xFFFF, len(data), data
-            )
+            ),
+            # decode=lambda data: struct.unpack("<HI", data),
+            # response=CloudChaser.CODE_ID_SEND
         )
 
         self.add(
@@ -218,8 +220,9 @@ def send_frames(cc):
         count += 1
         data = ''.join(chr(n % 256) for n in range(4800))
         # data = ''.join([chr(random.randrange(0, 0xff+1)) for _ in range(random.randrange(24, 114))])
-        cc.io.send(CloudChaser.NMAC_SEND_DGRM, 0x0000, data)
-        # sys.exit(0)
+        cc.io.send(CloudChaser.NMAC_SEND_STRM, 0x0000, data)
+        # time.sleep(0.010)
+        # sys.exit()
 
 
 def main(args):

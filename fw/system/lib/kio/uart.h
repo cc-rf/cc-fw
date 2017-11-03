@@ -96,7 +96,7 @@ static inline uart_t uart_mem_alloc(void)
 
 static inline void uart_mem_free(uart_t const uart)
 {
-    free(uart);
+    vPortFree(uart);
 }
 
 #elif (CONFIG_KIO_UART_COUNT == -1) || (CONFIG_KIO_UART_COUNT > 0)

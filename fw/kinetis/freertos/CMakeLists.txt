@@ -35,3 +35,5 @@ target_compile_definitions(
         ${NAME}
         PUBLIC FREERTOS
 )
+
+add_library(freertos ALIAS kinetis_freertos)

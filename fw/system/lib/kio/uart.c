@@ -344,7 +344,7 @@ size_t uart_readline(uart_t const uart, char **buf)
     u8 len = 0;
     u8 ch;
 
-    *buf = malloc(len_max);
+    *buf = pvPortMalloc(len_max);
     assert(*buf);
 
     while (1) {
