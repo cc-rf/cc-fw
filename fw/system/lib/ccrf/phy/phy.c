@@ -252,7 +252,7 @@ bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
 
         } else {
 
-            if (xQueueSendToFront(phy->txq, &sq, pdMS_TO_TICKS(100))) {
+            if (xQueueSend(phy->txq, &sq, pdMS_TO_TICKS(100))) {
                 xTaskNotify(phy->task, NOTIFY_MASK_TX, eSetBits);
             } else {
                 phy_trace_error("tx pkt queue immediate fail");
@@ -351,8 +351,10 @@ static void phy_task(phy_t const restrict phy)
                         if (phy_recv(phy, true)) {
                             if (tx_next && (phy->sync_time || phy->boss)) tx_next = 0;
                         } else {
-                            //const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
-                            //tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1) + pdMS_TO_TICKS(rand % 9);
+                            // Only unblock, do not block.
+                            /*if (!tx_next) {
+                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() & 3));
+                            }*/
                         }
 
                         if (pkt) goto _cca_fail;
@@ -369,13 +371,9 @@ static void phy_task(phy_t const restrict phy)
 
                     case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
                     _cca_fail:
-                        if (pkt) {
-                            assert(pkt == (rf_pkt_t *)&sq.pkt);
-                            assert(!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE));
-
-                            //const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
-                            //tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(3) + pdMS_TO_TICKS(rand % 8);
-                        }
+                        // Fall through and let the packet be re-queued.
+                        // If pkt is pkt_ack or pkt_sync (and we got here via goto), it disappears.
+                        //   But that's unlikely because those are sent from idle.
 
                     case CC1200_MARC_STATUS1_TX_FIFO_UNDERFLOW:
                     case CC1200_MARC_STATUS1_TX_FIFO_OVERFLOW:
@@ -408,9 +406,8 @@ static void phy_task(phy_t const restrict phy)
 
                             } else {
                                 rdio_cca_end(phy->rdio, ccac);
-
-                                const u8 rand = rdio_reg_get(phy->rdio, CC1200_RNDGEN, NULL) & CC1200_RNDGEN_VALUE_M;
-                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1) + pdMS_TO_TICKS(rand % 6);
+                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 5));
+                                // NOTE: Could jump to _loop_end from here if NOTIFY_MASK_HOP not set.
                             }
 
                             pkt = NULL;
@@ -423,7 +420,7 @@ static void phy_task(phy_t const restrict phy)
 
                     default:
                     case CC1200_MARC_STATUS1_NO_FAILURE:
-                        if (!(notify & ~NOTIFY_MASK_ISR)) continue; // usually the result of a SIDLE strobe
+                        if (!(notify & ~NOTIFY_MASK_ISR)) goto _loop_end; // usually the result of a SIDLE strobe
                         break;
                 }
             }
@@ -469,6 +466,8 @@ static void phy_task(phy_t const restrict phy)
 
                     if (pkt == (rf_pkt_t *)&sq.pkt && sq.task) {
                         xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);
+                    } else {
+                        // Packet disappears (pkt_ack or pkt_sync).
                     }
 
                     // TODO: Need common post-tx handler
@@ -535,7 +534,7 @@ static void phy_task(phy_t const restrict phy)
                     goto _restart_rx;
                 }
 
-                if (remaining < (500 + tx_times[pkt->size])) {
+                if (remaining < (750 + tx_times[pkt->size])) {
                     tx_next = 0;
                     pkt = NULL;
                     goto _restart_rx;
@@ -666,6 +665,7 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
             if (!phy->boss) {
                 phy->sync_time = ccrf_clock();
                 ccrf_timer_restart(phy->hop_timer);
+                return true;
             }
         }
 

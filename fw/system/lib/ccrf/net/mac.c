@@ -165,6 +165,9 @@ mac_t mac_init(mac_config_t *config)
         goto _fail;
     }
 
+    // This is important for variability in rand() calls within phy.
+    srand(mac->addr);
+
     mac->txq = xQueueCreateStatic(MAC_TXQ_SIZE, sizeof(mac->txq_buf[0]), (u8 *)mac->txq_buf, &mac->txq_static);
     mac->rxq = xQueueCreateStatic(MAC_RXQ_SIZE, sizeof(mac->rxq_buf[0]), (u8 *)mac->rxq_buf, &mac->rxq_static);
 
@@ -285,7 +288,12 @@ static bool mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, 
 
         if (pkt_size && data) memcpy(pkt.data, &data[size - remaining], pkt_size);
 
-        // TODO: Should we set BLK flag for multi-part messages?
+        /*mac_trace_verbose(
+                "mac/%u: TX %04X->%04X #%04u %03u-%02u-%02u",
+                rdio_id(phy_rdio(mac->phy)), pkt.addr, pkt.dest,
+                pkt.size, pkt.seq.num, pkt.seq.msg, pkt.seq.idx
+        );*/
+
         if (!mac_send_packet(mac, flag, &pkt)) return false;
 
         remaining -= pkt_size;
@@ -416,6 +424,12 @@ static void mac_task_recv(mac_t mac)
     while (1) {
         while (!xQueueReceive(rxq, &recv, portMAX_DELAY));
 
+        /*mac_trace_verbose(
+                "mac/%u: RX %04X->%04X #%04u %03u-%02u-%02u",
+                rdio_id(phy_rdio(mac->phy)), recv.peer->addr, recv.dest,
+                recv.size, recv.seq.num, recv.seq.msg, recv.seq.idx
+        );*/
+
         if (recv.seq.msg) {
 
             if (!recv.peer->part) {
@@ -464,18 +478,13 @@ static void mac_task_recv(mac_t mac)
 static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta)
 {
     mac_pkt_t *pkt = (mac_pkt_t *)data;
-    bool unblock = false;
+    bool unblock = true;
 
     if (size != sizeof(mac_pkt_t) + MIN(pkt->size, MAC_PKT_SIZE_MAX)) {
         mac_trace_debug("(rx) bad length: len=%u != size=%u + base=%u", size, MIN(pkt->size, MAC_PKT_SIZE_MAX), sizeof(mac_pkt_t));
 
     } else {
         if (pkt->dest == 0 || pkt->dest == mac->addr) {
-
-            if (pkt->dest == mac->addr) {
-                unblock = true;
-            }
-
             mac_peer_t *const peer = mac_peer_get(mac, pkt->addr);
 
             if (peer) {
@@ -494,6 +503,8 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
                             mac, pkt->addr, MAC_FLAG_PKT_BLK | MAC_FLAG_PKT_IMM | MAC_FLAG_ACK_RSP,
                             sizeof(seqn), &seqn
                     );
+
+                    unblock = false;
                 }
 
                 if (pkt->dest == mac->addr && (flag & MAC_FLAG_ACK_RSP)) {
@@ -519,6 +530,9 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
 
                     if (!(flag & MAC_FLAG_ACK_RQR) || (peer->seq.num != pkt->seq.num)) {
                         peer->seq.num = pkt->seq.num;
+
+                        if (unblock && ((flag & PHY_PKT_FLAG_IMMEDIATE) || (pkt->seq.msg && !pkt->seq.end)))
+                            unblock = false;
 
                         mac_recv_data_t recv = {
                                 .meta = meta,
