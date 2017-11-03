@@ -73,9 +73,9 @@
 /* Phillip: Additional configs from FreeRTOS.h */
 #define configUSE_NEWLIB_REENTRANT          0/*1*/
 #define configSUPPORT_STATIC_ALLOCATION     1
-#define portCRITICAL_NESTING_IN_TCB         1
 
-/* Phillip: specific task priorities */
+/* Phillip: specific task stack sizes and priorities */
+
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
 #define TASK_STACK_SIZE_HUGE        (TASK_STACK_SIZE_SMALL * 13)
 #define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 9)
@@ -109,14 +109,15 @@
  * See http://www.freertos.org/a00110.html.
  *----------------------------------------------------------*/
 
-#define configUSE_PREEMPTION 1U
+#define configUSE_PREEMPTION 0U
 #define configUSE_IDLE_HOOK 0U
 #define configUSE_TICK_HOOK 0U
+#define configUSE_TICKLESS_IDLE 0U
 
 #define configCPU_CLOCK_HZ (SystemCoreClock)
 #define configTICK_RATE_HZ ((TickType_t)10000U)
 #define configMAX_PRIORITIES (18U)
-#define configMINIMAL_STACK_SIZE ((unsigned short)/*90U*//*120U*/192U)
+#define configMINIMAL_STACK_SIZE ((unsigned short) 192U)
 
 #if defined(USB_STACK_FREERTOS_HEAP_SIZE) && (USB_STACK_FREERTOS_HEAP_SIZE > 0)
 #define configTOTAL_HEAP_SIZE ((size_t)(USB_STACK_FREERTOS_HEAP_SIZE))
@@ -129,7 +130,7 @@
 #define configIDLE_SHOULD_YIELD 1U
 #define configUSE_MUTEXES 1U
 #define configQUEUE_REGISTRY_SIZE 8U
-#define configCHECK_FOR_STACK_OVERFLOW 2U/*0U*/
+#define configCHECK_FOR_STACK_OVERFLOW 2U
 #define configUSE_RECURSIVE_MUTEXES 1U
 #define configUSE_MALLOC_FAILED_HOOK 0U
 #define configUSE_APPLICATION_TASK_TAG 0U
@@ -141,7 +142,7 @@
 #define configMAX_CO_ROUTINE_PRIORITIES (2U)
 
 /* Software timer definitions. */
-#define configUSE_TIMERS 1U
+#define configUSE_TIMERS 0U
 #define configTIMER_TASK_PRIORITY (configMAX_PRIORITIES - 1U)
 #define configTIMER_QUEUE_LENGTH 10U
 #define configTIMER_TASK_STACK_DEPTH (configMINIMAL_STACK_SIZE * 2U)
@@ -157,13 +158,13 @@ to exclude the API function. */
 #define INCLUDE_vTaskDelay 1U
 #define INCLUDE_xSemaphoreGetMutexHolder 1U
 #define INCLUDE_xEventGroupSetBitFromISR 1U
-#define INCLUDE_xTimerPendFunctionCall 1U
+#define INCLUDE_xTimerPendFunctionCall 0U
 
 /* This demo makes use of one or more example stats formatting functions.  These
 format the raw data provided by the uxTaskGetSystemState() function in to human
 readable ASCII form.  See the notes in the implementation of vTaskList() within
 FreeRTOS/Source/tasks.c for limitations. */
-#define configUSE_STATS_FORMATTING_FUNCTIONS 1U
+#define configUSE_STATS_FORMATTING_FUNCTIONS 0U
 
 /* Run time stats gathering definitions. */
 #ifdef __ICCARM__
