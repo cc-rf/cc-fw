@@ -40,4 +40,4 @@ mac_addr_t mac_addr(mac_t mac);
 bool mac_boss(mac_t mac);
 phy_cell_t mac_cell(mac_t mac);
 
-bool mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 data[]);
+mac_size_t mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 data[], bool wait);

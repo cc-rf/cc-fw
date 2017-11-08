@@ -120,11 +120,6 @@ lp5562_t lp5562_init(u8 addr)
     lp5562_write(lp, LP5562_REG_ENABLE, LP5562_ENABLE_DEFAULT);
     vTaskDelay(pdMS_TO_TICKS(1));
     lp5562_write(lp, LP5562_REG_CONFIG, LP5562_PWM_HF | LP5562_CLK_INT);
-    itm_printf(
-            0, "reg_config = 0x%02X ~ 0x%02X\n",
-            LP5562_DEFAULT_CFG | LP5562_CLK_INT,
-            lp5562_read(lp, LP5562_REG_CONFIG)
-    );
     lp5562_write(lp, LP5562_REG_OP_MODE, LP5562_CMD_DIRECT);
     lp5562_write(lp, LP5562_REG_ENG_SEL, LP5562_ENG_SEL_PWM);
 

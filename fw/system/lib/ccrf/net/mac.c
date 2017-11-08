@@ -30,8 +30,8 @@
 
 #define MAC_NOTIFY_ACK          (1u<<10)
 
-#define MAC_FLAG_PKT_IMM        (PHY_PKT_FLAG_USER_0 >> 1)  // Local
-#define MAC_FLAG_PKT_BLK        (PHY_PKT_FLAG_USER_0 >> 2)  // Local
+#define MAC_FLAG_PKT_IMM        ((u8) (PHY_PKT_FLAG_USER_0 >> 1))  // Local
+#define MAC_FLAG_PKT_BLK        ((u8) (PHY_PKT_FLAG_USER_0 >> 2))  // Local
 #define MAC_FLAG_ACK_REQ        (PHY_PKT_FLAG_USER_0)
 #define MAC_FLAG_ACK_RSP        (PHY_PKT_FLAG_USER_1)
 #define MAC_FLAG_ACK_RQR        (PHY_PKT_FLAG_USER_2)
@@ -131,7 +131,7 @@ struct __packed mac {
 
 static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr);
 
-static bool mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, u8 data[]);
+static mac_size_t mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, u8 data[]);
 static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt);
 
 static void mac_task_send(mac_t mac);
@@ -234,24 +234,24 @@ static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr)
 }
 
 
-bool mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 data[])
+mac_size_t mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 data[], bool wait)
 {
-    // TODO: Add block flag. Also return number of actua packets sent?
+    const u8 flag = wait ? MAC_FLAG_PKT_BLK : (u8) 0;
 
     switch (type) {
         case MAC_SEND_DGRM:
-            return mac_send_base(mac, dest, 0, size, data);
+            return mac_send_base(mac, dest, flag, size, data);
 
         case MAC_SEND_MESG:
             if (!dest) return false;
-            return mac_send_base(mac, dest, MAC_FLAG_ACK_REQ, size, data);
+            return mac_send_base(mac, dest, flag | MAC_FLAG_ACK_REQ, size, data);
 
         case MAC_SEND_TRXN:
             if (!dest) return false;
-            return mac_send_base(mac, dest, MAC_FLAG_ACK_REQ, size, data);
+            return mac_send_base(mac, dest, flag | MAC_FLAG_ACK_REQ, size, data);
 
         case MAC_SEND_STRM:
-            return mac_send_base(mac, dest, MAC_FLAG_PKT_IMM, size, data);
+            return mac_send_base(mac, dest, flag | MAC_FLAG_PKT_IMM, size, data);
 
         default:
             return false;
@@ -259,10 +259,11 @@ bool mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 d
 }
 
 
-static bool mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, u8 data[])
+static mac_size_t mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, u8 data[])
 {
     mac_size_t pkt_size;
     mac_size_t remaining = size;
+    mac_size_t count = 0;
 
     mac_static_pkt_t pkt = {
             .addr = mac->addr,
@@ -298,13 +299,14 @@ static bool mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, 
                 pkt.size, pkt.seq.num, pkt.seq.msg, pkt.seq.idx
         );*/
 
-        if (!mac_send_packet(mac, flag, &pkt)) return false;
+        if (!mac_send_packet(mac, flag, &pkt)) return 0;
 
+        ++count;
         remaining -= pkt_size;
 
     } while (remaining);
 
-    return true;
+    return count;
 }
 
 

@@ -27,6 +27,8 @@
 
 #define RESET_MAGIC         0xD1E00D1E
 
+#define CODE_SEND_FLAG_WAIT 1
+
 
 typedef struct __packed {
     u32 version;
@@ -199,7 +201,7 @@ void cloudchaser_main(void)
 
         while (1) {
             const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
-            mac_send(macs[0], MAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send);
+            mac_send(macs[0], MAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send, false);
             vTaskDelay(pdMS_TO_TICKS(23));
         }
     }
@@ -234,7 +236,7 @@ static void uart_relay_run(void)
             uart_pkt->code = frame->code;
             memcpy(uart_pkt->data, frame->data, frame_size);
 
-            if (mac_send(macs[0], MAC_SEND_STRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt)) {
+            if (mac_send(macs[0], MAC_SEND_STRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
                 ++status.send_count;
                 status.send_bytes += uart_pkt_size;
                 led_toggle(LED_RGB0_BLUE);
@@ -293,7 +295,7 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
         }*/
 
         if (!mac_boss(mac)) {
-            mac_send(mac, MAC_SEND_STRM, 0x0000, size, data);
+            mac_send(mac, MAC_SEND_STRM, 0x0000, size, data, false);
             return;
         }
 
@@ -392,12 +394,15 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
 
     for (u8 i = 0; i < CLOUDCHASER_RDIO_COUNT; ++i) {
         if (!code_send->node || code_send->node == mac_addr(macs[i])) {
-            const bool result = mac_send(
+            const bool wait = (code_send->flag & CODE_SEND_FLAG_WAIT) != 0;
+
+            const mac_size_t result = mac_send(
                     macs[i],
                     (mac_send_t) code_send->type,
                     code_send->dest,
                     code_send->size,
-                    code_send->data
+                    code_send->data,
+                    wait
             );
 
             if (result) {
@@ -408,12 +413,14 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
                 //LED_D_TOGGLE();
             }
 
-            /*code_send_stat_t code_send_stat = {
-                    .node =  mac_addr(macs[i]),
-                    .stat = (u32) result
-            };
+            if (wait) {
+                code_send_stat_t code_send_stat = {
+                        .node =  mac_addr(macs[i]),
+                        .stat = (u32) result
+                };
 
-            write_code_send_stat(port, &code_send_stat);*/
+                write_code_send_stat(port, &code_send_stat);
+            }
 
             break;
         }
@@ -429,7 +436,7 @@ static void handle_code_reset(u8 port, size_t size, u8 *data)
 
     if (code_reset->magic == RESET_MAGIC) {
         printf("<reset>\r\n");
-        vTaskDelay(pdMS_TO_TICKS(2317));
+        vTaskDelay(pdMS_TO_TICKS(500));
         NVIC_SystemReset();
     } else {
         printf("reset: malformed magic code\r\n");
@@ -470,7 +477,7 @@ static void handle_code_uart(size_t size, u8 *data)
 
         //itm_printf(0, "uart: rf relay %lu byte(s), packet size = %lu\r\n", size - sizeof(code_uart_t), uart_pkt_size);
 
-        if (mac_send(macs[0], MAC_SEND_DGRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt)) {
+        if (mac_send(macs[0], MAC_SEND_DGRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
             ++status.send_count;
             status.send_bytes += uart_pkt_size;
             led_toggle(LED_RGB0_BLUE);
