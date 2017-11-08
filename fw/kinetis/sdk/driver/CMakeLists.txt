@@ -1,41 +1,155 @@
 set(NAME kinetis_sdk_driver)
 
+set(KINETIS_SDK_DRIVERS)
+
+list(APPEND KINETIS_SDK_DRIVERS fsl_common.c)
+
+if(KINETIS_SDK_DRIVER_ADC16)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_adc16.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_CMP)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_cmp.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_CRC)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_crc.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_DAC)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_dac.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_DMAMUX)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_dmamux.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_DSPI_EDMA)
+    set(KINETIS_SDK_DRIVER_DSPI TRUE)
+    set(KINETIS_SDK_DRIVER_EDMA TRUE)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_dspi_edma.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_DSPI)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_dspi.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_I2C_EDMA)
+    set(KINETIS_SDK_DRIVER_I2C TRUE)
+    set(KINETIS_SDK_DRIVER_EDMA TRUE)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_i2c_edma.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_I2C)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_i2c.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_LPUART_EDMA)
+    set(KINETIS_SDK_DRIVER_LPUART TRUE)
+    set(KINETIS_SDK_DRIVER_EDMA TRUE)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_lpuart_edma.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_LPUART)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_lpuart.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_SAI_EDMA)
+    set(KINETIS_SDK_DRIVER_SAI TRUE)
+    set(KINETIS_SDK_DRIVER_EDMA TRUE)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_sai_edma.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_SAI)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_sai.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_UART_EDMA)
+    set(KINETIS_SDK_DRIVER_UART TRUE)
+    set(KINETIS_SDK_DRIVER_EDMA TRUE)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_uart_edma.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_UART)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_uart.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_EDMA)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_edma.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_EWM)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_ewm.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_FLASH)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_flash.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_FLEXBUS)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_flexbus.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_FTM)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_ftm.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_GPIO)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_gpio.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_LLWU)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_llwu.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_LPTMR)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_lptmr.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_PDB)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_pdb.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_PIT)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_pit.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_PMC)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_pmc.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_RCM)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_rcm.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_RNGA)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_rnga.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_RTC)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_rtc.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_SIM)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_sim.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_SMC)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_smc.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_VREF)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_vref.c)
+endif()
+
+if(KINETIS_SDK_DRIVER_WDOG)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_wdog.c)
+endif()
+
+
 add_library(
         ${NAME} STATIC EXCLUDE_FROM_ALL
-        fsl_adc16.c
-        fsl_cmp.c
-        fsl_common.c
-        fsl_crc.c
-        fsl_dac.c
-        fsl_dmamux.c
-        fsl_dspi.c
-        fsl_dspi_edma.c
-        fsl_edma.c
-        fsl_ewm.c
-        fsl_flash.c
-        fsl_flexbus.c
-        fsl_ftm.c
-        fsl_gpio.c
-        fsl_i2c.c
-        fsl_i2c_edma.c
-        fsl_llwu.c
-        fsl_lptmr.c
-        fsl_lpuart.c
-        fsl_lpuart_edma.c
-        fsl_pdb.c
-        fsl_pit.c
-        fsl_pmc.c
-        fsl_rcm.c
-        fsl_rnga.c
-        fsl_rtc.c
-        fsl_sai.c
-        fsl_sai_edma.c
-        fsl_sim.c
-        fsl_smc.c
-        fsl_uart.c
-        fsl_uart_edma.c
-        fsl_vref.c
-        fsl_wdog.c
+        ${KINETIS_SDK_DRIVERS}
 )
 
 target_include_directories(
