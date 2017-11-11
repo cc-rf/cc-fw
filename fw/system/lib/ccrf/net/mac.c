@@ -191,21 +191,15 @@ mac_t mac_init(mac_config_t *config)
 }
 
 
+phy_t mac_phy(mac_t mac)
+{
+    return mac->phy;
+}
+
+
 mac_addr_t mac_addr(mac_t mac)
 {
     return mac->addr;
-}
-
-
-bool mac_boss(mac_t mac)
-{
-    return phy_boss(mac->phy);
-}
-
-
-phy_cell_t mac_cell(mac_t mac)
-{
-    return phy_cell(mac->phy);
 }
 
 

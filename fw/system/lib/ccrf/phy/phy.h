@@ -16,8 +16,6 @@
 #define PHY_PKT_FLAG_USER_5     ((u8) 0x80)
 
 
-typedef struct phy *phy_t;
-
 typedef bool (* phy_recv_t)(void *param, u8 flag, u8 size, u8 data[], pkt_meta_t meta);
 
 typedef struct __packed {
@@ -34,8 +32,6 @@ typedef struct __packed {
 phy_t phy_init(phy_config_t *config);
 
 rdio_t phy_rdio(phy_t phy);
-bool phy_boss(phy_t phy);
-phy_cell_t phy_cell(phy_t phy);
 
 u32 phy_delay(u8 size);
 

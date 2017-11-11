@@ -470,6 +470,16 @@ void usb_write(u8 port, u8 *buf, size_t len)
     }
 }
 
+void usb_write_raw(u8 port, u8 *buf, size_t len)
+{
+    if (!usb_attached(port) || !buf) return;
+
+    u8 *buf_copy = pvPortMalloc(len); assert(buf_copy);
+    memcpy(buf_copy, buf, len);
+    usb_write_direct(port, buf_copy, len);
+}
+
+
 void usb_write_direct(u8 port, u8 *buf, size_t len)
 {
     if (!usb_attached(port) || !buf) {

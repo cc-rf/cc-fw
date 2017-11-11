@@ -362,7 +362,7 @@ size_t uart_readline(uart_t const uart, char **buf)
 
         if (len >= len_max) {
             len_max *= 2;
-            *buf = realloc(*buf, len_max);
+            *buf = realloc(*buf, len_max); // TODO: Fix this (not currently used)
             assert(*buf);
         }
     };

@@ -1,5 +1,6 @@
 #include "cloudchaser.h"
 #include "led.h"
+#include "console.h"
 
 #include <board.h>
 #include <virtual_com.h>
@@ -191,6 +192,12 @@ void cloudchaser_main(void)
 
     #endif
 
+    #if USB_CDC_INSTANCE_COUNT > 1
+
+        console_init(macs[0]);
+
+    #endif
+
     if (uflag1_set()) {
         uart_relay_run();
     }
@@ -294,7 +301,7 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
             LED_C_OFF();
         }*/
 
-        if (!mac_boss(mac)) {
+        if (!phy_boss(mac_phy(mac))) {
             mac_send(mac, MAC_SEND_STRM, 0x0000, size, data, false);
             return;
         }
@@ -337,14 +344,34 @@ void usb_recv(u8 port, size_t size, u8 *data)
     memcpy(&usb_in_data[port][usb_in_size[port]], data, size);
     usb_in_size[port] += size;
 
-    serf_t *frame = pvPortMalloc(sizeof(serf_t) + usb_in_size[port] + 1); assert(frame);
-    size_t frame_size = serf_decode(usb_in_data[port], &usb_in_size[port], frame, usb_in_size[port] + 1);
+    if (port == 0) {
+        serf_t *frame = pvPortMalloc(sizeof(serf_t) + usb_in_size[port] + 1);
+        assert(frame);
+        size_t frame_size = serf_decode(usb_in_data[port], &usb_in_size[port], frame, usb_in_size[port] + 1);
 
-    if (frame_size) {
-        frame_recv(port, frame, frame_size);
+        if (frame_size) {
+            frame_recv(port, frame, frame_size);
+        }
+
+        vPortFree(frame);
+
+    } else if (port == 1) {
+        const static char nl[] = "\r\n\0";
+
+        for (size_t i = usb_in_size[port] - size; i < usb_in_size[port]; ++i) {
+            if (usb_in_data[port][i] == '\r' || usb_in_data[port][i] == '\n') {
+                usb_write_raw(port, (u8 *) nl, 2);
+                usb_in_data[port][i] = '\0';
+                console_input((char *) usb_in_data[port]);
+                usb_in_size[port] -= i + 1;
+
+                if (usb_in_size[port])
+                    memcpy(usb_in_data[port], &usb_in_data[port][i+1], usb_in_size[port]);
+            } else {
+                usb_write_raw(port, &usb_in_data[port][i], 1);
+            }
+        }
     }
-
-    vPortFree(frame);
 }
 
 

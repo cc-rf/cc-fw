@@ -493,6 +493,10 @@
 #define CC1200_MODCFG_DEV_E_DEV_E_M                     __CC1200_FLGDEF(0x07)
 #define CC1200_MODCFG_DEV_E_DEV_E_S                     __CC1200_FLGDEF(0x00)
 
+/* CC1200_MDMCFG2 bits
+ */
+#define CC1200_MDMCFG2_CFM_DATA_EN                      __CC1200_FLGDEF(0x01)
+
 /* CC1200_SYMBOL_RATE2 bits
  */
 #define CC1200_SYMBOL_RATE2_SRATE_E_M   __CC1200_FLGDEF(0xF0)

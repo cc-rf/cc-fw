@@ -223,6 +223,69 @@ rdio_status_t rdio_mode_rx(rdio_t rdio)
     return status;
 }
 
+rdio_status_t rdio_mode_tx(rdio_t rdio)
+{
+    rdio_status_t status;/* = RDIO_STATUS_TX;
+
+    switch (rdio_state(rdio)) {
+        case RDIO_STATE_SETTLE:
+            goto _full_check;
+            break;
+
+        case RDIO_STATE_RX:
+            break;
+
+        case RDIO_STATE_IDLE:
+            break;
+
+        default:
+        case RDIO_STATE_TX:
+            goto _done;
+    }
+
+    status = rdio_strobe_tx(rdio);
+
+    goto _done;
+
+    _full_check:*/
+
+    do {
+        status = rdio_strobe_noop(rdio) & RDIO_STATUS_MASK;
+
+    } while (status == RDIO_STATUS_SETTLING || status == RDIO_STATUS_CALIBRATE);
+
+    switch (status) {
+        case RDIO_STATUS_TX:
+            goto _done;
+
+        case RDIO_STATUS_RX:
+            break;
+
+        case RDIO_STATUS_FSTXON:
+            break;
+
+        case RDIO_STATUS_IDLE:
+        default:
+            break;
+
+        case RDIO_STATUS_RXFIFO_ERROR:
+            //rdio_strobe_idle(rdio);
+            rdio_strobe_rxfl(rdio);
+            break;
+
+        case RDIO_STATUS_TXFIFO_ERROR:
+            //rdio_strobe_idle(rdio);
+            rdio_strobe_txfl(rdio);
+            break;
+    }
+
+    status = rdio_strobe_tx(rdio);
+
+    _done:
+
+    return status;
+}
+
 rdio_status_t rdio_cca_begin(rdio_t rdio, rdio_ccac_t *ccac)
 {
     rdio_status_t st;
@@ -262,6 +325,15 @@ rdio_status_t rdio_rssi_read(rdio_t rdio, s16 *rssi)
     *rssi = rdio_util_get_rssi(rdio);
 
     return st;
+}
+
+rdio_status_t rdio_cw_set(rdio_t rdio, bool cw)
+{
+    if (cw) {
+        return rdio_reg_update(rdio, CC1200_MDMCFG2, CC1200_MDMCFG2_CFM_DATA_EN, CC1200_MDMCFG2_CFM_DATA_EN, NULL);
+    } else {
+        return rdio_reg_update(rdio, CC1200_MDMCFG2, CC1200_MDMCFG2_CFM_DATA_EN, 0, NULL);
+    }
 }
 
 bool rdio_reg_config(rdio_t rdio, const rdio_reg_config_t config[], size_t size)

@@ -71,9 +71,11 @@ rdio_state_t rdio_state_read(rdio_t rdio);
 
 rdio_status_t rdio_mode_idle(rdio_t rdio);
 rdio_status_t rdio_mode_rx(rdio_t rdio);
+rdio_status_t rdio_mode_tx(rdio_t rdio);
 rdio_status_t rdio_cca_begin(rdio_t rdio, rdio_ccac_t *ccac);
 rdio_status_t rdio_cca_end(rdio_t rdio, rdio_ccac_t ccac);
 rdio_status_t rdio_rssi_read(rdio_t rdio, s16 *rssi);
+rdio_status_t rdio_cw_set(rdio_t rdio, bool cw);
 
 bool rdio_reg_config(rdio_t rdio, const rdio_reg_config_t config[], size_t size);
 

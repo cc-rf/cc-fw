@@ -5,6 +5,7 @@
 #include "sys/timer.h"
 #include "sys/clock.h"
 #include "sys/local.h"
+#include "chan.h"
 
 #include <FreeRTOS.h>
 #include <task.h>
@@ -21,7 +22,7 @@
 
 #define FREQ_BASE       902000000u
 #define FREQ_BW         1001000u
-#define CHAN_COUNT      25u
+#define CHAN_COUNT      PHY_CHAN_COUNT
 #define CHAN_TIME       40000u
 
 #define PHY_RF_FRAME_SIZE_MAX   (PHY_FRAME_SIZE_MAX + sizeof(phy_pkt_hdr_t) - 1)
@@ -35,10 +36,11 @@
 #define NOTIFY_MASK_ISR         (1<<1)
 #define NOTIFY_MASK_TX          (1<<2)
 #define NOTIFY_MASK_HOP         (1<<3)
-#define NOTIFY_MASK_ALL         (NOTIFY_MASK_ISR | NOTIFY_MASK_TX | NOTIFY_MASK_HOP)
+#define NOTIFY_MASK_DIAG        (1<<4)
+#define NOTIFY_MASK_ALL         (NOTIFY_MASK_ISR | NOTIFY_MASK_TX | NOTIFY_MASK_HOP | NOTIFY_MASK_DIAG)
 
-#define CALLER_NOTIFY_TX_DONE   (1<<4)
-#define CALLER_NOTIFY_TX_FAIL   (1<<5)
+#define CALLER_NOTIFY_TX_DONE   (1<<5)
+#define CALLER_NOTIFY_TX_FAIL   (1<<6)
 #define CALLER_NOTIFY_TX_MASK   (CALLER_NOTIFY_TX_DONE | CALLER_NOTIFY_TX_FAIL)
 
 #define PHY_SYNC_MAGIC          ((u8) 0x69)
@@ -92,8 +94,17 @@ struct __packed phy {
         chan_group_t group;
         chan_info_t channel[CHAN_COUNT];
         chan_id_t hop_table[CHAN_COUNT];
+        volatile chan_id_t cur;
 
     } chan;
+
+    struct __packed {
+        bool boss;
+        bool nosync;
+        chan_id_t chan;
+        bool cw;
+
+    } diag;
 
     ccrf_timer_t hop_timer;
     volatile phy_static_pkt_t pkt_ack;
@@ -114,8 +125,9 @@ static void phy_task(phy_t const restrict phy);
 static bool phy_recv(phy_t phy, bool flush);
 static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi);
 
-static inline void phy_chan_next(phy_t phy, chan_id_t *chan);
+static inline void phy_chan_next(phy_t phy);
 static inline void phy_chan_set(phy_t phy, chan_id_t chan);
+static inline chan_id_t phy_chan_set_base(phy_t phy, chan_id_t chan);
 
 static void phy_rdio_isr(phy_t phy);
 static void hop_timer_handler(ccrf_timer_t timer, phy_t phy);
@@ -137,6 +149,11 @@ phy_t phy_init(phy_config_t *config)
     phy->sync = config->sync;
     phy->recv = config->recv;
     phy->recv_param = config->recv_param;
+
+    phy->diag.boss = phy->boss;
+    phy->diag.nosync = false;
+    phy->diag.chan = CHAN_ID_INVALID;
+    phy->diag.cw = false;
 
     rdio_config_t rdio_config = {
             .id = config->rdid,
@@ -163,6 +180,8 @@ phy_t phy_init(phy_config_t *config)
             },
             .size = CHAN_COUNT
     };
+
+    phy->chan.cur = CHAN_ID_INVALID;
 
     chan_group_init(&phy->chan.group, phy->chan.hop_table);
     chan_table_reorder(&phy->chan.group, phy->cell, phy->chan.hop_table);
@@ -199,9 +218,34 @@ phy_t phy_init(phy_config_t *config)
 }
 
 
+chan_id_t phy_chan(phy_t phy, u32 *freq)
+{
+    const chan_id_t chan = phy->chan.hop_table[phy->chan.cur];
+    if (freq) *freq = phy->chan.channel[chan].freq;
+    return chan;
+}
+
+
+u32 phy_freq(phy_t phy, chan_id_t chan)
+{
+    return phy->chan.channel[chan].freq;
+}
+
+
+void phy_hops(phy_t phy, chan_id_t chan[])
+{
+    memcpy(chan, phy->chan.hop_table, sizeof(chan_id_t) * PHY_CHAN_COUNT);
+}
+
+
 rdio_t phy_rdio(phy_t phy)
 {
     return phy->rdio;
+}
+
+phy_cell_t phy_cell(phy_t phy)
+{
+    return phy->cell;
 }
 
 bool phy_boss(phy_t phy)
@@ -209,9 +253,48 @@ bool phy_boss(phy_t phy)
     return phy->boss;
 }
 
-phy_cell_t phy_cell(phy_t phy)
+bool phy_sync(phy_t phy)
 {
-    return phy->cell;
+    return phy->boss || phy->sync_time != 0;
+}
+
+bool phy_diag_boss(phy_t phy, bool boss, bool nosync)
+{
+    if (boss != phy->diag.boss) {
+        phy->diag.boss = boss;
+        phy->diag.nosync = nosync;
+        xTaskNotify(phy->task, NOTIFY_MASK_DIAG, eSetBits);
+        return true;
+    }
+
+    return false;
+}
+
+
+bool phy_diag_chan(phy_t phy, chan_id_t chan, u32 *freq)
+{
+    if (freq) *freq = phy->chan.channel[chan].freq;
+
+    if (chan != phy->diag.chan || phy->diag.boss) {
+        phy->diag.boss = false;
+        phy->diag.chan = chan;
+        xTaskNotify(phy->task, NOTIFY_MASK_DIAG, eSetBits);
+        return true;
+    }
+
+    return false;
+}
+
+
+bool phy_diag_cw(phy_t phy, bool cw)
+{
+    if (cw != phy->diag.cw) {
+        phy->diag.cw = cw;
+        xTaskNotify(phy->task, NOTIFY_MASK_DIAG, eSetBits);
+        return true;
+    }
+
+    return false;
 }
 
 
@@ -293,8 +376,6 @@ static void phy_task(phy_t const restrict phy)
     TickType_t loop_wait = portMAX_DELAY;
     u32 notify;
 
-    volatile chan_id_t chan_cur = (chan_id_t) -1;
-
     rdio_ccac_t ccac = 0;
 
     phy_sync_pkt_t pkt_sync = {
@@ -313,7 +394,7 @@ static void phy_task(phy_t const restrict phy)
     if (phy->boss) {
         xTaskNotify(xTaskGetCurrentTaskHandle(), NOTIFY_MASK_HOP, eSetBits);
     } else {
-        phy_chan_set(phy, chan_cur = 0);
+        phy_chan_set(phy, 0);
         rdio_strobe_rx(phy->rdio);
     }
 
@@ -412,7 +493,6 @@ static void phy_task(phy_t const restrict phy)
                             } else {
                                 rdio_cca_end(phy->rdio, ccac);
                                 tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 5));
-                                // NOTE: Could jump to _loop_end from here if NOTIFY_MASK_HOP not set.
                             }
 
                             pkt = NULL;
@@ -425,18 +505,41 @@ static void phy_task(phy_t const restrict phy)
 
                     default:
                     case CC1200_MARC_STATUS1_NO_FAILURE:
-                        if (!(notify & ~NOTIFY_MASK_ISR)) goto _loop_end; // usually the result of a SIDLE strobe
+                        // Can be the result of a SIDLE strobe.
+                        if (!(notify & ~NOTIFY_MASK_ISR)) goto _loop_end;
                         break;
                 }
+            }
+
+            if (notify & NOTIFY_MASK_DIAG) {
+
+                if (phy->boss != phy->diag.boss) {
+                    phy->sync_time = 0;
+
+                    if ((phy->boss = phy->diag.boss)) {
+                        phy->chan.cur = CHAN_ID_INVALID;
+                        notify |= NOTIFY_MASK_HOP;
+                    } else {
+                        ccrf_timer_stop(phy->hop_timer);
+                    }
+                }
+
+                if (!phy->boss && phy->diag.chan != (chan_id_t) CHAN_ID_INVALID) {
+                    // Repeated calls get ingored within these functions.
+                    phy_chan_set_base(phy, phy->diag.chan);
+                }
+
+                rdio_cw_set(phy->rdio, phy->diag.cw);
             }
 
             if ((notify & NOTIFY_MASK_HOP) && (phy->boss || phy->sync_time)) {
                 ts = ccrf_clock();
                 tx_next = 0;
 
-                if (!phy->boss && !chan_cur) {
+                if (!phy->boss && !phy->chan.cur) {
                     if (((ts - phy->sync_time) >= 5*(CHAN_TIME * CHAN_COUNT))) {
                         phy_trace_debug("phy/%u: sync loss: last=%lu now=%lu", rdio_id(phy->rdio), CCRF_CLOCK_MSEC(phy->sync_time), CCRF_CLOCK_MSEC(ts));
+                        // TODO: Stop timer?
                         phy->sync_time = 0;
                         goto _inner_loop;
 
@@ -445,18 +548,18 @@ static void phy_task(phy_t const restrict phy)
                     }
                 }
 
-                phy_chan_next(phy, (chan_id_t *) &chan_cur);
+                phy_chan_next(phy);
 
-                if (phy->boss && !chan_cur) {
+                if (phy->boss && !phy->chan.cur) {
                     if (!phy->sync_time) {
                         phy->sync_time = ts;
                         ccrf_timer_start(phy->hop_timer);
                     }
 
-                    sync_needed = true;
+                    sync_needed = !phy->diag.nosync;
                 }
 
-                if (phy->sync) phy->sync(chan_cur);
+                if (phy->sync) phy->sync(phy->chan.cur);
 
                 if (pkt) {
                     const u8 tx_bytes = rdio_reg_get(phy->rdio, CC1200_NUM_TXBYTES, NULL);
@@ -531,7 +634,7 @@ static void phy_task(phy_t const restrict phy)
                 remaining = ccrf_timer_remaining(phy->hop_timer);
                 chan_elapsed = CHAN_TIME - remaining;
 
-                u32 lead_time = 200 + ((!phy->boss && !chan_cur) ? 500 + tx_times[pkt_sync.hdr.size] : 0);
+                u32 lead_time = 200 + ((!phy->boss && !phy->chan.cur) ? 500 + tx_times[pkt_sync.hdr.size] : 0);
 
                 if (chan_elapsed < lead_time) {
                     tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(lead_time);
@@ -539,7 +642,7 @@ static void phy_task(phy_t const restrict phy)
                     goto _restart_rx;
                 }
 
-                if (remaining < (750 + tx_times[pkt->size])) {
+                if (remaining < (750 + tx_times[pkt->size])) { // TODO: Give more time for CCA-TX? (non-imm)
                     tx_next = 0;
                     pkt = NULL;
                     goto _restart_rx;
@@ -578,7 +681,11 @@ static void phy_task(phy_t const restrict phy)
 
         _restart_rx:
 
-        rdio_mode_rx(phy->rdio);
+        if (!phy->diag.cw) {
+            rdio_mode_rx(phy->rdio);
+        } else {
+            rdio_mode_tx(phy->rdio);
+        }
 
         _loop_end:;
 
@@ -683,22 +790,35 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
 }
 
 
-static inline void phy_chan_next(phy_t phy, chan_id_t *chan)
+static inline void phy_chan_next(phy_t phy)
 {
-    if (++*chan >= CHAN_COUNT) *chan = 0;
-    phy_chan_set(phy, *chan);
+    // NOTE: Incrementing from CHAN_ID_INVALID wraps to zero.
+    chan_id_t next = ++phy->chan.cur;
+    if (next >= CHAN_COUNT) next = 0;
+    phy_chan_set(phy, next);
 }
 
 
 static inline void phy_chan_set(phy_t phy, chan_id_t chan)
 {
-    static volatile chan_id_t chan_prev = (chan_id_t) -1;
-
-    if (chan != chan_prev) {
-        chan_prev = chan;
+    if (chan != phy->chan.cur) {
+        phy->chan.cur = chan;
         rdio_mode_idle(phy->rdio);
         chan_select(&phy->chan.group, phy->chan.hop_table[chan]);
     }
+}
+
+
+static inline chan_id_t phy_chan_set_base(phy_t phy, chan_id_t chan)
+{
+    for (chan_id_t c = 0; c < phy->chan.group.size; ++c) {
+        if (phy->chan.hop_table[c] == chan) {
+            phy_chan_set(phy, c);
+            return phy->chan.hop_table[c];
+        }
+    }
+
+    return CHAN_ID_INVALID;
 }
 
 
