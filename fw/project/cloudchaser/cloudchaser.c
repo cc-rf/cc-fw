@@ -346,8 +346,40 @@ void usb_recv(u8 port, size_t size, u8 *data)
 
     } else if (port == 1) {
         const static char nl[] = "\r\n\0";
+        static volatile u8 esc = 0;
+        static volatile u8 escb = 0;
+        size_t scan_size = usb_in_size[port] - size;
 
-        for (size_t i = usb_in_size[port] - size; i < usb_in_size[port]; ++i) {
+        for (size_t i = scan_size; i < usb_in_size[port]; ++i) {
+            if (usb_in_data[port][i] == '\x1B' || usb_in_data[port][i] == '\x08' || usb_in_data[port][i] == '\x7E') {
+                if (usb_in_data[port][i] == '\x1B') esc = 1;
+                --usb_in_size[port];
+                if (i >= usb_in_size[port]) continue;
+                memcpy(&usb_in_data[port][i], &usb_in_data[port][i+1], usb_in_size[port] - i);
+                --i;
+                continue;
+            }
+
+            if (esc && (usb_in_data[port][i] == '[')) {
+                ++escb;
+                --usb_in_size[port];
+                if (i >= usb_in_size[port]) continue;
+                memcpy(&usb_in_data[port][i], &usb_in_data[port][i+1], usb_in_size[port] - i);
+                --i;
+                continue;
+            } else {
+                if (esc && !escb) esc = 0;
+            }
+
+            if (escb && esc) {
+                if (!--escb) esc = 0;
+                --usb_in_size[port];
+                if (i >= usb_in_size[port]) continue;
+                memcpy(&usb_in_data[port][i], &usb_in_data[port][i+1], usb_in_size[port] - i);
+                --i;
+                continue;
+            }
+
             if (usb_in_data[port][i] == '\r' || usb_in_data[port][i] == '\n') {
                 usb_write_raw(port, (u8 *) nl, 2);
                 usb_in_data[port][i] = '\0';
