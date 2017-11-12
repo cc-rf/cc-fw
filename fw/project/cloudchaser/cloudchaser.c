@@ -36,10 +36,7 @@ typedef struct __packed {
     u64 serial;
     u32 uptime;
     u16 node;
-    u32 recv_count;
-    u32 recv_bytes;
-    u32 send_count;
-    u32 send_bytes;
+    mac_stat_t stat;
 
     // TODO: Add error stats, maybe fragment stats, and heap stats
 
@@ -130,10 +127,7 @@ void cloudchaser_main(void)
             .serial = uid(),
             .uptime = 0,
             .node = uid_short(),
-            .recv_count = 0,
-            .recv_bytes = 0,
-            .send_count = 0,
-            .send_bytes = 0
+            .stat = {{0}}
     };
 
     mac_config_t mac_config = {
@@ -244,8 +238,6 @@ static void uart_relay_run(void)
             memcpy(uart_pkt->data, frame->data, frame_size);
 
             if (mac_send(macs[0], MAC_SEND_STRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
-                ++status.send_count;
-                status.send_bytes += uart_pkt_size;
                 led_toggle(LED_RGB0_BLUE);
                 led_off(LED_RGB0_RED);
             } else {
@@ -260,9 +252,6 @@ static void uart_relay_run(void)
 
 static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta)
 {
-    ++status.recv_count;
-    status.recv_bytes += size;
-
     //LED_A_TOGGLE();
     //LED_B_TOGGLE();
 
@@ -433,9 +422,6 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
             );
 
             if (result) {
-                ++status.send_count;
-                status.send_bytes += code_send->size;
-
                 //LED_C_TOGGLE();
                 //LED_D_TOGGLE();
             }
@@ -477,6 +463,7 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
     (void)data;
 
     status.uptime = SCLK_MSEC(sclk_time());
+    mac_stat(macs[0], &status.stat);
 
     write_code_status(port, &status);
 }
@@ -505,8 +492,6 @@ static void handle_code_uart(size_t size, u8 *data)
         //itm_printf(0, "uart: rf relay %lu byte(s), packet size = %lu\r\n", size - sizeof(code_uart_t), uart_pkt_size);
 
         if (mac_send(macs[0], MAC_SEND_DGRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
-            ++status.send_count;
-            status.send_bytes += uart_pkt_size;
             led_toggle(LED_RGB0_BLUE);
             led_off(LED_RGB0_RED);
         } else {

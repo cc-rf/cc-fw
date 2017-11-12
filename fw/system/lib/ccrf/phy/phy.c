@@ -11,6 +11,7 @@
 #include <task.h>
 #include <queue.h>
 #include <assert.h>
+#include <ccrf/phy.h>
 
 
 #define phy_trace_info      ccrf_trace_info
@@ -117,6 +118,8 @@ struct __packed phy {
     QueueHandle_t txq;
     StaticQueue_t txq_static;
     phy_send_queue_t txq_buf[PHY_TXQ_LEN];
+
+    phy_stat_t stat;
 };
 
 
@@ -170,7 +173,7 @@ phy_t phy_init(phy_config_t *config)
     rdio_reg_set(phy->rdio, CC1200_DEV_ADDR, phy->cell);
 
     ccrf_amp_init(phy->rdio);
-    ccrf_amp_ctrl(phy->rdio, CCRF_AMP_HGM, true);
+    ccrf_amp_mode_hgm(phy->rdio, true);
 
     phy->chan.group = (chan_group_t) {
             .rdio = phy->rdio,
@@ -218,6 +221,12 @@ phy_t phy_init(phy_config_t *config)
 }
 
 
+void phy_stat(phy_t phy, phy_stat_t *stat)
+{
+    memcpy(stat, &phy->stat, sizeof(phy->stat));
+}
+
+
 chan_id_t phy_chan(phy_t phy, u32 *freq)
 {
     const chan_id_t chan = phy->chan.hop_table[phy->chan.cur];
@@ -258,6 +267,18 @@ bool phy_sync(phy_t phy)
     return phy->boss || phy->sync_time != 0;
 }
 
+bool phy_hgm(phy_t phy)
+{
+    return ccrf_amp_stat(phy->rdio, CCRF_AMP_HGM);
+}
+
+u8 phy_pwr(phy_t phy)
+{
+    u8 pwr = rdio_reg_get(phy->rdio, CC1200_PA_CFG1, NULL) & CC1200_PA_CFG1_PA_POWER_RAMP_M;
+    if (pwr >= 3) pwr -= 3;
+    return pwr;
+}
+
 bool phy_diag_boss(phy_t phy, bool boss, bool nosync)
 {
     if (boss != phy->diag.boss) {
@@ -291,6 +312,33 @@ bool phy_diag_cw(phy_t phy, bool cw)
     if (cw != phy->diag.cw) {
         phy->diag.cw = cw;
         xTaskNotify(phy->task, NOTIFY_MASK_DIAG, eSetBits);
+        return true;
+    }
+
+    return false;
+}
+
+
+bool phy_diag_pwr(phy_t phy, u8 pwr)
+{
+    assert(pwr <= PHY_PWR_MAX);
+    // This works directly when SPI is polling or locking
+    pwr += 3;
+    u8 prev = pwr;
+
+    rdio_reg_update(
+            phy_rdio(phy), CC1200_PA_CFG1, CC1200_PA_CFG1_PA_POWER_RAMP_M,
+            pwr, &prev
+    );
+
+    return pwr != prev;
+}
+
+
+bool phy_diag_hgm(phy_t phy, bool hgm)
+{
+    if (hgm != phy_hgm(phy)) {
+        ccrf_amp_mode_hgm(phy->rdio, hgm);
         return true;
     }
 
@@ -389,8 +437,6 @@ static void phy_task(phy_t const restrict phy)
     bool sync_needed = false;
     phy->sync_time = 0;
 
-    ///ccrf_amp_mode_rx(phy->rdio, true);
-
     if (phy->boss) {
         xTaskNotify(xTaskGetCurrentTaskHandle(), NOTIFY_MASK_HOP, eSetBits);
     } else {
@@ -448,10 +494,11 @@ static void phy_task(phy_t const restrict phy)
 
                     case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
                     case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
-                    case CC1200_MARC_STATUS1_ADDRESS:
                     case CC1200_MARC_STATUS1_CRC:
+                    case CC1200_MARC_STATUS1_ADDRESS:
                         rdio_mode_idle(phy->rdio);
                         rdio_strobe_rxfl(phy->rdio);
+                        ++phy->stat.rx.errors;
                         if (pkt) goto _cca_fail;
                         break;
 
@@ -467,8 +514,6 @@ static void phy_task(phy_t const restrict phy)
                         rdio_strobe_txfl(phy->rdio);
 
                     case CC1200_MARC_STATUS1_TX_FINISHED:
-                        ///ccrf_amp_mode_tx(phy->rdio, false);
-
                         if (pkt) {
                             if (pkt == (rf_pkt_t *)&sq.pkt && sq.task) {
                                 xTaskNotify(
@@ -478,22 +523,29 @@ static void phy_task(phy_t const restrict phy)
                                 );
                             }
 
-                            if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE) {
-                                if ((void*)pkt == &phy->pkt_ack) {
-                                    phy->pkt_ack.hdr.flag = 0;
-                                    phy->pkt_ack.hdr.size = 0;
-                                }
+                            if ((void*)pkt == &phy->pkt_ack) {
+                                phy->pkt_ack.hdr.flag = 0;
+                                phy->pkt_ack.hdr.size = 0;
+                            }
 
-                                if ((void*)pkt == &pkt_sync) {
-
-                                    phy->sync_time = ccrf_clock();
-                                    ccrf_timer_restart(phy->hop_timer);
-                                }
-
+                            if ((void*)pkt == &pkt_sync) {
+                                phy->sync_time = ccrf_clock();
+                                ccrf_timer_restart(phy->hop_timer);
                             } else {
+                                if (ms == CC1200_MARC_STATUS1_TX_FINISHED) {
+                                    ++phy->stat.tx.count;
+                                    phy->stat.tx.bytes += pkt->size + 1;
+                                } else {
+                                    ++phy->stat.tx.errors;
+                                }
+                            }
+
+                            if (!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)) {
                                 rdio_cca_end(phy->rdio, ccac);
                                 tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 5));
                             }
+
+                            if (phy->diag.cw) rdio_cw_set(phy->rdio, true);
 
                             pkt = NULL;
 
@@ -580,12 +632,14 @@ static void phy_task(phy_t const restrict phy)
 
                     // TODO: Need common post-tx handler
 
-                    ///ccrf_amp_mode_tx(phy->rdio, false);
-
                     if ((void *) pkt == &phy->pkt_ack) {
                         phy->pkt_ack.hdr.flag = 0;
                         phy->pkt_ack.hdr.size = 0;
                     }
+
+                    ++phy->stat.tx.errors;
+
+                    if (phy->diag.cw) rdio_cw_set(phy->rdio, false);
 
                     pkt = NULL;
                 }
@@ -611,8 +665,10 @@ static void phy_task(phy_t const restrict phy)
             pkt_sync.hdr.cell = phy->cell;
 
             rdio_mode_idle(phy->rdio); // TODO: Perhaps always strobing here would be better/more predictable
+
+            if (phy->diag.cw) rdio_cw_set(phy->rdio, false);
+
             rdio_fifo_write(phy->rdio, (u8 *) pkt, pkt->size + (u8)1);
-            ///ccrf_amp_mode_tx(phy->rdio, true);
             rdio_strobe_tx(phy->rdio);
 
         } else if (!pkt && ((volatile u8)phy->pkt_ack.hdr.flag || xQueuePeek(phy->txq, &sq, 0))) {
@@ -662,14 +718,17 @@ static void phy_task(phy_t const restrict phy)
                 rdio_mode_idle(phy->rdio);
             }
 
+            if (phy->diag.cw) {
+                rdio_mode_idle(phy->rdio);
+                rdio_cw_set(phy->rdio, false);
+            }
+
             rdio_fifo_write(phy->rdio, (u8 *) pkt, pkt->size + (u8)1);
 
             if (!imm) {
-                ///ccrf_amp_mode_rx(phy->rdio, true);
                 rdio_cca_begin(phy->rdio, &ccac);
             }
 
-            ///ccrf_amp_mode_tx(phy->rdio, true);
             rdio_strobe_tx(phy->rdio);
             tx_next = 0;
 
@@ -697,7 +756,7 @@ static void phy_task(phy_t const restrict phy)
 
             } else {
                 tx_next = 0;
-                loop_wait = portMAX_DELAY;
+                loop_wait = 0;
             }
 
         } else {
@@ -720,7 +779,6 @@ static bool phy_recv(phy_t phy, bool flush)
 
     rf_pkt_t *spkt;
     u8 *buf = alloca(len);
-    size_t pkt_count = 0;
     bool unblock = false;
 
     rdio_fifo_read(phy->rdio, buf, len);
@@ -735,8 +793,6 @@ static bool phy_recv(phy_t phy, bool flush)
         if (spkt->size > (len - PKT_OVERHEAD)) {
             break;
         }
-
-        ++pkt_count;
 
         if (spkt->size) {
             const s8 rssi = (s8) spkt->data[spkt->size];
@@ -767,6 +823,7 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
     phy_pkt_t *const ppkt = (phy_pkt_t *)pkt;
 
     if (ppkt->hdr.size < sizeof(phy_pkt_hdr_t)) {
+        ++phy->stat.rx.errors;
         return false;
     }
 
@@ -783,6 +840,9 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
 
         return false;
     }
+
+    ++phy->stat.rx.count;
+    phy->stat.rx.bytes += ppkt->hdr.size + 1;
 
     ppkt->hdr.size -= (sizeof(phy_pkt_t) - sizeof(rf_pkt_t));
 

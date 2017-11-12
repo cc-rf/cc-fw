@@ -18,8 +18,8 @@
 
 #define MAC_PEER_MAX            10
 
-#define MAC_PEND_TIME           3
-#define MAC_PEND_RETRY          5
+#define MAC_PEND_TIME           10
+#define MAC_PEND_RETRY          10
 
 #define MAC_TXQ_COUNT           7 // This should eventually reflect the number of threads waiting on messages
 #define MAC_TXQ_SIZE            (MAC_TXQ_COUNT)
@@ -126,6 +126,8 @@ struct __packed mac {
     QueueHandle_t rxq;
     StaticQueue_t rxq_static;
     mac_recv_data_t rxq_buf[MAC_RXQ_SIZE];
+
+    mac_stat_t stat;
 };
 
 
@@ -200,6 +202,12 @@ phy_t mac_phy(mac_t mac)
 mac_addr_t mac_addr(mac_t mac)
 {
     return mac->addr;
+}
+
+
+void mac_stat(mac_t mac, mac_stat_t *stat)
+{
+    memcpy(stat, &mac->stat, sizeof(mac->stat));
 }
 
 
@@ -293,12 +301,20 @@ static mac_size_t mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t 
                 pkt.size, pkt.seq.num, pkt.seq.msg, pkt.seq.idx
         );*/
 
-        if (!mac_send_packet(mac, flag, &pkt)) return 0;
+        if (!mac_send_packet(mac, flag, &pkt)) {
+            ++mac->stat.tx.errors;
+            return 0;
+        }
 
         ++count;
         remaining -= pkt_size;
 
     } while (remaining);
+
+    if (!(flag & MAC_FLAG_ACK_RSP)) {
+        ++mac->stat.tx.count;
+        mac->stat.tx.bytes += size;
+    }
 
     return count;
 }
@@ -311,7 +327,10 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
     const u8 pkt_len = sizeof(mac_pkt_t) + MIN(pkt->size, MAC_PKT_SIZE_MAX);
     const bool imm = flag & (u8)MAC_FLAG_PKT_IMM;
     const bool needs_ack = flag & (u8)MAC_FLAG_ACK_REQ;
-    u8 phy_flag = (u8)(flag & PHY_PKT_FLAG_USER_MASK) | (u8)(imm ? PHY_PKT_FLAG_IMMEDIATE : 0) | (u8)(!imm || needs_ack ? PHY_PKT_FLAG_BLOCK : 0);
+    u8 phy_flag =
+            (u8)(flag & PHY_PKT_FLAG_USER_MASK) |
+            (u8)(imm ? PHY_PKT_FLAG_IMMEDIATE : 0) |
+            (u8)(!imm || needs_ack ? PHY_PKT_FLAG_BLOCK : 0);
 
     u8 retry = MAC_PEND_RETRY;
 
@@ -365,11 +384,10 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
 
     if (needs_ack) {
         // TODO: Test this below
-        const u32 tx_time = MAC_PEND_TIME + phy_delay(2 + (u8)MAC_PKT_OVERHEAD) / 1000;
         //sclk_t elaps = sclk_time();
         u32 notify = 0;
 
-        if (!xTaskNotifyWait(MAC_NOTIFY_ACK, MAC_NOTIFY_ACK, &notify, pdMS_TO_TICKS(tx_time)) || !(notify & MAC_NOTIFY_ACK)) {
+        if (!xTaskNotifyWait(MAC_NOTIFY_ACK, MAC_NOTIFY_ACK, &notify, pdMS_TO_TICKS(MAC_PEND_TIME)) || !(notify & MAC_NOTIFY_ACK)) {
             //elaps = sclk_time() - elaps;
 
             if (mac->pend.flag & MAC_FLAG_ACK_RSP) {
@@ -436,6 +454,7 @@ static void mac_task_recv(mac_t mac)
             if (!recv.peer->part) {
                 if (recv.seq.idx != 0) {
                     mac_trace_warn("(rx) multi-packet stream sync error");
+                    // Do not add to error count because this happens on every chunk.
                     continue;
                 }
 
@@ -448,6 +467,7 @@ static void mac_task_recv(mac_t mac)
                 mac_trace_warn("(rx) multi-packet stream error");
                 vPortFree(recv.peer->part);
                 recv.peer->part = NULL;
+                ++mac->stat.rx.errors;
                 continue;
             } else {
                 if (!++recv.peer->part->seq.idx) recv.peer->part->seq.idx = 1;
@@ -456,6 +476,7 @@ static void mac_task_recv(mac_t mac)
                     mac_trace_warn("(rx) multi-packet stream lost");
                     vPortFree(recv.peer->part);
                     recv.peer->part = NULL;
+                    ++mac->stat.rx.errors;
                     continue;
                 }
 
@@ -466,6 +487,8 @@ static void mac_task_recv(mac_t mac)
             }
 
             if (recv.seq.end) {
+                ++mac->stat.rx.count;
+                mac->stat.rx.bytes += recv.peer->part->size;
                 mac->recv(mac, recv.peer->addr, recv.peer->part->dest, recv.peer->part->size, recv.peer->part->data, recv.meta);
                 vPortFree(recv.peer->part);
                 recv.peer->part = NULL;
@@ -473,6 +496,9 @@ static void mac_task_recv(mac_t mac)
 
             continue;
         }
+
+        ++mac->stat.rx.count;
+        mac->stat.rx.bytes += recv.size;
 
         mac->recv(mac, recv.peer->addr, recv.dest, recv.size, recv.data, recv.meta);
     }
@@ -486,6 +512,7 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
 
     if (size != sizeof(mac_pkt_t) + MIN(pkt->size, MAC_PKT_SIZE_MAX)) {
         mac_trace_debug("(rx) bad length: len=%u != size=%u + base=%u", size, MIN(pkt->size, MAC_PKT_SIZE_MAX), sizeof(mac_pkt_t));
+        ++mac->stat.rx.errors;
 
     } else {
         if (pkt->seq.msg && !pkt->seq.end)
@@ -550,12 +577,12 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
                         if (recv.size) memcpy(recv.data, pkt->data, MIN(recv.size, MAC_PKT_SIZE_MAX));
 
                         if (!xQueueSend(mac->rxq, &recv, 0)) {
+                            ++mac->stat.rx.errors;
                             mac_trace_debug("(rx) queue failed");
                         }
                     }
 
                 }
-
             }
         }
     }

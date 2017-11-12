@@ -30,13 +30,25 @@ typedef struct __packed {
     mac_recv_t recv;
     phy_sync_t sync;
 
-
 } mac_config_t;
 
+typedef struct __packed {
+    u32 count;
+    u32 bytes;
+    u32 errors;
+
+} mac_stat_item_t;
+
+typedef struct __packed {
+    mac_stat_item_t rx;
+    mac_stat_item_t tx;
+
+} mac_stat_t;
 
 mac_t mac_init(mac_config_t *config);
 
 phy_t mac_phy(mac_t mac);
 mac_addr_t mac_addr(mac_t mac);
+void mac_stat(mac_t mac, mac_stat_t *stat);
 
 mac_size_t mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 data[], bool wait);

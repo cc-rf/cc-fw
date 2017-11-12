@@ -72,6 +72,12 @@ rdio_t rdio_init(const rdio_config_t *config)
         ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO3, CCRF_ISR_EDGE_RISING, config->isr, config->isr_param);
     }
 
+    /**
+     * NOTE: Using the GPIOs for status means that we cannot properly switch the CC1190 (amp)
+     * from RX to TX when the radio decides to actually send the packet. Luckily there are
+     * GPIOs that can directly drive the amplifier state and they are required here.
+     */
+
     /*rdio_reg_set(rdio, CC1200_IOCFG2, CC1200_IOCFG_GPIO_CFG_MARC_2PIN_STATUS1);
     ccrf_isr_configure(rdio, CCRF_ISR_SRC_GPIO2, CCRF_ISR_EDGE_BOTH, (ccrf_isr_t) rdio_isr_status_1, rdio);
 

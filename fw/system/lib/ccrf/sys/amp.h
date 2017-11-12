@@ -14,6 +14,11 @@ void ccrf_amp_init(rdio_t rdio);
 void ccrf_amp_ctrl(rdio_t rdio, ccrf_amp_t amp, bool enable);
 bool ccrf_amp_stat(rdio_t rdio, ccrf_amp_t amp);
 
+static inline void ccrf_amp_mode_hgm(rdio_t rdio, bool enable)
+{
+    ccrf_amp_ctrl(rdio, CCRF_AMP_HGM, enable);
+}
+
 static inline void ccrf_amp_mode_rx(rdio_t rdio, bool enable)
 {
     ccrf_amp_ctrl(rdio, CCRF_AMP_LNA, enable);
