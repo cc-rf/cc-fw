@@ -30,7 +30,7 @@
 
 #define CODE_SEND_FLAG_WAIT 1
 
-#define SERF_USB_PORT       1
+#define SERF_USB_PORT       0
 
 typedef struct __packed {
     u32 version;
