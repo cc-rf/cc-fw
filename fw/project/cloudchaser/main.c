@@ -347,7 +347,7 @@ _READ_WRITE_RETURN_TYPE _EXFUN(_write, (int __fd, const void *__buf, size_t __nb
     }*/
 
     itm_write(0, (const u8 *) __buf, __nbyte);
-    usb_write(0, (u8 *) __buf, __nbyte);
+    usb_write(0, (u8 *) __buf, __nbyte); // TODO: Map to SERF_USB_PORT or CONSOLE_USB_PORT or both?
 
     /*if (!is_interrupt) xSemaphoreGive(write_sem);
     else {

@@ -105,7 +105,7 @@
 #define USB_CDC_OBEX_SERVICE_ID_FUNC_DESC (0x19)
 
 // config
-#define USB_CDC_INSTANCE_COUNT 2
+#define USB_CDC_INSTANCE_COUNT 1
 
 
 /* usb descritpor length */

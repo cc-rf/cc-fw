@@ -30,6 +30,7 @@
 
 #define CODE_SEND_FLAG_WAIT 1
 
+#define SERF_USB_PORT       1
 
 typedef struct __packed {
     u32 version;
@@ -186,7 +187,7 @@ void cloudchaser_main(void)
 
     #endif
 
-    #if USB_CDC_INSTANCE_COUNT > 1
+    #if CONSOLE_ENABLED
 
         console_init(macs[0]);
 
@@ -333,7 +334,7 @@ void usb_recv(u8 port, size_t size, u8 *data)
     memcpy(&usb_in_data[port][usb_in_size[port]], data, size);
     usb_in_size[port] += size;
 
-    if (port == 0) {
+    if (port == SERF_USB_PORT) {
         serf_t *frame = pvPortMalloc(sizeof(serf_t) + usb_in_size[port] + 1);
         assert(frame);
         size_t frame_size = serf_decode(usb_in_data[port], &usb_in_size[port], frame, usb_in_size[port] + 1);
@@ -344,7 +345,7 @@ void usb_recv(u8 port, size_t size, u8 *data)
 
         vPortFree(frame);
 
-    } else if (port == 1) {
+    } else if (port == CONSOLE_USB_PORT) {
         const static char nl[] = "\r\n\0";
         static volatile u8 esc = 0;
         static volatile u8 escb = 0;
@@ -552,7 +553,7 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     vPortFree(code_recv);
 
     if (frame) {
-        usb_write_direct(0, frame, size);
+        usb_write_direct(SERF_USB_PORT, frame, size);
     }
 }
 
@@ -587,11 +588,11 @@ static void write_code_uart(code_uart_t *code_uart, size_t size)
         }
     }
 
-    if (usb_attached(0)) {
+    if (usb_attached(SERF_USB_PORT)) {
         frame_size = serf_encode(CODE_ID_UART, &code_uart->code, size + sizeof(code_uart->code), &frame);
 
         if (frame) {
-            usb_write_direct(0, frame, frame_size);
+            usb_write_direct(SERF_USB_PORT, frame, frame_size);
         }
     }
 }

@@ -118,7 +118,7 @@ void console_printf(char *format, ...)
     result = vasprintf((char **)&output, format, va);
 
     if (result >= 0) {
-        usb_write_raw(1, output, (size_t) result);
+        usb_write_raw(CONSOLE_USB_PORT, output, (size_t) result);
         free(output);
     }
 
