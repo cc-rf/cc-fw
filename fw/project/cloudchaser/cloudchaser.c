@@ -137,10 +137,8 @@ void cloudchaser_main(void)
             .addr = status.node,
             .cell = 0,
             .recv = handle_rx,
-            .sync = NULL
+            .sync = sync_hook
     };
-
-    mac_config.sync = sync_hook;
 
     #if BOARD_REVISION == 2
         mac_config.boss = /*status.node == 0x4BDB;*/ pflag_set();
@@ -316,6 +314,25 @@ static void sync_hook(chan_id_t chan)
         led_set(LED_1, (chan == 15) ? LED_ON : LED_OFF);
         led_set(LED_3, (chan == 17) ? LED_ON : LED_OFF);
     }
+
+    static mac_stat_t stat_prev = {0};
+    static mac_stat_t stat;
+
+    mac_stat(macs[0], &stat);
+
+    if (stat.rx.count != stat_prev.rx.count) {
+        led_set(LED_RGB0_GREEN, 60);
+    } else {
+        led_set(LED_RGB0_GREEN, 0);
+    }
+
+    if (stat.tx.count != stat_prev.tx.count) {
+        led_set(LED_RGB1_BLUE, 60);
+    } else {
+        led_set(LED_RGB1_BLUE, 0);
+    }
+
+    stat_prev = stat;
 }
 
 
