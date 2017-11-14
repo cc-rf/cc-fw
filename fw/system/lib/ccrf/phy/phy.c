@@ -853,7 +853,7 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
 static inline void phy_chan_next(phy_t phy)
 {
     // NOTE: Incrementing from CHAN_ID_INVALID wraps to zero.
-    chan_id_t next = ++phy->chan.cur;
+    chan_id_t next = phy->chan.cur + (chan_id_t)1;
     if (next >= CHAN_COUNT) next = 0;
     phy_chan_set(phy, next);
 }
