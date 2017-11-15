@@ -207,7 +207,7 @@ mac_addr_t mac_addr(mac_t mac)
 
 void mac_stat(mac_t mac, mac_stat_t *stat)
 {
-    memcpy(stat, &mac->stat, sizeof(mac->stat));
+    *stat = mac->stat;
 }
 
 
