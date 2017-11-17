@@ -266,6 +266,12 @@ void console_input(char *data)
         goto parse_done;
     }
 
+    if (!strcmp(cmd, "rainbow")) {
+        extern void rainbow(void);
+        rainbow();
+        goto parse_done;
+    }
+
     if (!strcmp(cmd, "help")) {
         console_printf("available commands:\r\n  master      set master (hop) mode\r\n  chan        select channel\r\n  cw          continuous wave transmit\r\n  hgm         high-gain mode toggle\r\n  pwr         power level set\r\n  send        transmit packets\r\n  info        show params/stats\r\n  reboot      restart system\r\n");
         goto parse_done;

@@ -31,7 +31,7 @@
 
 #define CODE_SEND_FLAG_WAIT 1
 
-#define SERF_USB_PORT       0
+#define SERF_USB_PORT       1
 
 typedef struct __packed {
     u32 version;
@@ -166,7 +166,7 @@ static const led_rgb_t rainbow_colors[][2] = {
 
 static volatile bool sync_blink = true;
 
-static inline void rainbow()
+void rainbow(void)
 {
     const TickType_t delay = 0;
     const u16 resolution = 1000;
