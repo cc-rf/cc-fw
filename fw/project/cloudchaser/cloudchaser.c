@@ -25,12 +25,13 @@
 #define CODE_ID_RECV        3
 #define CODE_ID_RESET       9
 #define CODE_ID_UART        26
+#define CODE_ID_RAINBOW     29
 
 #define RESET_MAGIC         0xD1E00D1E
 
 #define CODE_SEND_FLAG_WAIT 1
 
-#define SERF_USB_PORT       1
+#define SERF_USB_PORT       0
 
 typedef struct __packed {
     u32 version;
@@ -104,6 +105,7 @@ static void handle_code_reset(u8 port, size_t size, u8 *data);
 static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
 static void handle_code_uart(size_t size, u8 *data);
+static void handle_code_rainbow(size_t size, u8 *data);
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
 static void write_code_status(u8 port, code_status_t *code_status);
@@ -119,6 +121,59 @@ static code_status_t status;
 static uart_t uart = NULL;
 static size_t usb_in_size[USB_CDC_INSTANCE_COUNT] = {0};
 static u8 usb_in_data[USB_CDC_INSTANCE_COUNT][USB_IN_DATA_MAX];
+
+static const led_rgb_t rainbow_colors[][2] = {
+        {{  0,   0,   0,   0}, {  0,   0,   0,   0}},
+
+        {{100,   0,   0, 255}, { 25,   5,   0, 255}},
+        {{100, 100,   0, 100}, { 50,   3,   0, 100}},
+        {{  0, 100,   0,  50}, {100,   0,   0,  50}},
+        {{  0, 100, 200, 255}, {100, 100,   0, 255}},
+        {{ 30,   0, 200, 100}, {  0, 100,   0, 100}},
+        {{ 70,   0, 180,  50}, {  0, 100, 200,  50}},
+        {{ 40,   0, 100, 200}, { 30,   0, 200, 200}},
+        {{ 20,   0,  50,  40}, { 70,   0, 180,  40}},
+
+        {{100,   0,   0, 255}, { 25,   5,   0, 255}},
+        {{100, 100,   0, 100}, { 50,   3,   0, 100}},
+        {{  0, 100,   0,  50}, {100,   0,   0,  50}},
+        {{  0, 100, 200, 255}, {100, 100,   0, 255}},
+        {{ 30,   0, 200, 100}, {  0, 100,   0, 100}},
+        {{ 70,   0, 180,  50}, {  0, 100, 200,  50}},
+        {{ 40,   0, 100, 200}, { 30,   0, 200, 200}},
+        {{ 20,   0,  50,  40}, { 70,   0, 180,  40}},
+
+        {{100,   0,   0, 255}, { 25,   5,   0, 255}},
+        {{100, 100,   0, 100}, { 50,   3,   0, 100}},
+        {{  0, 100,   0,  50}, {100,   0,   0,  50}},
+        {{  0, 100, 200, 255}, {100, 100,   0, 255}},
+        {{ 30,   0, 200, 100}, {  0, 100,   0, 100}},
+        {{ 70,   0, 180,  50}, {  0, 100, 200,  50}},
+        {{ 40,   0, 100, 200}, { 30,   0, 200, 200}},
+        {{ 20,   0,  50,  40}, { 70,   0, 180,  40}},
+
+        {{100,   0,   0, 255}, { 25,   5,   0, 255}},
+        {{100, 100,   0, 100}, { 50,   3,   0, 100}},
+        {{  0, 100,   0,  50}, {100,   0,   0,  50}},
+        {{  0, 100, 200, 255}, {100, 100,   0, 255}},
+        {{ 30,   0, 200, 100}, {  0, 100,   0, 100}},
+        {{ 70,   0, 180,  50}, {  0, 100, 200,  50}},
+        {{ 40,   0, 100, 200}, { 30,   0, 200, 200}},
+        {{ 20,   0,  50,  40}, { 70,   0, 180,  40}},
+
+        {{  0,   0,   0,   0}, {  0,   0,   0,   0}},
+};
+
+static volatile bool sync_blink = true;
+
+static inline void rainbow()
+{
+    const TickType_t delay = 0;
+    const u16 resolution = 1000;
+    sync_blink = false;
+    led_run_program(resolution, delay, rainbow_colors, COUNT_OF(rainbow_colors));
+    sync_blink = true;
+}
 
 
 void cloudchaser_main(void)
@@ -137,10 +192,8 @@ void cloudchaser_main(void)
             .addr = status.node,
             .cell = 0,
             .recv = handle_rx,
-            .sync = NULL
+            .sync = sync_hook
     };
-
-    mac_config.sync = sync_hook;
 
     #if BOARD_REVISION == 2
         mac_config.boss = /*status.node == 0x4BDB;*/ pflag_set();
@@ -157,17 +210,8 @@ void cloudchaser_main(void)
             (u32)(status.serial >> 32), (u32)status.serial, mac_config.cell, status.node
     );
 
-    led_on(LED_RGB0_GREEN);
-    led_on(LED_RGB0_RED);
-    led_on(LED_RGB1_GREEN);
-    led_on(LED_RGB1_RED);
-    led_on(LED_BLUE_0);
-    led_on(LED_BLUE_1);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    led_off(LED_RGB0_GREEN);
-    led_off(LED_RGB0_RED);
-    led_off(LED_RGB1_GREEN);
-    led_off(LED_RGB1_RED);
+    rainbow();
+
     led_off(LED_BLUE_0);
     led_off(LED_BLUE_1);
 
@@ -195,17 +239,6 @@ void cloudchaser_main(void)
 
     if (uflag1_set()) {
         uart_relay_run();
-    }
-
-    if (uflag2_set() && mac_config.boss) {
-        printf("meter: auto-tx enabled\r\n");
-        #define TXLEN 45
-
-        while (1) {
-            const char to_send[TXLEN] = { [ 0 ... (TXLEN-1) ] = '\xA5' };
-            mac_send(macs[0], MAC_SEND_STRM, 0x0000, TXLEN, (u8 *)to_send, false);
-            vTaskDelay(pdMS_TO_TICKS(23));
-        }
     }
 }
 
@@ -253,9 +286,6 @@ static void uart_relay_run(void)
 
 static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta)
 {
-    //LED_A_TOGGLE();
-    //LED_B_TOGGLE();
-
     if (uflag1_set() && size >= sizeof(uart_pkt_t) && uart) {
         uart_pkt_t *const uart_pkt = (uart_pkt_t *) data;
 
@@ -268,54 +298,38 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
         }
     }
 
-    if (uflag2_set()) {
-        /*if (rssi >= -34) {  // 60 dB down
-            LED_A_ON();
-            LED_B_ON();
-            LED_C_ON();
-        } else if (rssi >= -44) { // 70 dB down
-            LED_A_ON();
-            LED_B_ON();
-            LED_C_OFF();
-        } else if (rssi >= -74) { // 100 dB down
-            LED_A_ON();
-            LED_B_OFF();
-            LED_C_OFF();
-        } else if (rssi >= -89) { // 115 dB down
-            LED_A_OFF();
-            LED_B_OFF();
-            LED_C_ON();
-        } else {
-            LED_A_OFF();
-            LED_B_OFF();
-            LED_C_OFF();
-        }*/
-
-        if (!phy_boss(mac_phy(mac))) {
-            mac_send(mac, MAC_SEND_STRM, 0x0000, size, data, false);
-            return;
-        }
-
-        return;
-    }
-
     write_code_recv(mac_addr(mac), peer, dest, size, data, meta);
 }
 
 
 static void sync_hook(chan_id_t chan)
 {
-    if (uflag2_set()) {
-        //if (chan == 11 || chan == 13 || chan == 15 || chan == 17) LED_D_ON();
-        //else LED_D_OFF();
-    } else {
-        //led_set(LED_0, (chan == 0) || (chan == 2) || (chan == 4) ? LED_ON : LED_OFF);
-        //led_set(LED_1, (chan == 1) || (chan == 1) || (chan == 3) ? LED_ON : LED_OFF);
+    static mac_stat_t stat_prev = {0};
+    static mac_stat_t stat;
+
+    if (sync_blink) {
+
         led_set(LED_0, (chan == 11) ? LED_ON : LED_OFF);
         led_set(LED_2, (chan == 13) ? LED_ON : LED_OFF);
         led_set(LED_1, (chan == 15) ? LED_ON : LED_OFF);
         led_set(LED_3, (chan == 17) ? LED_ON : LED_OFF);
+
+        mac_stat(macs[0], &stat);
+
+        if (stat.rx.count != stat_prev.rx.count) {
+            led_set(LED_RGB0_GREEN, 60);
+        } else {
+            led_set(LED_RGB0_GREEN, 0);
+        }
+
+        if (stat.tx.count != stat_prev.tx.count) {
+            led_set(LED_RGB1_BLUE, 80);
+        } else {
+            led_set(LED_RGB1_BLUE, 0);
+        }
     }
+
+    stat_prev = stat;
 }
 
 
@@ -422,6 +436,9 @@ static void frame_recv(u8 port, serf_t *frame, size_t size)
 
         case CODE_ID_UART:
             return handle_code_uart(size, frame->data);
+
+        case CODE_ID_RAINBOW:
+            return handle_code_rainbow(size, frame->data);
 
         default:
             printf("(frame) unknown code: size=%u code=0x%02x\r\n", size, frame->code);
@@ -531,6 +548,12 @@ static void handle_code_uart(size_t size, u8 *data)
             led_on(LED_RGB0_RED);
         }
     }
+}
+
+
+static void handle_code_rainbow(size_t size, u8 *data)
+{
+    rainbow();
 }
 
 

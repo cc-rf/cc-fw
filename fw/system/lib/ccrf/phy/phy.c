@@ -223,7 +223,7 @@ phy_t phy_init(phy_config_t *config)
 
 void phy_stat(phy_t phy, phy_stat_t *stat)
 {
-    memcpy(stat, &phy->stat, sizeof(phy->stat));
+    *stat = phy->stat;
 }
 
 

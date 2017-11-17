@@ -177,4 +177,26 @@ void BOARD_InitPins(void)
     PORT_SetPinMux(PORTB,  4u, kPORT_MuxAsGpio);                // GPIO_HDR #8   ** extra pwr
     PORT_SetPinMux(PORTB,  5u, kPORT_MuxAsGpio);                // GPIO_HDR #9   ** pflag input
     #endif
+
+    /**
+     * J6 #2 PTD10 B2
+     * J6 #3 PTD12 B1   3:FTM3_FLT0
+     * J6 #4 PTD13 C3
+     * J6 #5 PTD14 C2
+     * J6 #6 PTD7  A1   4:FTM0_CH7  6:FTM0_FLT1
+     * J6 #7 PTD8  C9
+     * J6 #8 PTD9  B9
+     *
+     * J5 #3 PTD2       4:FTM3_CH2
+     * J5 #4 PTD3       4:FTM3_CH3
+     * J5 #5 PTE24      3:UART4_TX
+     * J5 #6 PTE25      3:UART4_RX
+     * J5 #7 PTA11      3:FTM2_CH1  6:FTM2_QD_PHB/TPM2_CH1
+     * J5 #8 PTA12      3:FTM1_CH0  7:FTM1_QD_PHA/TPM1_CH0
+     * J5 #9 PTE11      6:FTM3_CH6
+     *
+     * J3 #9 PTE5       6:FTM3_CH0
+     *
+     *
+     */
 }

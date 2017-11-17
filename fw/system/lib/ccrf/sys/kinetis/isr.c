@@ -169,7 +169,7 @@ bool ccrf_isr_state(rdio_t rdio, ccrf_isr_src_t src)
     __attribute__((interrupt,noclone)) void PORT##P##_IRQHandler(void) { \
         u32 isfr = PORT##P->ISFR;                           \
         PORT##P->ISFR = isfr;                               \
-        isr_map_t *const isr_table = isr_map_port ## P;     \
+        static const isr_map_t *const isr_table = isr_map_port ## P;     \
         u32 bit_nr;                                         \
         while (isfr) {                                      \
             bit_nr = __builtin_ctz(isfr);                   \
