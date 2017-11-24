@@ -495,5 +495,5 @@ u32 rdio_util_get_tx_time(rdio_t rdio, u32 len)
     // Note for later: with 4-ary modulation the preamble is still sent as 2-ary.
 
 
-    return 200/*I/O overhead*/ + ((1000000 * 8 * (len + overhead) /*+ (symbol_rate >> 1)*/) / symbol_rate);
+    return 100/*I/O overhead*/ + ((1000000 * 8 * (len + overhead) /*+ (symbol_rate >> 1)*/) / symbol_rate);
 }
