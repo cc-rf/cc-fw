@@ -187,7 +187,7 @@ static unsigned long long usage_fault_count;
 
 static fault_reg_t hard_fault_last_reg;
 
-void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
+void __used hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
 {
     static int hard_fault_count_init;
 
@@ -263,7 +263,7 @@ void hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
     }*/
 }
 
-void usage_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
+void __used usage_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
 {
     static int usage_fault_count_init;
 
