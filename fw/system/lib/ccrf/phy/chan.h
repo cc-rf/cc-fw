@@ -6,7 +6,7 @@
 
 #define CHAN_ID_INVALID         ((chan_id_t) 0xFFFF)
 
-#define CHAN_FREQ_PRECISION     1000
+#define CHAN_FREQ_PRECISION     100
 #define CHAN_FREQ_ROUND(freq)   ((((freq) + (CHAN_FREQ_PRECISION>>1)) / CHAN_FREQ_PRECISION) * CHAN_FREQ_PRECISION)
 
 

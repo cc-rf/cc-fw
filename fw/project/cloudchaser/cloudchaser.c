@@ -31,7 +31,12 @@
 
 #define CODE_SEND_FLAG_WAIT 1
 
-#define SERF_USB_PORT       1
+#if CLOUDCHASER_FCC_MODE
+    #define SERF_USB_PORT       1
+#else
+    #define SERF_USB_PORT       0
+#endif
+
 
 typedef struct __packed {
     u32 version;
@@ -196,7 +201,7 @@ void cloudchaser_main(void)
     };
 
     #if BOARD_REVISION == 2
-        mac_config.boss = /*status.node == 0x4BDB;*/ pflag_set();
+        mac_config.boss = pflag_set() || (CLOUDCHASER_FCC_MODE != 0);
     #else
         mac_config.boss = pflag_set();
     #endif
@@ -309,10 +314,18 @@ static void sync_hook(chan_id_t chan)
 
     if (sync_blink) {
 
+        #if PHY_CHAN_COUNT == 50
+        // Assumption that makes this equivalent: channel time is halved
+        led_set(LED_0, (chan == 11*2) ? LED_ON : LED_OFF);
+        led_set(LED_2, (chan == 13*2) ? LED_ON : LED_OFF);
+        led_set(LED_1, (chan == 15*2) ? LED_ON : LED_OFF);
+        led_set(LED_3, (chan == 17*2) ? LED_ON : LED_OFF);
+        #else
         led_set(LED_0, (chan == 11) ? LED_ON : LED_OFF);
         led_set(LED_2, (chan == 13) ? LED_ON : LED_OFF);
         led_set(LED_1, (chan == 15) ? LED_ON : LED_OFF);
         led_set(LED_3, (chan == 17) ? LED_ON : LED_OFF);
+        #endif
 
         mac_stat(macs[0], &stat);
 

@@ -21,10 +21,10 @@
 #define phy_trace_verbose   ccrf_trace_verbose
 
 
-#define FREQ_BASE       902000000u
-#define FREQ_BW         1001000u
+#define FREQ_BASE       902456000u
+#define FREQ_BW         503000u
 #define CHAN_COUNT      PHY_CHAN_COUNT
-#define CHAN_TIME       40000u
+#define CHAN_TIME       20000u
 
 #define PHY_RF_FRAME_SIZE_MAX   (PHY_FRAME_SIZE_MAX + sizeof(phy_pkt_hdr_t) - 1)
 

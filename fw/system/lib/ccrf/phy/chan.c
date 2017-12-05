@@ -21,7 +21,8 @@ void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
     /**
      * Degraded sensitivity in RX at multiples of XOSC/2 and in TX at multiples of XOSC.
      */
-    #define BAD_FREQ_GAP        500000
+    #define BAD_FREQ_GAP        100000
+    #define BAD_FREQ_ADJ        1000
     #define IS_TOO_CLOSE(freq)  (((freq) % (CC_XOSC_FREQ / 2)) < BAD_FREQ_GAP) || (((CC_XOSC_FREQ / 2) - ((freq) % (CC_XOSC_FREQ / 2))) < BAD_FREQ_GAP)
 
     for (chan_id_t c = 0; c < group->size; ++c, freq = CHAN_FREQ_ROUND(freq+step)) {
@@ -30,7 +31,7 @@ void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
 
         while (IS_TOO_CLOSE(freq)) {
             //ccrf_trace_debug("chan: adjust freq %lu -> %lu", freq, freq + BAD_FREQ_GAP / 10);
-            freq += BAD_FREQ_GAP / 10;
+            freq += BAD_FREQ_ADJ;
         }
 
         /*freq = */rdio_util_map_freq(group->rdio, freq, &group->chan[c].cal.reg.freq);

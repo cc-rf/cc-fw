@@ -192,7 +192,7 @@ void console_input(char *data)
         if (cmd_chan) {
             unsigned long chn_input = strtoul(cmd_chan, NULL, 10);
 
-            if (chn_input >= 0 && chn_input < 25) {
+            if (chn_input >= 0 && chn_input < PHY_CHAN_COUNT) {
                 command_channel((chan_id_t) chn_input);
                 goto parse_done;
             }
@@ -282,6 +282,20 @@ void console_input(char *data)
 
         if (cmd_info) {
             if (!strcmp(cmd_info, "chan")) {
+                char *cmd_chan_info = strtok_r(NULL, " ", &saveptr);
+
+                if (!strcmp(cmd_chan_info, "sort")) {
+                    for (chan_id_t i = 0; i < PHY_CHAN_COUNT; ++i) {
+                        console_printf(" %02u    %lu Hz\r\n", i, phy_freq(console.phy, i));
+                    }
+
+                    goto parse_done;
+
+                } else if (strlen(cmd_chan_info)) {
+                    goto parse_usage_info;
+                }
+
+
                 chan_id_t hop_table[PHY_CHAN_COUNT];
                 phy_hops(console.phy, hop_table);
 
@@ -347,7 +361,7 @@ void console_input(char *data)
     goto parse_done;
 
     parse_usage_chan:
-    console_printf("usage: chan <0-24>\r\n");
+    console_printf("usage: chan <0-%u>\r\n", PHY_CHAN_COUNT-1);
     goto parse_done;
 
     parse_usage_hgm:
@@ -363,7 +377,7 @@ void console_input(char *data)
     goto parse_done;
 
     parse_usage_info:
-    console_printf("usage: info [chan]\r\n");
+    console_printf("usage: info [chan [sort]]\r\n");
     goto parse_done;
 
 
