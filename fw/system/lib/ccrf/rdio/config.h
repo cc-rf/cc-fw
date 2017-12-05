@@ -103,6 +103,12 @@
  * ^ SYNC_CFG0: Trying to unset RX_CONFIG_LIMITATION brings LQI from 1->4.
  * PREAMBLE_CFG1: 0x20->0x18->0x28->0x30->0x28. Preamble 6->4->8->24->8 bytes.
  * PREAMBLE_CFG1: 0x28->0x18. Preamble 8->4 bytes.
+ * ---
+ * --- 2017-12-05: 20dB BW is 210-230kHz, too small for 25 channels. Bumping deviation to 100kHz.
+ * ---             NOTE: Leaving board V1 values the same for now but they will need to be updated.
+ * ---
+ * DEVIATION_M/DEV_E: 0x55/0x0C->0x55/0x0D. Deviation 50->100kHz.
+ * DCFILT_CFG: 0x4B->0x0E. Re-enable DC offset correction at 16 samples (SmartRF says should be 64).
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -124,8 +130,8 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_IQIC,              0xD8},
         {CC1200_DEVIATION_M,       0x47},
         #endif
-        {CC1200_MODCFG_DEV_E,      0x0C},
-        {CC1200_DCFILT_CFG,        0x4B},
+        {CC1200_MODCFG_DEV_E,      0x0D},
+        {CC1200_DCFILT_CFG,        0x0E},
         {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
         {CC1200_CHAN_BW,           0x03},
@@ -149,10 +155,10 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_FS_CFG,            0x12},
         {CC1200_PA_CFG1,           0x77}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
-        {CC1200_IF_MIX_CFG,        0x18},
+        {CC1200_IF_MIX_CFG,        0x18}, // % INTERMEDIATE FREQ
         {CC1200_FREQOFF_CFG,       0x0C},
         {CC1200_TOC_CFG,           0x03},
-        {CC1200_MDMCFG2,           0x02},
+        {CC1200_MDMCFG2,           0x02}, // % UPSAMPLER
         {CC1200_FREQ2,             0x5C},
         {CC1200_FREQ1,             0x0F},
         {CC1200_FREQ0,             0x5C},
@@ -170,7 +176,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_FS_REG_DIV_CML,    0x1C},
         {CC1200_FS_SPARE,          0xAC},
         {CC1200_FS_VCO0,           0xB5},
-        {CC1200_IFAMP,             0x09},
+        {CC1200_IFAMP,             0x09}, // % SINGLE SIDE BW
         {CC1200_XOSC5,             0x0E},
         {CC1200_XOSC1,             0x03},
 };
