@@ -95,10 +95,67 @@ static inline rdio_status_t rdio_strobe_tx(rdio_t rdio) { return rdio_strobe(rdi
 static inline rdio_status_t rdio_fifo_read(rdio_t rdio, u8 *data, u8 size) { return rdio_reg_read(rdio, CC1200_FIFO_ACCESS, data, size); }
 static inline rdio_status_t rdio_fifo_write(rdio_t rdio, u8 *data, u8 size) { return rdio_reg_write(rdio, CC1200_FIFO_ACCESS, data, size); }
 
-u8 rdio_reg_get(rdio_t rdio, u16 addr, rdio_status_t *status);
-rdio_status_t rdio_reg_set(rdio_t rdio, u16 addr, u8 value);
-u16 rdio_reg_get16(rdio_t rdio, u16 addr, rdio_status_t *status);
-rdio_status_t rdio_reg_set16(rdio_t rdio, u16 addr, u16 value);
-rdio_status_t rdio_reg_update(rdio_t rdio, u16 addr, u8 mask, u8 value, u8 *prev);
-rdio_status_t rdio_reg_update16(rdio_t rdio, u16 addr, u16 mask, u16 value, u16 *prev);
+static inline u8 rdio_reg_get(rdio_t rdio, u16 addr, rdio_status_t *status)
+{
+    u8 reg;
+    const rdio_status_t st = rdio_reg_read(rdio, addr, &reg, sizeof(reg));
+    if (status) *status = st;
+    return reg;
+}
 
+
+static inline rdio_status_t rdio_reg_set(rdio_t rdio, u16 addr, u8 value)
+{
+    return rdio_reg_write(rdio, addr, &value, sizeof(value));
+}
+
+
+static inline u16 rdio_reg_get16(rdio_t rdio, u16 addr, rdio_status_t *status)
+{
+    u16 reg;
+    const rdio_status_t st = rdio_reg_read(rdio, addr, (u8 *) &reg, sizeof(reg));
+    if (status) *status = st;
+    return reg;
+}
+
+
+static inline rdio_status_t rdio_reg_set16(rdio_t rdio, u16 addr, u16 value)
+{
+    return rdio_reg_write(rdio, addr, (u8 *) &value, sizeof(value));
+}
+
+
+static inline rdio_status_t rdio_reg_update(rdio_t rdio, u16 addr, u8 mask, u8 value, u8 *prev)
+{
+    rdio_status_t status;
+
+    const u8 current = rdio_reg_get(rdio, addr, &status);
+
+    value = (current & ~mask) | (value & mask);
+
+    if (value != current) {
+        status = rdio_reg_set(rdio, addr, value);
+    }
+
+    if (prev) *prev = current;
+
+    return status;
+}
+
+
+static inline rdio_status_t rdio_reg_update16(rdio_t rdio, u16 addr, u16 mask, u16 value, u16 *prev)
+{
+    rdio_status_t status;
+
+    const u16 current = rdio_reg_get16(rdio, addr, &status);
+
+    value = (current & ~mask) | (value & mask);
+
+    if (value != current) {
+        status = rdio_reg_set16(rdio, addr, value);
+    }
+
+    if (prev) *prev = current;
+
+    return status;
+}

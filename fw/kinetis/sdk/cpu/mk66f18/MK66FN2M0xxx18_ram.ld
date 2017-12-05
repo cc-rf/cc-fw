@@ -54,8 +54,8 @@ STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x0400;
 MEMORY
 {
   m_interrupts          (RX)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00000400
-  m_text                (RX)  : ORIGIN = 0x1FFF0400, LENGTH = 0x0000FC00
-  m_data                (RW)  : ORIGIN = 0x20000000, LENGTH = 0x00030000
+  m_text                (RX)  : ORIGIN = 0x1FFF0400, LENGTH = 0x0001fc00
+  m_data                (RW)  : ORIGIN = 0x20010000, LENGTH = 0x00020000
 }
 
 /* Define output sections */
@@ -79,10 +79,10 @@ SECTIONS
     . = ALIGN(4);
     *(.text)                 /* .text sections (code) */
     *(.text*)                /* .text* sections (code) */
-    *(.rodata)               /* .rodata sections (constants, strings, etc.) */
-    *(.rodata*)              /* .rodata* sections (constants, strings, etc.) */
     *(.glue_7)               /* glue arm to thumb code */
     *(.glue_7t)              /* glue thumb to arm code */
+    *(.rodata)               /* .rodata sections (constants, strings, etc.) */
+    *(.rodata*)              /* .rodata* sections (constants, strings, etc.) */
     *(.eh_frame)
     KEEP (*(.init))
     KEEP (*(.fini))
