@@ -110,6 +110,7 @@
  * DEVIATION_M/DEV_E: 0x55/0x0C->0x55/0x0D. Deviation 50->100kHz.
  * DCFILT_CFG: 0x4B->0x0E. Re-enable DC offset correction at 16 samples (SmartRF says should be 64).
  * DEVIATION_M/DEV_E: 0x55/0x0D->0x55/0x0C. Deviation 100->50kHz. Putting back in favor of 50 channels.
+ * DEV_E: 0x0D->0x2D. 2GFSK->4GFSK. 100kHz is the *outer* deviation, inner is 1/3 of that. TODO: Toggle this for long-range or high-speed modes?
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -131,7 +132,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_IQIC,              0xD8},
         {CC1200_DEVIATION_M,       0x47},
         #endif
-        {CC1200_MODCFG_DEV_E,      0x0C},
+        {CC1200_MODCFG_DEV_E,      0x2D},
         {CC1200_DCFILT_CFG,        0x0E},
         {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
