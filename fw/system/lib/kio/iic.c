@@ -30,8 +30,7 @@ iic_t iic_init(u8 bus, u32 baud)
     iic->bus = bus;
 
     #ifdef IIC_LOCK
-        iic->mtx = xSemaphoreCreateBinaryStatic(&iic->mtx_static);
-        xSemaphoreGive(iic->mtx);
+        iic->mtx = xSemaphoreCreateMutexStatic(&iic->mtx_static);
     #endif
 
     #if !defined(IIC_NOTIFY) && !defined(IIC_POLL)
