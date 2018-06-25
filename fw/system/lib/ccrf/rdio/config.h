@@ -111,6 +111,10 @@
  * DCFILT_CFG: 0x4B->0x0E. Re-enable DC offset correction at 16 samples (SmartRF says should be 64).
  * DEVIATION_M/DEV_E: 0x55/0x0D->0x55/0x0C. Deviation 100->50kHz. Putting back in favor of 50 channels.
  * DEV_E: 0x0D->0x2D. 2GFSK->4GFSK. 100kHz is the *outer* deviation, inner is 1/3 of that. TODO: Toggle this for long-range or high-speed modes?
+ * NOTE: Variable values for DEV_M/DEV_E:
+ *      - 0x55/0x0D for long-range FCC mode (2GFSK dev 100kHz, compliant at 60% power),
+ *      - 0x55/0x0C for 50-chan or optimal 25-chan (2GFSK dev 50kHz, was too narrow for FCC),
+ *      - 0x55/0x2D for 50-chan high-speed (4GFSK dev 100kHz)
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)

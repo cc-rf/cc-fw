@@ -20,11 +20,15 @@
 #define phy_trace_debug     ccrf_trace_debug
 #define phy_trace_verbose   ccrf_trace_verbose
 
-
-#define FREQ_BASE       902456000u
-#define FREQ_BW         503000u
-#define CHAN_COUNT      PHY_CHAN_COUNT
-#define CHAN_TIME       20000u
+#if PHY_CHAN_COUNT == 25
+    #define FREQ_BASE       902000000u
+    #define FREQ_BW         1001000u
+    #define CHAN_TIME       40000u
+#elif PHY_CHAN_COUNT == 50
+    #define FREQ_BASE       902456000u
+    #define FREQ_BW         503000u
+    #define CHAN_TIME       20000u
+#endif
 
 #define PHY_RF_FRAME_SIZE_MAX   (PHY_FRAME_SIZE_MAX + sizeof(phy_pkt_hdr_t) - 1)
 
@@ -93,8 +97,8 @@ struct __packed phy {
 
     struct __packed {
         chan_group_t group;
-        chan_info_t channel[CHAN_COUNT];
-        chan_id_t hop_table[CHAN_COUNT];
+        chan_info_t channel[PHY_CHAN_COUNT];
+        chan_id_t hop_table[PHY_CHAN_COUNT];
         volatile chan_id_t cur;
 
     } chan;
@@ -181,7 +185,7 @@ phy_t phy_init(phy_config_t *config)
                     .base = FREQ_BASE,
                     .bw = FREQ_BW
             },
-            .size = CHAN_COUNT
+            .size = PHY_CHAN_COUNT
     };
 
     phy->chan.cur = CHAN_ID_INVALID;
@@ -499,7 +503,7 @@ static void phy_task(phy_t const restrict phy)
                         rdio_mode_idle(phy->rdio);
                         rdio_strobe_rxfl(phy->rdio);
                         ++phy->stat.rx.errors;
-                        if (pkt) goto _cca_fail;
+                        if (pkt) goto _cca_fail; // Possible b/c rdio doesn't disable RX on CCA.
                         break;
 
                     case CC1200_MARC_STATUS1_TX_ON_CCA_FAILED:
@@ -589,7 +593,7 @@ static void phy_task(phy_t const restrict phy)
                 tx_next = 0;
 
                 if (!phy->boss && !phy->chan.cur) {
-                    if (((ts - phy->sync_time) >= 5*(CHAN_TIME * CHAN_COUNT))) {
+                    if (((ts - phy->sync_time) >= 5*(CHAN_TIME * PHY_CHAN_COUNT))) {
                         phy_trace_debug("phy/%u: sync loss: last=%lu now=%lu", rdio_id(phy->rdio), CCRF_CLOCK_MSEC(phy->sync_time), CCRF_CLOCK_MSEC(ts));
                         // TODO: Stop timer?
                         phy->sync_time = 0;
@@ -854,7 +858,7 @@ static inline void phy_chan_next(phy_t phy)
 {
     // NOTE: Incrementing from CHAN_ID_INVALID wraps to zero.
     chan_id_t next = phy->chan.cur + (chan_id_t)1;
-    if (next >= CHAN_COUNT) next = 0;
+    if (next >= PHY_CHAN_COUNT) next = 0;
     phy_chan_set(phy, next);
 }
 
