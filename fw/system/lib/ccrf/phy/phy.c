@@ -32,20 +32,20 @@
 
 #define PHY_RF_FRAME_SIZE_MAX   (PHY_FRAME_SIZE_MAX + sizeof(phy_pkt_hdr_t) - 1)
 
-#define PHY_PKT_FLAG_SYNC       (0x01)   // Is a sync packet. Same value as local block flag, as this is non-local.
+#define PHY_PKT_FLAG_SYNC       ((u8) 0x01)   // Is a sync packet. Same value as local block flag, as this is non-local.
 
 #define PHY_TXQ_LEN             3
 
 #define PHY_TASK_STACK_SIZE     (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
 
-#define NOTIFY_MASK_ISR         (1<<1)
-#define NOTIFY_MASK_TX          (1<<2)
-#define NOTIFY_MASK_HOP         (1<<3)
-#define NOTIFY_MASK_DIAG        (1<<4)
+#define NOTIFY_MASK_ISR         (1u<<1u)
+#define NOTIFY_MASK_TX          (1u<<2u)
+#define NOTIFY_MASK_HOP         (1u<<3u)
+#define NOTIFY_MASK_DIAG        (1u<<4u)
 #define NOTIFY_MASK_ALL         (NOTIFY_MASK_ISR | NOTIFY_MASK_TX | NOTIFY_MASK_HOP | NOTIFY_MASK_DIAG)
 
-#define CALLER_NOTIFY_TX_DONE   (1<<5)
-#define CALLER_NOTIFY_TX_FAIL   (1<<6)
+#define CALLER_NOTIFY_TX_DONE   (1u<<5u)
+#define CALLER_NOTIFY_TX_FAIL   (1u<<6u)
 #define CALLER_NOTIFY_TX_MASK   (CALLER_NOTIFY_TX_DONE | CALLER_NOTIFY_TX_FAIL)
 
 #define PHY_SYNC_MAGIC          ((u8) 0x69)
@@ -496,8 +496,10 @@ static void phy_task(phy_t const restrict phy)
                         if (pkt) goto _cca_fail;
                         break;
 
+                    case CC1200_MARC_STATUS1_RX_TERMINATION:
                     case CC1200_MARC_STATUS1_RX_FIFO_OVERFLOW:
                     case CC1200_MARC_STATUS1_RX_FIFO_UNDERFLOW:
+                    case CC1200_MARC_STATUS1_MAXIMUM_LENGTH:
                     case CC1200_MARC_STATUS1_CRC:
                     case CC1200_MARC_STATUS1_ADDRESS:
                         rdio_mode_idle(phy->rdio);
@@ -806,7 +808,7 @@ static bool phy_recv(phy_t phy, bool flush)
             if (crc_ok) {
                 unblock |= phy_recv_packet(phy, spkt, rssi, lqi);
             } else {
-                break;
+                break; // TODO: Log error? What about autoflush?
             }
         } else {
             break;

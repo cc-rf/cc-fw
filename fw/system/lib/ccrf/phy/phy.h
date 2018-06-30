@@ -5,7 +5,7 @@
 #include "phy/chan.h"
 
 
-#define PHY_PKT_FLAG_IMMEDIATE  ((u8) 0x02)  // Send without tx-gap delay (or CCA) and put at front of queue.
+#define PHY_PKT_FLAG_IMMEDIATE  ((u8) 0x02)  // Send without tx-gap delay (or CCA).
 #define PHY_PKT_FLAG_BLOCK      ((u8) 0x01)  // Return when packet is sent or fails (Local).
 #define PHY_PKT_FLAG_USER_MASK  ((u8) 0xFC)
 #define PHY_PKT_FLAG_USER_0     ((u8) 0x04)
