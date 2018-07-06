@@ -13,6 +13,8 @@
 
 #include <ccrf/mac.h>
 
+#include <fabi.h>
+
 
 #define CLOUDCHASER_RDIO_COUNT  1
 
@@ -25,6 +27,7 @@
 #define CODE_ID_RECV        3
 #define CODE_ID_RESET       9
 #define CODE_ID_UART        26
+#define CODE_ID_LED         27
 #define CODE_ID_RAINBOW     29
 
 #define RESET_MAGIC         0xD1E00D1E
@@ -111,6 +114,8 @@ static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
 static void handle_code_uart(size_t size, u8 *data);
 static void handle_code_rainbow(size_t size, u8 *data);
+static void handle_code_led(size_t size, u8 *data);
+
 
 static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
 static void write_code_status(u8 port, code_status_t *code_status);
@@ -215,7 +220,7 @@ void cloudchaser_main(void)
             (u32)(status.serial >> 32), (u32)status.serial, mac_config.cell, status.node
     );
 
-    rainbow();
+    //rainbow();
 
     led_off(LED_BLUE_0);
     led_off(LED_BLUE_1);
@@ -245,6 +250,8 @@ void cloudchaser_main(void)
     if (uflag1_set()) {
         uart_relay_run();
     }
+
+    fabi_init();
 }
 
 
@@ -453,6 +460,9 @@ static void frame_recv(u8 port, serf_t *frame, size_t size)
         case CODE_ID_RAINBOW:
             return handle_code_rainbow(size, frame->data);
 
+        case CODE_ID_LED:
+            return handle_code_led(size, frame->data);
+
         default:
             printf("(frame) unknown code: size=%u code=0x%02x\r\n", size, frame->code);
             break;
@@ -567,6 +577,12 @@ static void handle_code_uart(size_t size, u8 *data)
 static void handle_code_rainbow(size_t size, u8 *data)
 {
     rainbow();
+}
+
+
+static void handle_code_led(size_t size, u8 *data)
+{
+    fabi_write((fabi_rgb_t *) data, size);
 }
 
 

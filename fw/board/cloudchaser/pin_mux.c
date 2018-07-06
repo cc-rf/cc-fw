@@ -199,4 +199,30 @@ void BOARD_InitPins(void)
      *
      *
      */
+
+    // J3 Header GPIO Output
+
+    const port_pin_config_t port_pin_config_gpio = {
+            .pullSelect = kPORT_PullDisable,
+            .slewRate = kPORT_FastSlewRate,
+            .passiveFilterEnable = kPORT_PassiveFilterDisable,
+            .openDrainEnable = kPORT_OpenDrainDisable,
+            .driveStrength = kPORT_HighDriveStrength,
+            .mux = kPORT_MuxAsGpio,
+            .lockRegister = kPORT_LockRegister,
+    };
+
+    PORT_SetPinConfig(PORTE, 0u, &port_pin_config_gpio);   // J3 #2
+    PORT_SetPinConfig(PORTE, 1u, &port_pin_config_gpio);   // J3 #4
+    PORT_SetPinConfig(PORTE, 2u, &port_pin_config_gpio);   // J3 #6
+    PORT_SetPinConfig(PORTE, 3u, &port_pin_config_gpio);   // J3 #8
+    PORT_SetPinConfig(PORTE, 4u, &port_pin_config_gpio);   // J3 #10
+    PORT_SetPinConfig(PORTE, 5u, &port_pin_config_gpio);   // J3 #9
+
+    GPIO_PinInit(GPIOE, 0u, &gpio_pin_config);
+    GPIO_PinInit(GPIOE, 1u, &gpio_pin_config);
+    GPIO_PinInit(GPIOE, 2u, &gpio_pin_config);
+    GPIO_PinInit(GPIOE, 3u, &gpio_pin_config);
+    GPIO_PinInit(GPIOE, 4u, &gpio_pin_config);
+    GPIO_PinInit(GPIOE, 5u, &gpio_pin_config);
 }

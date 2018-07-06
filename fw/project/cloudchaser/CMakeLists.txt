@@ -32,6 +32,7 @@ target_link_libraries(
         PUBLIC kinetis_middleware_usb_phy
         PUBLIC kinetis_middleware_usb_device
         PUBLIC ccrf
+        PUBLIC fabi
 )
 
 target_compile_options(

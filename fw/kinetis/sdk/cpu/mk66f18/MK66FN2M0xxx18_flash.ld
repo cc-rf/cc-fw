@@ -232,6 +232,12 @@ SECTIONS
     __heap_limit = .; /* Add for _sbrk */
   } > m_data_2
 
+  .band :
+  {
+    . = ALIGN(8);
+    *(m_band)
+  } > m_data_2
+
   .stack :
   {
     . = ALIGN(8);
