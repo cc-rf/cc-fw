@@ -11,30 +11,35 @@
 #include <task.h>
 #include <MK66F18.h>
 
+#define FABI_BUS_COUNT      2
 
 #define GPIO                GPIOE
-#define GPIO_BIT            ((u8) 0u) //(11u-8u)
-#define GPIO_REG_BYTE(x)    x // ((u8 *)&(x))[1]
+#define GPIO_BIT            ((u8) 0u)
+#define GPIO_REG_BYTE(x)    (x) // ((u8 *)&(x))[1]
+
 
 #define FABI_NOTIFY         (1u<<23u)
+
+#define FABI_CHAN_MASK      ((u8)((u8)(1u << (u8)FABI_CHAN_COUNT) - 1u))
 
 // Only works for data in SRAM_U, above 0x2000_0000. For this project, that's the stack or section m_band.
 // https://community.arm.com/processors/f/discussions/6679/bit-banding-in-sram-region-cortex-m4
 #define BITBAND_REGION_BIT(src_byte_addr, bit)  (((((uint32_t)(src_byte_addr) & 0x000fffffu) << 5u) | ((uint32_t)(src_byte_addr) & 0xfff00000u) | 0x02000000u) + (((uint32_t)(bit)) << 2u))
 
 
-static void handle_edma(struct _edma_handle *handle, void *userData, bool transferDone, uint32_t tcds);
-void fabi_write(fabi_rgb_t *data, size_t size);
-static void fabi_dma_run(size_t size);
+typedef u8 fabi_out_t;
 
+
+static void handle_edma(struct _edma_handle *handle, void *userData, bool transferDone, uint32_t tcds);
+static void fabi_dma_run(size_t size);
+fabi_rgb_t *fabi_buffer(void);
 
 static edma_tcd_t tcd[3] __aligned(32);
 static edma_handle_t edma_handle[3];
 static edma_transfer_config_t tr[3] = {{0}};
 
-static u8 band_in[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section("m_band");
-static u8 band_out[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section("m_band");
-
+static u8 band_in[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section("m_band") __aligned(32);
+static fabi_out_t band_out[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section("m_band") __aligned(32);
 
 void fabi_init(void)
 {
@@ -81,31 +86,29 @@ void fabi_init(void)
         return;
     }
 
-
     // Necessary if radio interrupts should prioritize over this one.
     NVIC_SetPriority(((IRQn_Type [][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][edma_handle[2].channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
 
-    static u8 flag_psor = (u8)((1u << GPIO_BIT) /*| (1u << (GPIO_BIT + 1))*/);
-    static u8 flag_pcor = (u8)((1u << GPIO_BIT) /*| (1u << (GPIO_BIT + 1))*/);
+    static fabi_out_t flag = FABI_CHAN_MASK << GPIO_BIT;
 
     // Could also use EDMA_PrepareTransfer() for these:
 
-    tr[0].srcAddr = (u32) &flag_psor;
+    tr[0].srcAddr = (u32) &flag;
     tr[0].destAddr = (u32) &GPIO_REG_BYTE(GPIO->PSOR); // Port Set Out Register
     tr[0].srcOffset = 0;
-    tr[0].srcTransferSize = kEDMA_TransferSize1Bytes;
-    tr[0].destTransferSize = kEDMA_TransferSize1Bytes;
-    tr[0].minorLoopBytes = 1;
+    tr[0].srcTransferSize = sizeof(fabi_out_t) > 1 ? kEDMA_TransferSize4Bytes : kEDMA_TransferSize1Bytes;
+    tr[0].destTransferSize = sizeof(fabi_out_t) > 1 ? kEDMA_TransferSize4Bytes : kEDMA_TransferSize1Bytes;
+    tr[0].minorLoopBytes = sizeof(fabi_out_t);
     tr[0].majorLoopCounts = 0; // bit count
 
     tr[1] = tr[0];
     tr[1].srcAddr = (u32) band_out;
-    tr[1].destAddr = (u32) &GPIO_REG_BYTE(GPIO->PCOR); //&GPIO_REG_BYTE(GPIO->PDOR); // Port Data Out Register
-    tr[1].srcOffset = 1;
+    tr[1].destAddr = (u32) &GPIO_REG_BYTE(GPIO->PDOR); // Port Data Out Register
+    tr[1].srcOffset = sizeof(fabi_out_t);
 
     tr[2] = tr[0];
-    tr[2].srcAddr = (u32) &flag_pcor;
+    tr[2].srcAddr = (u32) &flag;
     tr[2].destAddr = (u32) &GPIO_REG_BYTE(GPIO->PCOR); // Port Clear Out Register
 
 
@@ -120,66 +123,91 @@ void fabi_init(void)
     EDMA_SetCallback(&edma_handle[2], handle_edma, &edma_handle[2]);
 
     // Needed?
-    EDMA_TcdSetTransferConfig(&tcd[0], &tr[0], &tcd[1]);
-    EDMA_TcdSetTransferConfig(&tcd[1], &tr[1], &tcd[2]);
-    EDMA_TcdSetTransferConfig(&tcd[2], &tr[2], NULL);
+    //EDMA_TcdSetTransferConfig(&tcd[0], &tr[0], &tcd[1]);
+    //EDMA_TcdSetTransferConfig(&tcd[1], &tr[1], &tcd[2]);
+    //EDMA_TcdSetTransferConfig(&tcd[2], &tr[2], NULL);
 
     // Needed?
-    EDMA_SetTransferConfig(DMA0, edma_handle[0].channel, &tr[0], &tcd[1]);
-    EDMA_SetTransferConfig(DMA0, edma_handle[1].channel, &tr[1], &tcd[2]);
-    EDMA_SetTransferConfig(DMA0, edma_handle[2].channel, &tr[2], NULL);
+    //EDMA_SetTransferConfig(DMA0, edma_handle[0].channel, &tr[0], &tcd[1]);
+    //EDMA_SetTransferConfig(DMA0, edma_handle[1].channel, &tr[1], &tcd[2]);
+    //EDMA_SetTransferConfig(DMA0, edma_handle[2].channel, &tr[2], NULL);
 
 
-    #define INIT_COUNT 144
-    fabi_rgb_t *init = pvPortMalloc(sizeof(fabi_rgb_t) * INIT_COUNT);
-    memset(init, 0, sizeof(fabi_rgb_t) * INIT_COUNT);
+    /*#define INIT_COUNT 144
+    fabi_rgb_t *init1 = pvPortMalloc(sizeof(fabi_rgb_t) * INIT_COUNT);
+    fabi_rgb_t *init2 = pvPortMalloc(sizeof(fabi_rgb_t) * INIT_COUNT);
 
-    memset(band_out, 0, FABI_LED_MAX * sizeof(fabi_rgb_t) * 8);
+    memset(init1, 0, sizeof(fabi_rgb_t) * INIT_COUNT);
+    memset(init2, 0, sizeof(fabi_rgb_t) * INIT_COUNT);
 
+    memset(band_out, 0, sizeof(band_out[0]) * FABI_LED_MAX * sizeof(fabi_rgb_t) * 8);
+
+    u16 counter, i;
 
     while (1) {
-        u32 counter = 0;
 
-        while (counter <= 255) {
-            //printf("%u\n", counter);
-            for (u32 i = 0; i < INIT_COUNT; ++i) {
-                init[i] = (fabi_rgb_t) {(8 - i % 8u)*3, (i % 8u)*3, (counter > 127 ? 255 - counter : counter)/3};
-                //init[i] = (fabi_rgb_t) {0, 0, 6};
+        for (counter = 0; counter <= UINT8_MAX; ++counter) {
+
+            for (i = 0; i < INIT_COUNT; ++i) {
+                init1[i] = (fabi_rgb_t) {(8 - i % 8u)*2, (i % 8u)*3, (counter > 127 ? 255 - counter : counter)/4 };
+                init2[i] = (fabi_rgb_t) {(8 - i % 8u)*2, (counter > 127 ? 255 - counter : counter)/4, (i % 8u)*3 };
             }
 
-            fabi_write(init, INIT_COUNT);
-            ++counter;
+            fabi_write(1, init1, INIT_COUNT);
+            fabi_write(2, init2, INIT_COUNT);
 
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(2));
         }
-    }
+    }*/
+
+
+    /*u16 i;
+
+    while (1) {
+
+        for (i = 0; i < INIT_COUNT; ++i) {
+            init1[i] = (fabi_rgb_t) { 0xff, 0xff, 0xff };
+
+            fabi_write(0b11, init1, INIT_COUNT);
+            //vTaskDelay(pdMS_TO_TICKS(2));
+
+            init1[i] = (fabi_rgb_t) { 0x00, 0x00, 0x00 };
+        }
+
+    }*/
 }
 
 
-void fabi_write(fabi_rgb_t *data, size_t size)
+fabi_rgb_t *fabi_buffer(void)
+{
+    return (fabi_rgb_t *) band_in;
+}
+
+
+void fabi_write(u8 mask, fabi_rgb_t *data, size_t size)
 {
     const u32 bits = size * sizeof(fabi_rgb_t) * 8;
     u32 mod;
     u8 bit;
+    u8 out_bits, biti;
+
+    mask &= FABI_CHAN_MASK;
 
     memcpy(band_in, data, size * sizeof(fabi_rgb_t));
 
-    //const u8 pdor = GPIO_REG_BYTE(GPIO->PDOR) & (u8)~(u8)(1u << GPIO_BIT);
-
-    // Explode the bits into array with one bit per byte.
+    // Explode the bits into array with one bit output element.
     for (u32 i = 0; i < bits; ++i) {
-        // Wrong bit order:
-        //*(u8 *)BITBAND_REGION_BIT(&band_out[i], GPIO_BIT) = *(u8 *)(i + (u32 *)BITBAND_REGION_BIT(band_in, 0));
-        // Preserve PDOR:
-        //band_out[i] = pdor | (u8)(*(u8 *)(i + (u32 *)BITBAND_REGION_BIT(band_in, 0)) << GPIO_BIT);
-
         mod = i % 8;
         bit = *(u8 *)(i - mod + (u32 *)BITBAND_REGION_BIT(band_in, 7 - mod));
-        band_out[i] = ~(u8)( (bit << GPIO_BIT) | (bit << (GPIO_BIT+1)) );
-        //*(u8 *)BITBAND_REGION_BIT(&band_out[i], GPIO_BIT) = bit;
-        //*(u8 *)BITBAND_REGION_BIT(&band_out[i], GPIO_BIT+1) = bit;
-    }
 
+        out_bits = mask;
+
+        while (out_bits) {
+            biti = __builtin_ctz(out_bits);
+            *(fabi_out_t *)BITBAND_REGION_BIT(&band_out[i], GPIO_BIT + biti) = bit;
+            out_bits = out_bits & (u8)(out_bits - 1u);
+        }
+    }
 
     fabi_dma_run(size * sizeof(fabi_rgb_t));
 }
@@ -191,13 +219,13 @@ static void fabi_dma_run(size_t size)
     tr[0].majorLoopCounts = tr[1].majorLoopCounts = tr[2].majorLoopCounts = bits;
     edma_handle[2].userData = xTaskGetCurrentTaskHandle();
 
-    EDMA_TcdReset(&tcd[0]);
+    /*EDMA_TcdReset(&tcd[0]);
     EDMA_TcdReset(&tcd[1]);
     EDMA_TcdReset(&tcd[2]);
 
     EDMA_ResetChannel(DMA0, edma_handle[0].channel);
     EDMA_ResetChannel(DMA0, edma_handle[1].channel);
-    EDMA_ResetChannel(DMA0, edma_handle[2].channel);
+    EDMA_ResetChannel(DMA0, edma_handle[2].channel);*/
 
     DMAMUX_DisableChannel(DMAMUX0, edma_handle[0].channel);
     DMAMUX_DisableChannel(DMAMUX0, edma_handle[1].channel);
@@ -216,6 +244,7 @@ static void fabi_dma_run(size_t size)
     DMAMUX_EnableChannel(DMAMUX0, edma_handle[2].channel);
 
     FTM->CNT = 0;
+    //FTM_ClearStatusFlags(FTM, UINT32_MAX);
     FTM_StartTimer(FTM, kFTM_SystemClock);
 
     u32 notify = 0;
