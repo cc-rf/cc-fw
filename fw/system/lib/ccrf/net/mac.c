@@ -16,17 +16,17 @@
 #define mac_trace_verbose       ccrf_trace_verbose
 
 
-#define MAC_PEER_MAX            10
+#define MAC_PEER_MAX            64
 
 #define MAC_PEND_TIME           10
-#define MAC_PEND_RETRY          10
+#define MAC_PEND_RETRY          5
 
 #define MAC_TXQ_COUNT           7 // This should eventually reflect the number of threads waiting on messages
 #define MAC_TXQ_SIZE            (MAC_TXQ_COUNT)
 #define MAC_RXQ_SIZE            7
 
 #define MAC_TX_TASK_STACK_SIZE  (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
-#define MAC_RX_TASK_STACK_SIZE  (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
+#define MAC_RX_TASK_STACK_SIZE  (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
 
 #define MAC_NOTIFY_ACK          (1u<<10)
 
@@ -35,6 +35,7 @@
 #define MAC_FLAG_ACK_REQ        (PHY_PKT_FLAG_USER_0)
 #define MAC_FLAG_ACK_RSP        (PHY_PKT_FLAG_USER_1)
 #define MAC_FLAG_ACK_RQR        (PHY_PKT_FLAG_USER_2)
+#define MAC_FLAG_USER           (PHY_PKT_FLAG_USER_3 | PHY_PKT_FLAG_USER_4 | PHY_PKT_FLAG_USER_5)
 
 #define MAC_SEQ_INIT            ((mac_seq_t){0,0,0,0})
 
@@ -91,6 +92,7 @@ typedef struct __packed {
     mac_addr_t dest;
     mac_size_t size;
     mac_seq_t seq;
+    mac_flag_t flag;
     u8 data[MAC_PKT_SIZE_MAX];
 
 } mac_recv_data_t;
@@ -236,9 +238,9 @@ static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr)
 }
 
 
-mac_size_t mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 data[], bool wait)
+mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mac_size_t size, u8 data[], bool wait)
 {
-    const u8 flag = wait ? MAC_FLAG_PKT_BLK : (u8) 0;
+    const u8 flag = (flags & MAC_FLAG_MASK) | (wait ? MAC_FLAG_PKT_BLK : (u8) 0);
 
     switch (type) {
         case MAC_SEND_DGRM:
@@ -489,7 +491,7 @@ static void mac_task_recv(mac_t mac)
             if (recv.seq.end) {
                 ++mac->stat.rx.count;
                 mac->stat.rx.bytes += recv.peer->part->size;
-                mac->recv(mac, recv.peer->addr, recv.peer->part->dest, recv.peer->part->size, recv.peer->part->data, recv.meta);
+                mac->recv(mac, recv.flag, recv.peer->addr, recv.peer->part->dest, recv.peer->part->size, recv.peer->part->data, recv.meta);
                 vPortFree(recv.peer->part);
                 recv.peer->part = NULL;
             }
@@ -500,7 +502,7 @@ static void mac_task_recv(mac_t mac)
         ++mac->stat.rx.count;
         mac->stat.rx.bytes += recv.size;
 
-        mac->recv(mac, recv.peer->addr, recv.dest, recv.size, recv.data, recv.meta);
+        mac->recv(mac, recv.flag, recv.peer->addr, recv.dest, recv.size, recv.data, recv.meta);
     }
 }
 
@@ -572,6 +574,7 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
                                 .dest = pkt->dest,
                                 .size = pkt->size,
                                 .seq  = pkt->seq,
+                                .flag = flag & MAC_FLAG_MASK,
                         };
 
                         if (recv.size) memcpy(recv.data, pkt->data, MIN(recv.size, MAC_PKT_SIZE_MAX));

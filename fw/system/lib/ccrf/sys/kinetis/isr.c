@@ -164,7 +164,7 @@ bool ccrf_isr_state(rdio_t rdio, ccrf_isr_src_t src)
     return GPIO_ReadPinInput(gpios[port], pin) != 0;
 }
 
-
+// TODO: Compare this method with https://lemire.me/blog/2018/02/21/iterating-over-set-bits-quickly/
 #define DECL_PORT_ISR(P) \
     __attribute__((interrupt,noclone)) void PORT##P##_IRQHandler(void) { \
         u32 isfr = PORT##P->ISFR;                           \

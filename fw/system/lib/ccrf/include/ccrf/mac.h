@@ -6,13 +6,21 @@
 #define MAC_PKT_OVERHEAD    8
 #define MAC_PKT_SIZE_MAX    ((mac_size_t)(PHY_FRAME_SIZE_MAX - MAC_PKT_OVERHEAD))
 
+#define MAC_ADDR_BCST       ((mac_addr_t) 0u)
+
+#define MAC_FLAG_0          ((mac_flag_t) 0x20u)
+#define MAC_FLAG_1          ((mac_flag_t) 0x40u)
+#define MAC_FLAG_2          ((mac_flag_t) 0x80u)
+#define MAC_FLAG_MASK       (MAC_FLAG_0 | MAC_FLAG_1 | MAC_FLAG_2)
+
 
 typedef struct mac *mac_t;
 
 typedef u16 mac_addr_t;
 typedef u16 mac_size_t;
+typedef u8 mac_flag_t;
 
-typedef void (* mac_recv_t)(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
+typedef void (* mac_recv_t)(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
 
 typedef enum __packed {
     MAC_SEND_DGRM,
@@ -24,11 +32,11 @@ typedef enum __packed {
 
 typedef struct __packed {
     rdio_id_t rdid;
-    bool boss;
-    mac_addr_t addr;
     phy_cell_t cell;
-    mac_recv_t recv;
+    mac_addr_t addr;
+    bool boss;
     phy_sync_t sync;
+    mac_recv_t recv;
 
 } mac_config_t;
 
@@ -51,4 +59,4 @@ phy_t mac_phy(mac_t mac);
 mac_addr_t mac_addr(mac_t mac);
 void mac_stat(mac_t mac, mac_stat_t *stat);
 
-mac_size_t mac_send(mac_t mac, mac_send_t type, mac_addr_t dest, mac_size_t size, u8 data[], bool wait);
+mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mac_size_t size, u8 data[], bool wait);

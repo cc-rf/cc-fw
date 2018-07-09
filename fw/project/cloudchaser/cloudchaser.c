@@ -12,6 +12,7 @@
 #include <kio/uart.h>
 
 #include <ccrf/mac.h>
+#include <ccrf/net.h>
 
 #include <fabi.h>
 
@@ -23,8 +24,13 @@
 
 #define CODE_ID_ECHO        0
 #define CODE_ID_STATUS      1
-#define CODE_ID_SEND        2
-#define CODE_ID_RECV        3
+#define CODE_ID_MAC_SEND    2
+#define CODE_ID_MAC_RECV    3
+#define CODE_ID_SEND        4
+#define CODE_ID_RECV        5
+#define CODE_ID_TRXN        6
+#define CODE_ID_TRXN_REPL   7
+#define CODE_ID_EVNT        8
 #define CODE_ID_RESET       9
 #define CODE_ID_UART        26
 #define CODE_ID_LED         27
@@ -39,6 +45,8 @@
 #else
     #define SERF_USB_PORT       0
 #endif
+
+#define CC_MAC_FLAG         0
 
 
 typedef struct __packed {
@@ -65,7 +73,7 @@ typedef struct __packed {
     pkt_meta_t meta;
     u8 data[];
 
-} code_recv_t;
+} code_mac_recv_t;
 
 typedef struct __packed {
     u8 type;
@@ -75,13 +83,46 @@ typedef struct __packed {
     u16 size;
     u8 data[];
 
+} code_mac_send_t;
+
+typedef struct __packed {
+    net_node_t node;
+    net_port_t port;
+    net_type_t type;
+    net_size_t size;
+    u8 data[];
+
 } code_send_t;
+
+typedef struct __packed {
+    net_node_t node;
+    net_port_t port;
+    net_type_t type;
+    net_size_t size;
+    net_time_t wait;
+    u8 data[];
+
+} code_trxn_t;
 
 typedef struct __packed {
     u16 node;
     u32 stat;
 
-} code_send_stat_t;
+} code_mac_send_stat_t;
+
+typedef struct __packed {
+    net_port_t port;
+    net_type_t type;
+    net_size_t count;
+
+    struct __packed {
+        net_node_t node;
+        net_size_t size;
+        u8 data[];
+
+    } rslt[];
+
+} code_trxn_stat_t;
 
 typedef struct __packed {
     u8 code;
@@ -101,14 +142,19 @@ extern bool pflag_set(void);
 extern bool uflag1_set(void);
 extern bool uflag2_set(void);
 
+static void net_recv(net_t net, net_path_t path, size_t size, u8 data[]);
+
 static void uart_relay_run(void);
 
-static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
+static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data, pkt_meta_t meta);
 static void sync_hook(chan_id_t chan);
 
 static void frame_recv(u8 port, serf_t *frame, size_t size);
 
+static void handle_code_mac_send(u8 port, size_t size, u8 *data);
 static void handle_code_send(u8 port, size_t size, u8 *data);
+static void handle_code_trxn(u8 port, size_t size, u8 *data);
+static void handle_code_trxn_repl(u8 port, size_t size, u8 *data);
 static void handle_code_reset(u8 port, size_t size, u8 *data);
 static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
@@ -117,13 +163,17 @@ static void handle_code_rainbow(size_t size, u8 *data);
 static void handle_code_led(size_t size, u8 *data);
 
 
-static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
+static void write_code_mac_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
+//static void write_code_recv(...);
+//static void write_code_evnt(...);
 static void write_code_status(u8 port, code_status_t *code_status);
-static void write_code_send_stat(u8 port, code_send_stat_t *code_send_stat);
+static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat);
+static void write_code_trxn_stat(u8 port, code_trxn_stat_t *code_trxn_stat);
 
 static void write_code_uart(code_uart_t *code_uart, size_t size);
 
 
+static net_t nets[CLOUDCHASER_RDIO_COUNT];
 static mac_t macs[CLOUDCHASER_RDIO_COUNT];
 
 static code_status_t status;
@@ -196,28 +246,37 @@ void cloudchaser_main(void)
             .stat = {{0}}
     };
 
-    mac_config_t mac_config = {
-            .rdid = 0,
-            .boss = false,
-            .addr = status.node,
-            .cell = 0,
-            .recv = handle_rx,
-            .sync = sync_hook
+    net_config_t net_config = {
+            .phy = {
+                    .rdid = 0,
+                    .cell = 0,
+                    .sync = sync_hook,
+                    .boss = false
+            },
+
+            .mac = {
+                    .addr = status.node,
+                    .recv = mac_recv
+            },
+
+            .net = {
+                    .recv = net_recv
+            }
     };
 
     #if BOARD_REVISION == 2
-        mac_config.boss = pflag_set() || (CLOUDCHASER_FCC_MODE != 0);
+        net_config.phy.boss = pflag_set() || (CLOUDCHASER_FCC_MODE != 0);
     #else
         mac_config.boss = pflag_set();
     #endif
 
-    if (uflag1_set())       mac_config.cell = 0xA1;
-    else if (uflag2_set())  mac_config.cell = 0xA2;
-    else                    mac_config.cell = 0xA0;
+    if (uflag1_set())       net_config.phy.cell = 0xA1;
+    else if (uflag2_set())  net_config.phy.cell = 0xA2;
+    else                    net_config.phy.cell = 0xA0;
 
     printf(
             "\r\nCloud Chaser %08lX%08lX@%02X.%04X\r\n\r\n",
-            (u32)(status.serial >> 32), (u32)status.serial, mac_config.cell, status.node
+            (u32)(status.serial >> 32), (u32)status.serial, net_config.phy.cell, status.node
     );
 
     //rainbow();
@@ -225,19 +284,23 @@ void cloudchaser_main(void)
     led_off(LED_BLUE_0);
     led_off(LED_BLUE_1);
 
-    if (!(macs[0] = mac_init(&mac_config))) {
+    if (!(nets[0] = net_init(&net_config))) {
         return;
     }
 
+    macs[0] = net_mac(nets[0]);
+
     #if CLOUDCHASER_RDIO_COUNT > 1
 
-        mac_config.rdid = 1;
-        mac_config.sync = NULL;
-        mac_config.addr += 1;
+        net_config.phy.rdid = 1;
+        net_config.phy.sync = NULL;
+        net_config.mac.addr += 1;
 
-        if (!(macs[1] = mac_init(&mac_config))) {
+        if (!(nets[1] = net_init(&net_config))) {
             return;
         }
+
+        macs[1] = net_mac(nets[1]);
 
     #endif
 
@@ -252,6 +315,12 @@ void cloudchaser_main(void)
     }
 
     fabi_init();
+}
+
+
+static void net_recv(net_t net, net_path_t path, size_t size, u8 data[])
+{
+
 }
 
 
@@ -283,7 +352,7 @@ static void uart_relay_run(void)
             uart_pkt->code = frame->code;
             memcpy(uart_pkt->data, frame->data, frame_size);
 
-            if (mac_send(macs[0], MAC_SEND_STRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
+            if (mac_send(macs[0], MAC_SEND_STRM, CC_MAC_FLAG, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
                 led_toggle(LED_RGB0_BLUE);
                 led_off(LED_RGB0_RED);
             } else {
@@ -296,7 +365,8 @@ static void uart_relay_run(void)
 }
 
 
-static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta)
+static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data,
+                     pkt_meta_t meta)
 {
     if (uflag1_set() && size >= sizeof(uart_pkt_t) && uart) {
         uart_pkt_t *const uart_pkt = (uart_pkt_t *) data;
@@ -310,7 +380,7 @@ static void handle_rx(mac_t mac, mac_addr_t peer, mac_addr_t dest, mac_size_t si
         }
     }
 
-    write_code_recv(mac_addr(mac), peer, dest, size, data, meta);
+    write_code_mac_recv(mac_addr(mac), peer, dest, size, data, meta);
 }
 
 
@@ -350,6 +420,8 @@ static void sync_hook(chan_id_t chan)
     }
 
     stat_prev = stat;
+
+    if (!chan) net_sync(nets[0]);
 }
 
 
@@ -448,8 +520,14 @@ static void frame_recv(u8 port, serf_t *frame, size_t size)
         case CODE_ID_STATUS:
             return handle_code_status(port, size, frame->data);
 
+        case CODE_ID_MAC_SEND:
+            return handle_code_mac_send(port, size, frame->data);
+
         case CODE_ID_SEND:
             return handle_code_send(port, size, frame->data);
+
+        case CODE_ID_TRXN:
+            return handle_code_trxn(port, size, frame->data);
 
         case CODE_ID_RESET:
             return handle_code_reset(port, size, frame->data);
@@ -470,14 +548,14 @@ static void frame_recv(u8 port, serf_t *frame, size_t size)
 }
 
 
-static void handle_code_send(u8 port, size_t size, u8 *data)
+static void handle_code_mac_send(u8 port, size_t size, u8 *data)
 {
-    assert(size >= sizeof(code_send_t)); assert(data);
+    assert(size >= sizeof(code_mac_send_t)); assert(data);
 
-    code_send_t *const code_send = (code_send_t *)data;
+    code_mac_send_t *const code_send = (code_mac_send_t *)data;
 
-    if (code_send->size != (size - sizeof(code_send_t))) {
-        printf("(send) error: size mismatch: %u != %u\r\n", code_send->size, size - sizeof(code_send_t));
+    if (code_send->size != (size - sizeof(code_mac_send_t))) {
+        printf("(send) error: size mismatch: %u != %u\r\n", code_send->size, size - sizeof(code_mac_send_t));
         return;
     }
 
@@ -488,6 +566,7 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
             const mac_size_t result = mac_send(
                     macs[i],
                     (mac_send_t) code_send->type,
+                    CC_MAC_FLAG,
                     code_send->dest,
                     code_send->size,
                     code_send->data,
@@ -500,17 +579,75 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
             }
 
             if (wait) {
-                code_send_stat_t code_send_stat = {
+                code_mac_send_stat_t code_send_stat = {
                         .node =  mac_addr(macs[i]),
                         .stat = (u32) result
                 };
 
-                write_code_send_stat(port, &code_send_stat);
+                write_code_mac_send_stat(port, &code_send_stat);
             }
 
             break;
         }
     }
+}
+
+
+static void handle_code_send(u8 port, size_t size, u8 *data)
+{
+    assert(size >= sizeof(code_send_t)); assert(data);
+
+    code_send_t *const code_send = (code_send_t *)data;
+
+    if (code_send->size != (size - sizeof(code_send_t))) {
+        printf("(send) error: size mismatch: %u != %u\r\n", code_send->size, size - sizeof(code_send_t));
+        return;
+    }
+    
+    net_path_t path = {
+            .node = code_send->node,
+            .info = {
+                    .port = code_send->port,
+                    .type = code_send->type
+            }
+    };
+    
+    net_send(nets[0], path, code_send->size, data);
+}
+
+
+static void handle_code_trxn(u8 port, size_t size, u8 *data)
+{
+    assert(size >= sizeof(code_send_t)); assert(data);
+
+    code_trxn_t *const code_trxn = (code_trxn_t *)data;
+
+    if (code_trxn->size != (size - sizeof(code_trxn_t))) {
+        printf("(send) error: size mismatch: %u != %u\r\n", code_trxn->size, size - sizeof(code_trxn_t));
+        return;
+    }
+
+    net_path_t path = {
+            .node = code_trxn->node,
+            .info = {
+                    .port = code_trxn->port,
+                    .type = code_trxn->type
+            }
+    };
+
+    // TODO TODO
+}
+
+
+static void handle_code_trxn_repl(u8 port, size_t size, u8 *data)
+{
+    // TODO TODO
+}
+
+
+static void handle_code_evnt(u8 port, size_t size, u8 *data)
+{
+    // TODO TODO
 }
 
 
@@ -564,7 +701,7 @@ static void handle_code_uart(size_t size, u8 *data)
 
         //itm_printf(0, "uart: rf relay %lu byte(s), packet size = %lu\r\n", size - sizeof(code_uart_t), uart_pkt_size);
 
-        if (mac_send(macs[0], MAC_SEND_DGRM, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
+        if (mac_send(macs[0], MAC_SEND_DGRM, CC_MAC_FLAG, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
             led_toggle(LED_RGB0_BLUE);
             led_off(LED_RGB0_RED);
         } else {
@@ -582,13 +719,14 @@ static void handle_code_rainbow(size_t size, u8 *data)
 
 static void handle_code_led(size_t size, u8 *data)
 {
-    fabi_write((fabi_rgb_t *) data, size);
+    u8 mask = data[0];
+    fabi_write(mask, (fabi_rgb_t *) &data[1], size);
 }
 
 
-static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
+static void write_code_mac_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
 {
-    code_recv_t *code_recv = pvPortMalloc(sizeof(code_recv_t) + size); assert(code_recv);
+    code_mac_recv_t *code_recv = pvPortMalloc(sizeof(code_mac_recv_t) + size); assert(code_recv);
 
     code_recv->node = node;
     code_recv->peer = peer;
@@ -597,10 +735,10 @@ static void write_code_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[]
     code_recv->meta = meta;
 
     memcpy(code_recv->data, data, size);
-    size += sizeof(code_recv_t);
+    size += sizeof(code_mac_recv_t);
 
     u8 *frame;
-    size = serf_encode(CODE_ID_RECV, (u8 *)code_recv, size, &frame);
+    size = serf_encode(CODE_ID_MAC_RECV, (u8 *)code_recv, size, &frame);
 
     vPortFree(code_recv);
 
@@ -618,10 +756,18 @@ static void write_code_status(u8 port, code_status_t *code_status)
 }
 
 
-static void write_code_send_stat(u8 port, code_send_stat_t *code_send_stat)
+static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat)
 {
     u8 *frame;
-    const size_t size = serf_encode(CODE_ID_SEND, (u8 *)code_send_stat, sizeof(code_send_stat_t), &frame);
+    const size_t size = serf_encode(CODE_ID_MAC_SEND, (u8 *)code_send_stat, sizeof(code_mac_send_stat_t), &frame);
+    if (frame) usb_write_direct(port, frame, size);
+}
+
+
+static void write_code_trxn_stat(u8 port, code_trxn_stat_t *code_trxn_stat)
+{
+    u8 *frame;
+    const size_t size = serf_encode(CODE_ID_TRXN, (u8 *)code_trxn_stat, sizeof(code_trxn_stat_t), &frame);
     if (frame) usb_write_direct(port, frame, size);
 }
 

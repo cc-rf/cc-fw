@@ -138,7 +138,7 @@
 #define configMAX_CO_ROUTINE_PRIORITIES (2U)
 
 /* Software timer definitions. */
-#define configUSE_TIMERS 0U
+#define configUSE_TIMERS 1U
 #define configTIMER_TASK_PRIORITY (configMAX_PRIORITIES - 1U)
 #define configTIMER_QUEUE_LENGTH 10U
 #define configTIMER_TASK_STACK_DEPTH (configMINIMAL_STACK_SIZE * 2U)

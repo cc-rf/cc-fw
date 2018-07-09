@@ -7,7 +7,7 @@
  * and room for 2 status bytes on receive.
  */
 #define PHY_FRAME_SIZE_MAX  123
-#define PHY_CHAN_COUNT      50u
+#define PHY_CHAN_COUNT      25u
 #define PHY_PWR_MAX         60
 
 typedef struct phy *phy_t;

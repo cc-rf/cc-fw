@@ -10,7 +10,13 @@ include(sys/${CCRF_CONFIG_PLATFORM}/${CCRF_CONFIG_PLATFORM}.cmake)
 
 set(
         CCRF_SOURCES
+        include/ccrf/ccrf.h
+        include/ccrf/list.h
+        include/ccrf/mac.h
+        include/ccrf/net.h
+        include/ccrf/phy.h
         net/mac.c
+        net/net.c
         phy/chan.c
         phy/phy.c
         rdio/rdio.c

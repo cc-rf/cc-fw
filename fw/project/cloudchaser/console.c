@@ -101,7 +101,7 @@ void command_send(u8 size, size_t count)
     console_printf("sending %lu bytes in %lu packets...\r\n", size * count, count);
 
     while (count--)
-        mac_send(console.mac, MAC_SEND_STRM, 0xFFFE, size, data, false);
+        mac_send(console.mac, MAC_SEND_STRM, 0x00, 0xFFFE, size, data, false);
 
     console_printf("send complete.\r\n");
 

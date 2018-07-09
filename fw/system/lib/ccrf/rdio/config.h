@@ -136,7 +136,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_IQIC,              0xD8},
         {CC1200_DEVIATION_M,       0x47},
         #endif
-        {CC1200_MODCFG_DEV_E,      0x2D},
+        {CC1200_MODCFG_DEV_E,      0x0D},
         {CC1200_DCFILT_CFG,        0x0E},
         {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
