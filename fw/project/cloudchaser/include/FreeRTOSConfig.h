@@ -94,6 +94,8 @@
 
 #define pdUS_TO_TICKS( xTimeInUs ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTimeInUs ) * ( TickType_t ) configTICK_RATE_HZ ) / ( TickType_t ) 1000000 ) )
 
+#define pdSEC_TO_TICKS( xTimeInSec ) ( ( TickType_t ) ( ( TickType_t ) ( xTimeInSec ) * ( TickType_t ) configTICK_RATE_HZ ) )
+
 #define pdTICKS_TO_US( xTicks ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTicks ) * ( TickType_t ) 1000000 ) / ( TickType_t ) configTICK_RATE_HZ ) )
 
 #define pdTICKS_TO_MS( xTicks ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTicks ) * ( TickType_t ) 1000 ) / ( TickType_t ) configTICK_RATE_HZ ) )

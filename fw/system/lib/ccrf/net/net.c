@@ -5,6 +5,7 @@
 
 #include "sys/trace.h"
 #include "sys/local.h"
+#include "sys/clock.h"
 
 #include <FreeRTOS.h>
 #include <assert.h>
@@ -21,8 +22,7 @@
 
 
 #define NET_PEER_MAX            64u
-#define NET_PEER_BEACON_TIME    pdMS_TO_TICKS(10000)
-#define NET_PEER_EXPIRE_TIME    (NET_PEER_BEACON_TIME * 3 + pdMS_TO_TICKS(1000))
+#define NET_PEER_EXPIRE_TIME    600u
 #define NET_ASGN_BASE           32u
 
 #define NET_NOTIFY_TRXN_DONE    (1u << 18u)
@@ -71,8 +71,8 @@ struct __packed net {
     
     net_peer_t peer[NET_PEER_MAX];
 
-    TimerHandle_t peer_timer;
-    StaticTimer_t peer_timer_static;
+    TimerHandle_t timer;
+    StaticTimer_t timer_static;
 
     struct list_head txni;
 };
@@ -89,7 +89,7 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
 static void net_core_recv_boss(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg);
 static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg);
 static void net_peer_update(net_t net, net_addr_t addr);
-static void peer_timer(TimerHandle_t timer);
+static void net_timer(TimerHandle_t timer);
 
 
 static struct net nets[CCRF_CONFIG_RDIO_COUNT];
@@ -129,12 +129,12 @@ net_t net_init(net_config_t *config)
 
     net->mac.addr = mac_addr(net->mac.mac);
 
-    net->peer_timer = xTimerCreateStatic(
-            "net.peer", net->boss.boss ? NET_PEER_EXPIRE_TIME : NET_PEER_BEACON_TIME,
-            pdTRUE, net, peer_timer, &net->peer_timer_static
+    net->timer = xTimerCreateStatic(
+            "net.peer", pdSEC_TO_TICKS(NET_PEER_EXPIRE_TIME),
+            pdTRUE, net, net_timer, &net->timer_static
     );
 
-    xTimerStart(net->peer_timer, 0);
+    xTimerStart(net->timer, 0);
 
     INIT_LIST_HEAD(&net->txni);
 
@@ -147,6 +147,12 @@ net_t net_init(net_config_t *config)
 
     _done:
     return net;
+}
+
+
+net_time_t net_time(net_t net)
+{
+    return CCRF_CLOCK_SEC(ccrf_clock());
 }
 
 
@@ -466,7 +472,7 @@ static void net_peer_update(net_t net, net_addr_t addr)
         net_peer_t *peer = &net->peer[pi];
 
         if (peer->addr == addr) {
-            peer->last = xTaskGetTickCount();
+            peer->last = net_time(net);
             return;
         }
 
@@ -475,16 +481,16 @@ static void net_peer_update(net_t net, net_addr_t addr)
 
     if (free < NET_PEER_MAX) {
         net->peer[free].addr = addr;
-        net->peer[free].last = xTaskGetTickCount();
+        net->peer[free].last = net_time(net);
         net_evnt_peer(net, addr, NET_EVENT_PEER_SET);
     }
 }
 
 
-static void peer_timer(TimerHandle_t timer)
+static void net_timer(TimerHandle_t timer)
 {
     net_t net = pvTimerGetTimerID(timer);
-    TickType_t now = xTaskGetTickCount();
+    net_time_t now = net_time(net);
     net_peer_t *peer;
 
     for (net_addr_t pi = 0; pi < NET_PEER_MAX; ++pi) {

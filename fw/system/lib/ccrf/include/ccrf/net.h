@@ -109,6 +109,7 @@ typedef struct __packed {
 
 net_t net_init(net_config_t *config);
 
+net_time_t net_time(net_t net);
 mac_t net_mac(net_t net);
 net_addr_t net_addr(net_t net);
 //net_addr_t net_boss(net_t net);

@@ -4,6 +4,7 @@
 
 
 #define CCRF_CLOCK_MSEC(x)      ((u32)((x)/1000u))
+#define CCRF_CLOCK_SEC(x)       ((u32)((x)/1000000u))
 
 
 typedef u64 ccrf_clock_t;

@@ -759,12 +759,14 @@ static void handle_code_peer(u8 port, size_t size, u8 *data)
 
     code_peer->addr = net_addr(net);
     //code_peer->boss = net_boss(net);
-    code_peer->time = pdTICKS_TO_MS(xTaskGetTickCount());
+    code_peer->time = net_time(net);
 
-    for (net_size_t pi = 0; pi < count; ++pi) {
+    memcpy(code_peer->peer, peer, peer_size);
+
+    /*for (net_size_t pi = 0; pi < count; ++pi) {
         code_peer->peer[pi].addr = peer[pi].addr;
-        code_peer->peer[pi].last = pdTICKS_TO_MS(peer[pi].last);
-    }
+        code_peer->peer[pi].last = peer[pi].last;
+    }*/
 
     if (peer) vPortFree(peer);
 
