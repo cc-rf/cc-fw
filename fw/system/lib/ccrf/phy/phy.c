@@ -548,8 +548,9 @@ static void phy_task(phy_t const restrict phy)
 
                             if (!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)) {
                                 rdio_cca_end(phy->rdio, ccac);
-                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 5));
                             }
+
+                            tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 6));
 
                             if (phy->diag.cw) rdio_cw_set(phy->rdio, true);
 

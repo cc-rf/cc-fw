@@ -567,8 +567,8 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
                     if (!(flag & MAC_FLAG_ACK_RQR) || (peer->seq.num != pkt->seq.num)) {
                         peer->seq.num = pkt->seq.num;
 
-                        if (unblock && (flag & PHY_PKT_FLAG_IMMEDIATE))
-                            unblock = false;
+                        if (!unblock && !(flag & PHY_PKT_FLAG_IMMEDIATE))
+                            unblock = true;
 
                         mac_recv_data_t recv = {
                                 .meta = meta,
