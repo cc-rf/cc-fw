@@ -368,7 +368,7 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
 
     if (!phy_send(mac->phy, phy_flag, (u8 *)pkt, pkt_len)) {
         // Always retry on tx fail, nothing else to do.
-        mac_trace_warn("retry 0x%02X/%u [tx fail]", pkt->seq.num, pkt->size);
+        mac_trace_warn("retry: %04X/%03u/%03u [tx fail]", pkt->dest, pkt->seq.num, pkt->size);
 
         backoff *= 2;
 
@@ -400,8 +400,8 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
                     }
 
                     mac_trace_debug(
-                            "retry: seq=%03u len=%03u",// elaps=%lu",
-                            pkt->seq.num, pkt_len//, elaps
+                            "retry: %04X/%03u/%03u",// elaps=%lu",
+                            pkt->dest, pkt->seq.num, pkt_len//, elaps
                     );
 
                     backoff = (backoff * 3) / 2;

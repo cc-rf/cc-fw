@@ -96,6 +96,7 @@
 
 #define pdTICKS_TO_US( xTicks ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTicks ) * ( TickType_t ) 1000000 ) / ( TickType_t ) configTICK_RATE_HZ ) )
 
+#define pdTICKS_TO_MS( xTicks ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTicks ) * ( TickType_t ) 1000 ) / ( TickType_t ) configTICK_RATE_HZ ) )
 
 /*-----------------------------------------------------------
  * Application specific definitions.

@@ -18,20 +18,19 @@
 #define NET_MODE_FLAG_BCST      ((net_mode_t) (1u << 1u))
 #define NET_MODE_FLAG_CORE      ((net_mode_t) (1u << 0u))
 
-#define NET_NODE_NONE           ((net_node_t) 0u)
-#define NET_NODE_BOSS           ((net_node_t) 1u)
+#define NET_ADDR_NONE           ((net_addr_t) 0u)
+#define NET_ADDR_BOSS           ((net_addr_t) 1u)
 
 
 typedef struct net *net_t;
 
 typedef u16 net_size_t;
 
-typedef u8 net_node_t;
-
 typedef u8 net_mode_t;
 typedef u16 net_port_t;
 typedef u8 net_type_t;
 typedef u32 net_time_t;
+typedef mac_addr_t net_addr_t;
 
 typedef struct __packed {
     net_mode_t mode : NET_MODE_BITS;
@@ -41,16 +40,10 @@ typedef struct __packed {
 } net_info_t;
 
 typedef struct __packed {
-    net_node_t node;
+    net_addr_t addr;
     net_info_t info;
 
 } net_path_t;
-
-typedef struct __packed {
-    mac_addr_t base;
-    net_node_t node;
-
-} net_addr_t;
 
 typedef struct __packed {
     net_addr_t addr;
@@ -60,7 +53,7 @@ typedef struct __packed {
 
 typedef struct __packed {
     struct list_head __list;
-    net_node_t node;
+    net_addr_t addr;
     net_size_t size;
     u8 data[];
 
@@ -69,25 +62,18 @@ typedef struct __packed {
 typedef struct list_head net_trxn_rslt_t;
 
 typedef enum __packed {
-    NET_EVENT_ASSOC,
     NET_EVENT_PEER
 
 } net_event_t;
 
-typedef struct __packed {
-    net_node_t node;
-
-} net_event_assoc_t;
-
 typedef enum __packed {
     NET_EVENT_PEER_SET,
-    NET_EVENT_PEER_REM
+    NET_EVENT_PEER_EXP
 
 } net_event_peer_action_t;
 
 typedef struct __packed {
-    mac_addr_t addr;
-    net_node_t node;
+    net_addr_t addr;
     net_event_peer_action_t action;
 
 } net_event_peer_t;
@@ -124,8 +110,9 @@ typedef struct __packed {
 net_t net_init(net_config_t *config);
 
 mac_t net_mac(net_t net);
-net_node_t net_node(net_t net);
-net_peer_t *net_peers(net_t net);
+net_addr_t net_addr(net_t net);
+//net_addr_t net_boss(net_t net);
+size_t net_peers(net_t net, net_peer_t **peer);
 void net_sync(net_t net);
 
 net_size_t net_send(net_t net, bool trxn_repl, net_path_t path, net_size_t size, u8 data[]);

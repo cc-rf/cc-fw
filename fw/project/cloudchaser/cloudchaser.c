@@ -22,19 +22,20 @@
 
 #define USB_IN_DATA_MAX     (8192 + 64)
 
-#define CODE_ID_ECHO        0
-#define CODE_ID_STATUS      1
-#define CODE_ID_MAC_SEND    2
-#define CODE_ID_MAC_RECV    3
-#define CODE_ID_SEND        4
-#define CODE_ID_RECV        5
-#define CODE_ID_TRXN        6
-#define CODE_ID_TRXN_REPL   7
-#define CODE_ID_EVNT        8
-#define CODE_ID_RESET       9
-#define CODE_ID_UART        26
-#define CODE_ID_LED         27
-#define CODE_ID_RAINBOW     29
+#define CODE_ID_ECHO            0
+#define CODE_ID_STATUS          1
+#define CODE_ID_MAC_SEND        2
+#define CODE_ID_MAC_RECV        3
+#define CODE_ID_SEND            4
+#define CODE_ID_RECV            5
+#define CODE_ID_TRXN            6
+#define CODE_ID_TRXN_REPL       7
+#define CODE_ID_EVNT            8
+#define CODE_ID_PEER            9
+#define CODE_ID_RESET           11
+#define CODE_ID_UART            26
+#define CODE_ID_LED             27
+#define CODE_ID_RAINBOW         29
 
 #define RESET_MAGIC         0xD1E00D1E
 
@@ -86,7 +87,7 @@ typedef struct __packed {
 } code_mac_send_t;
 
 typedef struct __packed {
-    net_node_t node;
+    net_addr_t addr;
     net_port_t port;
     net_type_t type;
     u8 data[];
@@ -94,7 +95,7 @@ typedef struct __packed {
 } code_send_t;
 
 typedef struct __packed {
-    net_node_t node;
+    net_addr_t addr;
     net_port_t port;
     net_type_t type;
     u8 data[];
@@ -102,7 +103,7 @@ typedef struct __packed {
 } code_recv_t;
 
 typedef struct __packed {
-    net_node_t node;
+    net_addr_t addr;
     net_port_t port;
     net_type_t type;
     net_time_t wait;
@@ -117,7 +118,7 @@ typedef struct __packed {
 } code_mac_send_stat_t;
 
 typedef struct __packed {
-    net_node_t node;
+    net_addr_t addr;
     net_port_t port;
     net_type_t type;
     u8 data[];
@@ -126,17 +127,17 @@ typedef struct __packed {
 
 typedef struct __packed {
     net_event_t event;
-    net_node_t node;
-
-} code_evnt_assoc_t;
-
-typedef struct __packed {
-    net_event_t event;
-    mac_addr_t addr;
-    net_node_t node;
+    net_addr_t addr;
     net_event_peer_action_t action;
 
 } code_evnt_peer_t;
+
+typedef struct __packed {
+    net_addr_t addr;
+    net_time_t time;
+    net_peer_t peer[];
+
+} code_peer_t;
 
 typedef struct __packed {
     u8 code;
@@ -171,6 +172,7 @@ static void handle_code_send(u8 port, size_t size, u8 *data, bool trxn_repl);
 static void handle_code_trxn(u8 port, size_t size, u8 *data);
 static void handle_code_reset(u8 port, size_t size, u8 *data);
 static void handle_code_status(u8 port, size_t size, u8 *data);
+static void handle_code_peer(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
 static void handle_code_uart(size_t size, u8 *data);
 static void handle_code_rainbow(size_t size, u8 *data);
@@ -181,6 +183,7 @@ static void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 da
 static void write_code_recv(net_path_t path, size_t size, u8 data[]);
 static void write_code_evnt(net_size_t size, u8 data[]);
 static void write_code_status(u8 port, code_status_t *code_status);
+static void write_code_peer(u8 port, size_t size, code_peer_t *code_peer);
 static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat);
 static void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat);
 
@@ -342,24 +345,12 @@ static void net_recv(net_t net, net_path_t path, size_t size, u8 data[])
 static void net_evnt(net_t net, net_event_t event, void *info)
 {
     switch (event) {
-        case NET_EVENT_ASSOC: {
-            net_event_assoc_t *assoc = info;
-
-            code_evnt_assoc_t code_evnt_assoc = {
-                    .event = event,
-                    .node = assoc->node
-            };
-
-            return write_code_evnt(sizeof(code_evnt_assoc), (u8 *) &code_evnt_assoc);
-        }
-
         case NET_EVENT_PEER: {
             net_event_peer_t *peer = info;
 
             code_evnt_peer_t code_evnt_peer = {
                     .event = event,
                     .addr = peer->addr,
-                    .node = peer->node,
                     .action = peer->action
             };
 
@@ -577,6 +568,9 @@ static void frame_recv(u8 port, serf_t *frame, size_t size)
         case CODE_ID_TRXN_REPL:
             return handle_code_send(port, size, frame->data, true);
 
+        case CODE_ID_PEER:
+            return handle_code_peer(port, size, frame->data);
+
         case CODE_ID_RESET:
             return handle_code_reset(port, size, frame->data);
 
@@ -648,7 +642,7 @@ static void handle_code_send(u8 port, size_t size, u8 *data, bool trxn_repl)
     code_send_t *const code_send = (code_send_t *)data;
     
     net_path_t path = {
-            .node = code_send->node,
+            .addr = code_send->addr,
             .info = {
                     .port = code_send->port,
                     .type = code_send->type
@@ -671,7 +665,7 @@ static void handle_code_trxn(u8 port, size_t size, u8 *data)
     }
 
     net_path_t path = {
-            .node = code_trxn->node,
+            .addr = code_trxn->addr,
             .info = {
                     .port = code_trxn->port,
                     .type = code_trxn->type
@@ -692,7 +686,7 @@ static void handle_code_trxn(u8 port, size_t size, u8 *data)
         list_for_each_entry(trxn, &rslt, __list) {
             trxn_stat = pvPortMalloc(trxn->size + sizeof(code_trxn_stat_t));
 
-            trxn_stat->node = trxn->node;
+            trxn_stat->addr = trxn->addr;
             trxn_stat->port = path.info.port;
             trxn_stat->type = path.info.type;
 
@@ -701,7 +695,7 @@ static void handle_code_trxn(u8 port, size_t size, u8 *data)
             write_code_trxn_stat(port, trxn->size, trxn_stat);
 
             if (list_is_last(&trxn->__list, &rslt) != 0) {
-                trxn_stat->node = NET_NODE_NONE;
+                trxn_stat->addr = NET_ADDR_NONE;
                 write_code_trxn_stat(port, 0, trxn_stat);
             }
 
@@ -709,7 +703,7 @@ static void handle_code_trxn(u8 port, size_t size, u8 *data)
         }
     } else {
         code_trxn_stat_t trxn_stat = {
-                .node = NET_NODE_NONE,
+                .addr = NET_ADDR_NONE,
                 .port = path.info.port,
                 .type = path.info.type
         };
@@ -746,6 +740,37 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
     mac_stat(macs[0], &status.stat);
 
     write_code_status(port, &status);
+}
+
+
+static void handle_code_peer(u8 port, size_t size, u8 *data)
+{
+    (void)size;
+    (void)data;
+
+    net_t net = nets[0];
+
+    net_peer_t *peer;
+
+    size_t count = net_peers(net, &peer);
+    const size_t peer_size = count * sizeof(net_peer_t);
+
+    code_peer_t *code_peer = pvPortMalloc(sizeof(code_peer_t) + peer_size);
+
+    code_peer->addr = net_addr(net);
+    //code_peer->boss = net_boss(net);
+    code_peer->time = pdTICKS_TO_MS(xTaskGetTickCount());
+
+    for (net_size_t pi = 0; pi < count; ++pi) {
+        code_peer->peer[pi].addr = peer[pi].addr;
+        code_peer->peer[pi].last = pdTICKS_TO_MS(peer[pi].last);
+    }
+
+    if (peer) vPortFree(peer);
+
+    write_code_peer(port, peer_size, code_peer);
+
+    vPortFree(code_peer);
 }
 
 
@@ -822,7 +847,7 @@ static void write_code_recv(net_path_t path, size_t size, u8 data[])
 {
     code_recv_t *code_recv = pvPortMalloc(sizeof(code_recv_t) + size);
 
-    code_recv->node = path.node;
+    code_recv->addr = path.addr;
     code_recv->port = path.info.port;
     code_recv->type = path.info.type;
 
@@ -853,6 +878,14 @@ static void write_code_status(u8 port, code_status_t *code_status)
     u8 *frame;
     const size_t size = serf_encode(CODE_ID_STATUS, (u8 *)code_status, sizeof(code_status_t), &frame);
     if (frame) usb_write_direct(port, frame, size);
+}
+
+
+static void write_code_peer(u8 port, size_t size, code_peer_t *code_peer)
+{
+    u8 *frame;
+    const size_t fsize = serf_encode(CODE_ID_PEER, (u8 *)code_peer, size + sizeof(code_peer_t), &frame);
+    if (frame) usb_write_direct(port, frame, fsize);
 }
 
 
