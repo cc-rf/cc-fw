@@ -335,6 +335,7 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
             (u8)(!imm || needs_ack ? PHY_PKT_FLAG_BLOCK : 0);
 
     u8 retry = MAC_PEND_RETRY;
+    TickType_t backoff = pdMS_TO_TICKS(10 + (rand() % 11));
 
     if (!(flag & MAC_FLAG_PKT_BLK)) {
         mac_send_queue_t sq = {
@@ -366,22 +367,18 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
     ///sent = sclk_time();
 
     if (!phy_send(mac->phy, phy_flag, (u8 *)pkt, pkt_len)) {
+        // Always retry on tx fail, nothing else to do.
+        mac_trace_warn("retry 0x%02X/%u [tx fail]", pkt->seq.num, pkt->size);
 
-        if (--retry) {
-            mac_trace_warn("retry 0x%02X/%u [tx fail]", pkt->seq.num, pkt->size);
-            goto _retry_tx;
+        backoff *= 2;
 
-        } else {
-            mac_trace_warn("drop 0x%02X/%u [tx fail]", pkt->seq.num, pkt->size);
+        if (backoff > pdMS_TO_TICKS(100))
+            backoff = pdMS_TO_TICKS(100);
 
-            // TODO: Better cleanup/return flow
+        // ...except back off a good amount.
+        vTaskDelay(backoff);
 
-            if (needs_ack) {
-                mac->pend = (mac_pend_t){ NULL, NULL, 0 };
-            }
-
-            return false;
-        }
+        goto _retry_tx;
     }
 
     if (needs_ack) {
@@ -406,6 +403,9 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
                             "retry: seq=%03u len=%03u",// elaps=%lu",
                             pkt->seq.num, pkt_len//, elaps
                     );
+
+                    backoff = (backoff * 3) / 2;
+                    vTaskDelay(backoff);
 
                     goto _retry_tx;
 
@@ -510,7 +510,7 @@ static void mac_task_recv(mac_t mac)
 static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta)
 {
     mac_pkt_t *pkt = (mac_pkt_t *)data;
-    bool unblock = true;
+    bool unblock = false;
 
     if (size != sizeof(mac_pkt_t) + MIN(pkt->size, MAC_PKT_SIZE_MAX)) {
         mac_trace_debug("(rx) bad length: len=%u != size=%u + base=%u", size, MIN(pkt->size, MAC_PKT_SIZE_MAX), sizeof(mac_pkt_t));
@@ -552,6 +552,8 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
 
                             if (mac->pend.task)
                                 xTaskNotify(mac->pend.task, MAC_NOTIFY_ACK, eSetBits);
+
+                            unblock = true;
 
                         } else {
                             mac_trace_verbose("ack-dup\n");

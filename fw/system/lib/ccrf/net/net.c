@@ -22,12 +22,19 @@
 
 #define NET_PEER_MAX            64u
 #define NET_PEER_BEACON_TIME    pdMS_TO_TICKS(10000)
-#define NET_PEER_EXPIRE_TIME    (NET_PEER_BEACON_TIME * 2)
+#define NET_PEER_EXPIRE_TIME    (NET_PEER_BEACON_TIME * 3 + pdMS_TO_TICKS(1000))
 #define NET_ASGN_BASE           32u
 
 #define NET_NOTIFY_TRXN_DONE    (1u << 18u)
 
 #define NET_MAC_FLAG_NETLAYER   MAC_FLAG_0
+
+#define NET_BOSS_IO_PORT        ((net_port_t) 1u)
+#define NET_BOSS_IO_TYPE_ASGN   ((net_type_t) 1u)
+
+#define NET_EVENT_PORT          ((net_port_t) 2u)
+#define NET_EVENT_TYPE_JOIN     ((net_type_t) 1u)
+#define NET_EVENT_TYPE_HERE     ((net_type_t) 2u)
 
 
 typedef struct __packed {
@@ -49,6 +56,7 @@ typedef struct __packed txni {
 struct __packed net {
     net_node_t node;
     net_recv_t recv;
+    net_evnt_t evnt;
 
     struct {
         mac_t mac;
@@ -77,10 +85,12 @@ static void net_mesg_free(net_mesg_t **mesg);
 static mac_addr_t net_node_dest_mac(net_t net, net_node_t node);
 static net_peer_t *net_peer_from_node(net_t net, net_node_t node);
 static net_peer_t *net_peer_from_mac(net_t net, mac_addr_t addr);
-static void net_trxn_resp(net_t net, net_peer_t *peer, net_txni_t *txni, net_size_t size, u8 data[]);
+static void net_trxn_resp(net_t net, net_node_t node, net_txni_t *txni, net_size_t size, u8 data[]);
 static net_size_t net_send_base(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg);
 static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg);
 static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg);
+static void net_evnt_assoc(net_t net, net_node_t node);
+static void net_evnt_peer(net_t net, mac_addr_t addr, net_node_t node, net_event_peer_action_t action);
 static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
 static void net_core_recv_boss(net_t net, mac_addr_t addr, net_size_t size, net_mesg_t *mesg);
 static void net_core_recv(net_t net, mac_addr_t addr, net_size_t size, net_mesg_t *mesg);
@@ -99,6 +109,7 @@ net_t net_init(net_config_t *config)
 
     net->node = config->phy.boss ? NET_NODE_BOSS : NET_NODE_NONE;
     net->recv = config->net.recv;
+    net->evnt = config->net.evnt;
     
     net->boss.boss = config->phy.boss;
     net->boss.addr = 0;
@@ -223,7 +234,7 @@ static net_peer_t *net_peer_from_mac(net_t net, mac_addr_t addr)
     }
 
     if (peer == NET_PEER_MAX) {
-        if (net->peer[free].addr.base) return NULL;
+        if (free >= NET_PEER_MAX) return NULL;
         peer = free;
     }
 
@@ -255,17 +266,26 @@ void net_sync(net_t net)
 }
 
 
-net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[])
+net_size_t net_send(net_t net, bool trxn_repl, net_path_t path, net_size_t size, u8 data[])
 {
     if (!net->node) {
         net_trace_warn("unable to send: not joined");
         return 0;
     }
 
+    if (trxn_repl && !path.node) {
+        net_trace_warn("unable to send trxn reply: node not set");
+        return 0;
+    }
+
     if (!net->boss.boss && !phy_sync(mac_phy(net->mac.mac))) {
-        net_trace_warn("unable to send: not joined (sync lost)");
         net->node = 0;
         net->boss.addr = 0;
+
+        net_evnt_assoc(net, NET_NODE_NONE);
+
+        net_trace_warn("unable to send: not joined (sync lost)");
+        return 0;
     }
 
     path.info.mode = 0;
@@ -273,7 +293,11 @@ net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[])
     net_mesg_t *mesg = net_mesg_init(net, path, size, data);
     mac_addr_t addr = net_node_dest_mac(net, path.node);
 
-    size = net_send_base(net, addr, size, mesg);
+
+    if (trxn_repl)
+        size = net_send_base(net, addr, size, mesg);
+    else
+        size = net_send_base_dgrm(net, addr, size, mesg);
 
     net_mesg_free(&mesg);
 
@@ -281,20 +305,26 @@ net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[])
 }
 
 
-net_trxn_rslt_t net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry)
+void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry, net_trxn_rslt_t *rslt)
 {
     // TODO: Check that this is NOT receive queue task. Will deadlock.
-    if (!expiry || expiry >= portMAX_DELAY) return NULL;
+    if (!expiry || expiry >= portMAX_DELAY || !rslt) return;
+
+    INIT_LIST_HEAD(rslt);
 
     if (!net->node) {
         net_trace_warn("unable to send trxn: not joined");
-        return NULL;
+        return;
     }
 
     if (!net->boss.boss && !phy_sync(mac_phy(net->mac.mac))) {
-        net_trace_warn("unable to send trxn: not joined (sync lost)");
         net->node = 0;
         net->boss.addr = 0;
+
+        net_evnt_assoc(net, NET_NODE_NONE);
+
+        net_trace_warn("unable to send: not joined (sync lost)");
+        return;
     }
 
     path.info.mode = 0;
@@ -305,16 +335,14 @@ net_trxn_rslt_t net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[],
 
     net_txni_t txni = {
             .path = path,
-            .trxn = pvPortMalloc(sizeof(*txni.trxn)),
+            .trxn = rslt,
             .task = xTaskGetCurrentTaskHandle(),
             .list = LIST_HEAD_INIT(txni.list)
     };
 
-    INIT_LIST_HEAD(txni.trxn);
-
     list_add_tail(&txni.list, &net->txni);
 
-    if (!net_send_base_dgrm(net, addr, size, mesg)) {
+    if (!net_send_base(net, addr, size, mesg)) {
         net_trace_warn("trxn send fail");
         goto _fail;
     }
@@ -323,7 +351,7 @@ net_trxn_rslt_t net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[],
 
     do {
 
-        if (!xTaskNotifyWait(NET_NOTIFY_TRXN_DONE, NET_NOTIFY_TRXN_DONE, &notify, expiry)) {
+        if (!xTaskNotifyWait(NET_NOTIFY_TRXN_DONE, NET_NOTIFY_TRXN_DONE, &notify, pdMS_TO_TICKS(expiry))) {
             notify = 0;
             break;
         }
@@ -334,53 +362,40 @@ net_trxn_rslt_t net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[],
     goto _done;
     _fail:
 
-    if (txni.trxn) net_trxn_rslt_free(&txni.trxn);
+    net_trxn_rslt_free(txni.trxn);
 
     _done:
 
     list_del(&txni.list);
 
-    return txni.trxn;
-}
-
-
-net_size_t net_trxn_repl(net_t net, net_path_t path, net_size_t size, u8 data[])
-{
-    if (!path.node) {
-        net_trace_warn("unable to send trxn reply: node not set");
-        return 0;
-    }
-
-    return net_send(net, path, size, data);
+    net_mesg_free(&mesg);
 }
 
 
 void net_trxn_rslt_free(net_trxn_rslt_t *rslt)
 {
-    if (*rslt) {
+    if (rslt) {
         net_trxn_t *trxn, *trxn_t;
 
-        list_for_each_entry_safe(trxn, trxn_t, (struct list_head *) *rslt, __list) {
+        list_for_each_entry_safe(trxn, trxn_t, rslt, __list) {
             list_del(&trxn->__list);
             vPortFree(trxn);
         }
-
-        vPortFree(*rslt);
-        *rslt = NULL;
     }
 }
 
 
-static void net_trxn_resp(net_t net, net_peer_t *peer, net_txni_t *txni, net_size_t size, u8 data[])
+static void net_trxn_resp(net_t net, net_node_t node, net_txni_t *txni, net_size_t size, u8 data[])
 {
     // TODO: Is a race condition possible here?
 
     net_trxn_t *trxn = pvPortMalloc(sizeof(*trxn) + size);
-    trxn->node = peer->addr.node;
+    trxn->node = node;
     trxn->size = size;
 
-    if (size)
+    if (size) {
         memcpy(trxn->data, data, size);
+    }
 
     list_add_tail(&trxn->__list, txni->trxn);
 
@@ -398,8 +413,7 @@ static net_size_t net_send_base(net_t net, mac_addr_t dest, net_size_t size, net
     } else {
         size += sizeof(net_mesg_t);
         mesg->dest.info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
-        return (net_size_t) mac_send(net->mac.mac, MAC_SEND_MESG, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, true);
-    }
+        return (net_size_t) mac_send(net->mac.mac, MAC_SEND_MESG, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, false/*true?*/);    }
 }
 
 
@@ -410,7 +424,7 @@ static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size
     } else {
         size += sizeof(net_mesg_t);
         mesg->dest.info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
-        return (net_size_t) mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, false /*true?*/);
+        return (net_size_t) mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, false);
     }
 }
 
@@ -420,6 +434,28 @@ static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mes
     size += sizeof(net_mesg_t);
     mesg->dest.info.mode |= NET_MODE_FLAG_BCST;
     return (net_size_t) mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, MAC_ADDR_BCST, size, (u8 *) mesg, false);
+}
+
+
+static void net_evnt_assoc(net_t net, net_node_t node)
+{
+    net_event_assoc_t event = {
+            .node = node
+    };
+
+    return net->evnt(net, NET_EVENT_ASSOC, &event);
+}
+
+
+static void net_evnt_peer(net_t net, mac_addr_t addr, net_node_t node, net_event_peer_action_t action)
+{
+    net_event_peer_t event = {
+            .addr = addr,
+            .node = node,
+            .action = action
+    };
+
+    return net->evnt(net, NET_EVENT_PEER, &event);
 }
 
 
@@ -439,11 +475,13 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
         return;
     }
 
-    /*net_trace_verbose(
-            "net: %04X.%02X->%04X.%02X %u:%u:%u",
-            peer, mesg->node, dest, mesg->dest.node,
-            mesg->dest.info.mode, mesg->dest.info.port, mesg->dest.info.type
-    );*/
+    if (!(mesg->dest.info.mode & NET_MODE_FLAG_CORE)) {
+        net_trace_verbose(
+                "net: %04X.%02X->%04X.%02X %u:%u:%u",
+                peer, mesg->node, dest, mesg->dest.node,
+                mesg->dest.info.mode, mesg->dest.info.port, mesg->dest.info.type
+        );
+    }
 
     if (dest && (dest != net->mac.addr))
         return;
@@ -469,34 +507,36 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
             return net_core_recv(net, peer, size - sizeof(net_mesg_t), mesg);
         }
     } else if (mesg->node) {
-        net_peer_t *net_peer = net_peer_from_node(net, mesg->node);
 
-        if (!net_peer || peer != net_peer->addr.base) {
-            net_core_event_join(net, peer, mesg);
-
-            net_peer = net_peer_from_node(net, mesg->node);
+        if (mesg->node != NET_NODE_BOSS) {
+            net_peer_t *net_peer = net_peer_from_node(net, mesg->node);
 
             if (!net_peer || peer != net_peer->addr.base) {
-                net_trace_warn("unable to recv: no peer entry for %04X.%02X", peer, mesg->node);
-                return;
+                net_core_event_join(net, peer, mesg);
+
+                net_peer = net_peer_from_node(net, mesg->node);
+
+                if (!net_peer || peer != net_peer->addr.base) {
+                    net_trace_warn("unable to recv: no peer entry for %04X.%02X", peer, mesg->node);
+                    return;
+                }
             }
         }
 
         net_txni_t *txni;
 
         list_for_each_entry(txni, &net->txni, list) {
-            const bool match = net_info_match(&txni->path.info, &mesg->dest.info);
+            const bool match = net_path_info_match_port_type(&txni->path.info, &mesg->dest.info);
 
-            if (match && (!txni->path.node || (txni->path.node == mesg->node))) {
-                return net_trxn_resp(net, net_peer, txni, size - sizeof(net_mesg_t), mesg->data);
-            }
+            if (match && (!txni->path.node || (txni->path.node == mesg->node)))
+                return net_trxn_resp(net, mesg->node, txni, size - sizeof(net_mesg_t), mesg->data);
         }
 
         net_path_t addr = {
                 .node = mesg->node,
                 .info = mesg->dest.info
         };
-        
+
         return net->recv(net, addr, size - sizeof(net_mesg_t), mesg->data);
     }
 }
@@ -538,8 +578,14 @@ static void net_core_recv_boss(net_t net, mac_addr_t addr, net_size_t size, net_
                     if (net_send_base_dgrm(net, addr, 0, &resp)) {
                         peer->addr.base = addr;
                         peer->last = xTaskGetTickCount();
+
+                        net_evnt_peer(net, peer->addr.base, peer->addr.node, NET_EVENT_PEER_SET);
+
                         net_trace_debug("join %04X.%02X", addr, peer->addr.node);
+
                     } else {
+                        net_evnt_peer(net, addr, peer->addr.node, NET_EVENT_PEER_REM);
+
                         net_trace_warn("join %04X.%02X fail", addr, peer->addr.node);
                     }
 
@@ -582,19 +628,19 @@ static void net_core_recv(net_t net, mac_addr_t addr, net_size_t size, net_mesg_
             switch (mesg->dest.info.type) {
 
                 case NET_BOSS_IO_TYPE_ASGN:
-                    if (!mesg->dest.node) return; assert((net->node == NET_NODE_NONE) ^ (mesg->dest.node == net->node));
+                    if (!mesg->dest.node) return;
 
                     if (net->node) {
-                        net_trace_verbose("joining: %04X.[%02X->%02X]", net->mac.addr, net->node, mesg->dest.node);
+                        net_trace_debug("joining: %04X.[%02X->%02X]", net->mac.addr, net->node, mesg->dest.node);
                     } else {
-                        net_trace_verbose("joining: %04X.%02X", net->mac.addr, mesg->dest.node);
+                        net_trace_debug("joining: %04X.%02X", net->mac.addr, mesg->dest.node);
                     }
 
                     net->node = mesg->dest.node;
 
                     if (!net->boss.addr) {
-                        net_trace_verbose("boss found: %04X", addr);
                         net->boss.addr = addr;
+                        net_trace_verbose("boss found: %04X", addr);
                     }
 
                     net_mesg_t announce = {
@@ -610,8 +656,12 @@ static void net_core_recv(net_t net, mac_addr_t addr, net_size_t size, net_mesg_
                     };
 
                     if (net_send_base_bcst(net, 0, &announce)) {
+                        net_evnt_assoc(net, net->node);
                         net_trace_debug("join as %04X.%02X", net->mac.addr, net->node);
+
                     } else {
+                        net->node = 0;
+                        net_evnt_assoc(net, 0);
                         net_trace_warn("join as %04X.%02X fail", net->mac.addr, net->node);
                     }
 
@@ -646,14 +696,27 @@ static void net_core_event_join(net_t net, mac_addr_t addr, net_mesg_t *mesg)
 {
     net_trace_verbose("announce from %04X.%02X", addr, mesg->node);
 
+    if (mesg->node == net->node) {
+        net_trace_debug(
+                "announce %04X.%02X but this node is %04X.%02X: ignore",
+                addr, mesg->node,
+                net->mac.addr, net->node
+        );
+
+        return;
+    }
+
     net_peer_t *peer = net_peer_from_mac(net, addr);
     if (!peer) return;
 
     if (peer->addr.base == addr) {
         if (peer->addr.node != mesg->node) {
-            net_trace_verbose("mismatch %04X.[%02X != %02X]", addr, mesg->node, peer->addr.node);
+            net_evnt_peer(net, addr, peer->addr.node, NET_EVENT_PEER_REM);
+
             peer->addr.base = 0;
             peer = NULL;
+
+            net_trace_debug("mismatch %04X.[%02X != %02X]", addr, mesg->node, peer->addr.node);
         }
     } else {
         peer = NULL;
@@ -666,14 +729,20 @@ static void net_core_event_join(net_t net, mac_addr_t addr, net_mesg_t *mesg)
         if (peer->addr.base && peer->addr.base != addr) {
             if (!net->boss.boss) {
                 if (mesg->dest.info.port == NET_EVENT_PORT && mesg->dest.info.type == NET_EVENT_TYPE_JOIN) {
+
+                    net_evnt_peer(net, peer->addr.base, peer->addr.node, NET_EVENT_PEER_REM);
+
+                    peer->addr.base = addr;
+                    peer->last = xTaskGetTickCount();
+
+                    net_evnt_peer(net, peer->addr.base, peer->addr.node, NET_EVENT_PEER_SET);
+
                     net_trace_verbose(
                             "update %04X.[%02X->%02X]: owned by %04X (overwrite)",
                             addr, peer->addr.node, mesg->node, peer->addr.base
                     );
-                    
-                    peer->addr.base = addr;
-                    peer->last = xTaskGetTickCount();
-                    
+
+
                 } else {
                     // TODO: What if first join was missed and old node id is stale??
                     
@@ -686,15 +755,28 @@ static void net_core_event_join(net_t net, mac_addr_t addr, net_mesg_t *mesg)
                 return;
             }
 
-            net_node_t node_prev = peer->addr.node; assert(node_prev != mesg->node);
+            net_node_t node_prev = peer->addr.node;
+
+            // NOTE: This assert fails sometimes. TODO: Debug.
+            if (node_prev == mesg->node) {
+                net_trace_debug(
+                        "node_prev=%02X mesg->node=%02X peer_addr_base=%04X addr=%04X",
+                        node_prev, mesg->node, peer->addr.base, addr
+                );
+            }
+
+            assert(node_prev == mesg->node);
 
             peer = net_peer_from_mac(net, addr);
-            if (!peer) return;
+            if (!peer) {
+                net_trace_debug("reassign: peer pointer null!");
+            }
 
-            net_trace_verbose(
+            net_evnt_peer(net, addr, node_prev, NET_EVENT_PEER_REM);
+
+            net_trace_debug(
                     "reassign %04X.[%02X->%02X]: %02X was taken", addr, mesg->node, peer->addr.node, node_prev
             );
-
 
             net_mesg_t asgn = {
                     .node = net->node,
@@ -708,19 +790,30 @@ static void net_core_event_join(net_t net, mac_addr_t addr, net_mesg_t *mesg)
                     }
             };
 
+            net_evnt_peer(net, peer->addr.base, peer->addr.node, NET_EVENT_PEER_REM);
+
             if (net_send_base_dgrm(net, addr, 0, &asgn)) {
                 peer->addr.base = addr;
                 peer->last = xTaskGetTickCount();
+
+                net_evnt_peer(net, addr, peer->addr.node, NET_EVENT_PEER_SET);
+
                 net_trace_verbose("reassign %04X.[%02X->%02X]", addr, node_prev, peer->addr.node);
             } else {
                 net_trace_verbose("reassign %04X.[%02X->%02X] fail", addr, node_prev, peer->addr.node);
             }
 
+            return;
+
         } else {
+            // TODO: When boss, need to do anything else here? Hmm.
+            //      Gets here on rx after expiry.
             net_trace_debug("add %04X.%02X", addr, peer->addr.node);
         }
 
         peer->addr.base = addr;
+
+        net_evnt_peer(net, addr, peer->addr.node, NET_EVENT_PEER_SET);
     }
 
     peer->last = xTaskGetTickCount();
@@ -737,18 +830,23 @@ static void peer_timer(TimerHandle_t timer)
         peer = &net->peer[pi];
 
         if (peer->addr.base && (now - peer->last) >= NET_PEER_EXPIRE_TIME) {
-            net_trace_debug("expire %04X.%02X (%lu -> %lu)", peer->addr, peer->addr.node, peer->last, now);
+            net_evnt_peer(net, peer->addr.base, peer->addr.node, NET_EVENT_PEER_REM);
+
+            net_trace_debug("expire %04X.%02X (%lu -> %lu)", peer->addr.base, peer->addr.node, peer->last, now);
+
             peer->addr.base = 0;
             peer->last = 0;
         }
-
     }
 
     if (!net->boss.boss && net->node) {
         if (!phy_sync(mac_phy(net->mac.mac))) {
-            net_trace_debug("leave %04X.%02X", net->mac.addr, net->node);
             net->node = NET_NODE_NONE;
             net->boss.addr = 0;
+
+            net_evnt_assoc(net, 0x00);
+
+            net_trace_debug("leave %04X.%02X", net->mac.addr, net->node);
         } else {
             net_trace_verbose("announce %04X.%02X", net->mac.addr, net->node);
 

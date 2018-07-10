@@ -53,7 +53,7 @@ typedef struct __packed {
     u32 version;
     u64 serial;
     u32 uptime;
-    u16 node;
+    u16 macid;
     mac_stat_t stat;
 
     // TODO: Add error stats, maybe fragment stats, and heap stats
@@ -66,7 +66,7 @@ typedef struct __packed {
 } code_reset_t;
 
 typedef struct __packed {
-    u16 node;
+    u16 addr;
     u16 peer;
     u16 dest;
     u16 size;
@@ -78,7 +78,7 @@ typedef struct __packed {
 typedef struct __packed {
     u8 type;
     u8 flag;
-    u16 node;
+    u16 addr;
     u16 dest;
     u16 size;
     u8 data[];
@@ -89,7 +89,6 @@ typedef struct __packed {
     net_node_t node;
     net_port_t port;
     net_type_t type;
-    net_size_t size;
     u8 data[];
 
 } code_send_t;
@@ -98,31 +97,46 @@ typedef struct __packed {
     net_node_t node;
     net_port_t port;
     net_type_t type;
-    net_size_t size;
+    u8 data[];
+
+} code_recv_t;
+
+typedef struct __packed {
+    net_node_t node;
+    net_port_t port;
+    net_type_t type;
     net_time_t wait;
     u8 data[];
 
 } code_trxn_t;
 
 typedef struct __packed {
-    u16 node;
+    u16 addr;
     u32 stat;
 
 } code_mac_send_stat_t;
 
 typedef struct __packed {
+    net_node_t node;
     net_port_t port;
     net_type_t type;
-    net_size_t count;
-
-    struct __packed {
-        net_node_t node;
-        net_size_t size;
-        u8 data[];
-
-    } rslt[];
+    u8 data[];
 
 } code_trxn_stat_t;
+
+typedef struct __packed {
+    net_event_t event;
+    net_node_t node;
+
+} code_evnt_assoc_t;
+
+typedef struct __packed {
+    net_event_t event;
+    mac_addr_t addr;
+    net_node_t node;
+    net_event_peer_action_t action;
+
+} code_evnt_peer_t;
 
 typedef struct __packed {
     u8 code;
@@ -143,6 +157,7 @@ extern bool uflag1_set(void);
 extern bool uflag2_set(void);
 
 static void net_recv(net_t net, net_path_t path, size_t size, u8 data[]);
+static void net_evnt(net_t net, net_event_t event, void *info);
 
 static void uart_relay_run(void);
 
@@ -152,9 +167,8 @@ static void sync_hook(chan_id_t chan);
 static void frame_recv(u8 port, serf_t *frame, size_t size);
 
 static void handle_code_mac_send(u8 port, size_t size, u8 *data);
-static void handle_code_send(u8 port, size_t size, u8 *data);
+static void handle_code_send(u8 port, size_t size, u8 *data, bool trxn_repl);
 static void handle_code_trxn(u8 port, size_t size, u8 *data);
-static void handle_code_trxn_repl(u8 port, size_t size, u8 *data);
 static void handle_code_reset(u8 port, size_t size, u8 *data);
 static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
@@ -163,12 +177,12 @@ static void handle_code_rainbow(size_t size, u8 *data);
 static void handle_code_led(size_t size, u8 *data);
 
 
-static void write_code_mac_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
-//static void write_code_recv(...);
-//static void write_code_evnt(...);
+static void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
+static void write_code_recv(net_path_t path, size_t size, u8 data[]);
+static void write_code_evnt(net_size_t size, u8 data[]);
 static void write_code_status(u8 port, code_status_t *code_status);
 static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat);
-static void write_code_trxn_stat(u8 port, code_trxn_stat_t *code_trxn_stat);
+static void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat);
 
 static void write_code_uart(code_uart_t *code_uart, size_t size);
 
@@ -242,7 +256,7 @@ void cloudchaser_main(void)
             .version = 0,
             .serial = uid(),
             .uptime = 0,
-            .node = uid_short(),
+            .macid = uid_short(),
             .stat = {{0}}
     };
 
@@ -255,12 +269,13 @@ void cloudchaser_main(void)
             },
 
             .mac = {
-                    .addr = status.node,
+                    .addr = status.macid,
                     .recv = mac_recv
             },
 
             .net = {
-                    .recv = net_recv
+                    .recv = net_recv,
+                    .evnt = net_evnt
             }
     };
 
@@ -276,7 +291,7 @@ void cloudchaser_main(void)
 
     printf(
             "\r\nCloud Chaser %08lX%08lX@%02X.%04X\r\n\r\n",
-            (u32)(status.serial >> 32), (u32)status.serial, net_config.phy.cell, status.node
+            (u32)(status.serial >> 32), (u32)status.serial, net_config.phy.cell, status.macid
     );
 
     //rainbow();
@@ -320,7 +335,37 @@ void cloudchaser_main(void)
 
 static void net_recv(net_t net, net_path_t path, size_t size, u8 data[])
 {
+    return write_code_recv(path, size, data);
+}
 
+
+static void net_evnt(net_t net, net_event_t event, void *info)
+{
+    switch (event) {
+        case NET_EVENT_ASSOC: {
+            net_event_assoc_t *assoc = info;
+
+            code_evnt_assoc_t code_evnt_assoc = {
+                    .event = event,
+                    .node = assoc->node
+            };
+
+            return write_code_evnt(sizeof(code_evnt_assoc), (u8 *) &code_evnt_assoc);
+        }
+
+        case NET_EVENT_PEER: {
+            net_event_peer_t *peer = info;
+
+            code_evnt_peer_t code_evnt_peer = {
+                    .event = event,
+                    .addr = peer->addr,
+                    .node = peer->node,
+                    .action = peer->action
+            };
+
+            return write_code_evnt(sizeof(code_evnt_peer), (u8 *) &code_evnt_peer);
+        }
+    }
 }
 
 
@@ -524,10 +569,13 @@ static void frame_recv(u8 port, serf_t *frame, size_t size)
             return handle_code_mac_send(port, size, frame->data);
 
         case CODE_ID_SEND:
-            return handle_code_send(port, size, frame->data);
+            return handle_code_send(port, size, frame->data, false);
 
         case CODE_ID_TRXN:
             return handle_code_trxn(port, size, frame->data);
+
+        case CODE_ID_TRXN_REPL:
+            return handle_code_send(port, size, frame->data, true);
 
         case CODE_ID_RESET:
             return handle_code_reset(port, size, frame->data);
@@ -560,7 +608,7 @@ static void handle_code_mac_send(u8 port, size_t size, u8 *data)
     }
 
     for (u8 i = 0; i < CLOUDCHASER_RDIO_COUNT; ++i) {
-        if (!code_send->node || code_send->node == mac_addr(macs[i])) {
+        if (!code_send->addr || code_send->addr == mac_addr(macs[i])) {
             const bool wait = (code_send->flag & CODE_SEND_FLAG_WAIT) != 0;
 
             const mac_size_t result = mac_send(
@@ -580,7 +628,7 @@ static void handle_code_mac_send(u8 port, size_t size, u8 *data)
 
             if (wait) {
                 code_mac_send_stat_t code_send_stat = {
-                        .node =  mac_addr(macs[i]),
+                        .addr =  mac_addr(macs[i]),
                         .stat = (u32) result
                 };
 
@@ -593,16 +641,11 @@ static void handle_code_mac_send(u8 port, size_t size, u8 *data)
 }
 
 
-static void handle_code_send(u8 port, size_t size, u8 *data)
+static void handle_code_send(u8 port, size_t size, u8 *data, bool trxn_repl)
 {
     assert(size >= sizeof(code_send_t)); assert(data);
 
     code_send_t *const code_send = (code_send_t *)data;
-
-    if (code_send->size != (size - sizeof(code_send_t))) {
-        printf("(send) error: size mismatch: %u != %u\r\n", code_send->size, size - sizeof(code_send_t));
-        return;
-    }
     
     net_path_t path = {
             .node = code_send->node,
@@ -611,19 +654,19 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
                     .type = code_send->type
             }
     };
-    
-    net_send(nets[0], path, code_send->size, data);
+
+    net_send(nets[0], trxn_repl, path, (net_size_t)size - sizeof(code_send_t), code_send->data);
 }
 
 
 static void handle_code_trxn(u8 port, size_t size, u8 *data)
 {
-    assert(size >= sizeof(code_send_t)); assert(data);
+    assert(size >= sizeof(code_trxn_t)); assert(data);
 
     code_trxn_t *const code_trxn = (code_trxn_t *)data;
 
-    if (code_trxn->size != (size - sizeof(code_trxn_t))) {
-        printf("(send) error: size mismatch: %u != %u\r\n", code_trxn->size, size - sizeof(code_trxn_t));
+    if (!code_trxn->wait || code_trxn->wait > INT32_MAX) {
+        printf("(trxn) error: bad wait time %lu\r\n", code_trxn->wait);
         return;
     }
 
@@ -635,19 +678,46 @@ static void handle_code_trxn(u8 port, size_t size, u8 *data)
             }
     };
 
-    // TODO TODO
-}
+    net_trxn_rslt_t rslt;
 
+    net_trxn(
+            nets[0], path, (net_size_t)size - sizeof(code_trxn_t),
+            code_trxn->data, code_trxn->wait, &rslt
+    );
 
-static void handle_code_trxn_repl(u8 port, size_t size, u8 *data)
-{
-    // TODO TODO
-}
+    if (!list_empty(&rslt)) {
+        net_trxn_t *trxn;
+        code_trxn_stat_t *trxn_stat;
 
+        list_for_each_entry(trxn, &rslt, __list) {
+            trxn_stat = pvPortMalloc(trxn->size + sizeof(code_trxn_stat_t));
 
-static void handle_code_evnt(u8 port, size_t size, u8 *data)
-{
-    // TODO TODO
+            trxn_stat->node = trxn->node;
+            trxn_stat->port = path.info.port;
+            trxn_stat->type = path.info.type;
+
+            if (trxn->size) memcpy(trxn_stat->data, trxn->data, trxn->size);
+
+            write_code_trxn_stat(port, trxn->size, trxn_stat);
+
+            if (list_is_last(&trxn->__list, &rslt) != 0) {
+                trxn_stat->node = NET_NODE_NONE;
+                write_code_trxn_stat(port, 0, trxn_stat);
+            }
+
+            vPortFree(trxn_stat);
+        }
+    } else {
+        code_trxn_stat_t trxn_stat = {
+                .node = NET_NODE_NONE,
+                .port = path.info.port,
+                .type = path.info.type
+        };
+
+        write_code_trxn_stat(port, 0, &trxn_stat);
+    }
+
+    net_trxn_rslt_free(&rslt);
 }
 
 
@@ -724,17 +794,17 @@ static void handle_code_led(size_t size, u8 *data)
 }
 
 
-static void write_code_mac_recv(u16 node, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
+static void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
 {
-    code_mac_recv_t *code_recv = pvPortMalloc(sizeof(code_mac_recv_t) + size); assert(code_recv);
+    code_mac_recv_t *code_recv = pvPortMalloc(sizeof(code_mac_recv_t) + size);
 
-    code_recv->node = node;
+    code_recv->addr = addr;
     code_recv->peer = peer;
     code_recv->dest = dest;
     code_recv->size = (u16)size;
     code_recv->meta = meta;
 
-    memcpy(code_recv->data, data, size);
+    if (size) memcpy(code_recv->data, data, size);
     size += sizeof(code_mac_recv_t);
 
     u8 *frame;
@@ -745,6 +815,36 @@ static void write_code_mac_recv(u16 node, u16 peer, u16 dest, size_t size, u8 da
     if (frame) {
         usb_write_direct(SERF_USB_PORT, frame, size);
     }
+}
+
+
+static void write_code_recv(net_path_t path, size_t size, u8 data[])
+{
+    code_recv_t *code_recv = pvPortMalloc(sizeof(code_recv_t) + size);
+
+    code_recv->node = path.node;
+    code_recv->port = path.info.port;
+    code_recv->type = path.info.type;
+
+    if (size) memcpy(code_recv->data, data, size);
+    size += sizeof(code_recv_t);
+
+    u8 *frame;
+    size = serf_encode(CODE_ID_RECV, (u8 *)code_recv, size, &frame);
+
+    vPortFree(code_recv);
+
+    if (frame) {
+        usb_write_direct(SERF_USB_PORT, frame, size);
+    }
+}
+
+
+static void write_code_evnt(net_size_t size, u8 data[])
+{
+    u8 *frame;
+    const size_t fsize = serf_encode(CODE_ID_EVNT, data, size, &frame);
+    if (frame) usb_write_direct(SERF_USB_PORT, frame, fsize);
 }
 
 
@@ -764,11 +864,11 @@ static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_st
 }
 
 
-static void write_code_trxn_stat(u8 port, code_trxn_stat_t *code_trxn_stat)
+static void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat)
 {
     u8 *frame;
-    const size_t size = serf_encode(CODE_ID_TRXN, (u8 *)code_trxn_stat, sizeof(code_trxn_stat_t), &frame);
-    if (frame) usb_write_direct(port, frame, size);
+    const size_t fsize = serf_encode(CODE_ID_TRXN, (u8 *)code_trxn_stat, size + sizeof(code_trxn_stat_t), &frame);
+    if (frame) usb_write_direct(port, frame, fsize);
 }
 
 
