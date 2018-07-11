@@ -42,7 +42,6 @@ void phy_hops(phy_t phy, chan_id_t chan[]);
 
 void phy_stat(phy_t phy, phy_stat_t *stat);
 phy_cell_t phy_cell(phy_t phy);
-bool phy_boss(phy_t phy);
 bool phy_sync(phy_t phy);
 bool phy_hgm(phy_t phy);
 u8 phy_pwr(phy_t phy);

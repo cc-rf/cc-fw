@@ -158,7 +158,6 @@ mac_t mac_init(mac_config_t *config)
 
     phy_config_t phy_config = {
             .rdid = config->rdid,
-            .boss = config->boss,
             .cell = config->cell,
             .sync = config->sync,
             .recv = (phy_recv_t) mac_phy_recv,

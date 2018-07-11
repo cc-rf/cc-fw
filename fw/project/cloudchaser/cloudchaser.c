@@ -272,7 +272,6 @@ void cloudchaser_main(void)
                     .rdid = 0,
                     .cell = 0,
                     .sync = sync_hook,
-                    .boss = false
             },
 
             .mac = {
@@ -285,12 +284,6 @@ void cloudchaser_main(void)
                     .evnt = net_evnt
             }
     };
-
-    #if BOARD_REVISION == 2
-        net_config.phy.boss = pflag_set() || (CLOUDCHASER_FCC_MODE != 0);
-    #else
-        mac_config.boss = pflag_set();
-    #endif
 
     if (uflag1_set())       net_config.phy.cell = 0xA1;
     else if (uflag2_set())  net_config.phy.cell = 0xA2;
@@ -778,15 +771,9 @@ static void handle_code_peer(u8 port, size_t size, u8 *data)
     code_peer_t *code_peer = pvPortMalloc(sizeof(code_peer_t) + peer_size);
 
     code_peer->addr = net_addr(net);
-    //code_peer->boss = net_boss(net);
     code_peer->time = net_time(net);
 
     memcpy(code_peer->peer, peer, peer_size);
-
-    /*for (net_size_t pi = 0; pi < count; ++pi) {
-        code_peer->peer[pi].addr = peer[pi].addr;
-        code_peer->peer[pi].last = peer[pi].last;
-    }*/
 
     if (peer) vPortFree(peer);
 

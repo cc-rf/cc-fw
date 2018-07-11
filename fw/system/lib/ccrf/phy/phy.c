@@ -49,6 +49,8 @@
 #define CALLER_NOTIFY_TX_MASK   (CALLER_NOTIFY_TX_DONE | CALLER_NOTIFY_TX_FAIL)
 
 #define PHY_SYNC_MAGIC          ((u8) 0x69)
+#define PHY_SYNC_CYCLE_COUNT    10
+
 
 typedef struct __packed {
     u8 size;
@@ -77,7 +79,8 @@ typedef struct __packed {
 
 typedef struct __packed {
     phy_pkt_hdr_t hdr;
-    u8 magic;
+    bool stay : 1;
+    u8 magic : 7;
 
 } phy_sync_pkt_t;
 
@@ -114,6 +117,8 @@ struct __packed phy {
     ccrf_timer_t hop_timer;
     volatile phy_static_pkt_t pkt_ack;
     volatile ccrf_clock_t sync_time;
+    u8 cycle;
+    chan_id_t stay;
 
     TaskHandle_t task;
     StaticTask_t task_static;
@@ -151,7 +156,7 @@ phy_t phy_init(phy_config_t *config)
 
     memset(phy, 0, sizeof(struct phy));
 
-    phy->boss = config->boss;
+    phy->boss = true;
     phy->cell = config->cell;
     phy->sync = config->sync;
     phy->recv = config->recv;
@@ -259,11 +264,6 @@ rdio_t phy_rdio(phy_t phy)
 phy_cell_t phy_cell(phy_t phy)
 {
     return phy->cell;
-}
-
-bool phy_boss(phy_t phy)
-{
-    return phy->boss;
 }
 
 bool phy_sync(phy_t phy)
@@ -435,18 +435,15 @@ static void phy_task(phy_t const restrict phy)
                     .size = sizeof(phy_sync_pkt_t) - 1,
                     .flag = (u8)(PHY_PKT_FLAG_IMMEDIATE | PHY_PKT_FLAG_SYNC)
             },
-            .magic = PHY_SYNC_MAGIC
+            .magic = PHY_SYNC_MAGIC,
+            .stay = 0
     };
 
     bool sync_needed = false;
     phy->sync_time = 0;
+    phy->cycle = 1;
 
-    if (phy->boss) {
-        xTaskNotify(xTaskGetCurrentTaskHandle(), NOTIFY_MASK_HOP, eSetBits);
-    } else {
-        phy_chan_set(phy, 0);
-        rdio_strobe_rx(phy->rdio);
-    }
+    xTaskNotify(xTaskGetCurrentTaskHandle(), NOTIFY_MASK_HOP, eSetBits);
 
     /*ccrf_clock_t loop_time_start = ccrf_clock();
     ccrf_clock_t loop_time;
@@ -480,8 +477,6 @@ static void phy_task(phy_t const restrict phy)
                 switch (ms) {
                     case CC1200_MARC_STATUS1_RX_FINISHED:
                         phy_recv(phy);
-                        tx_next = 0;
-
                         if (pkt) goto _cca_fail;
                         break;
 
@@ -537,9 +532,8 @@ static void phy_task(phy_t const restrict phy)
 
                             if (!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)) {
                                 rdio_cca_end(phy->rdio, ccac);
+                                //tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(1000 + (rand() % 2000));
                             }
-
-                            tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(1000 + (rand() % 2000));
 
                             if (phy->diag.cw) rdio_cw_set(phy->rdio, true);
 
@@ -562,13 +556,9 @@ static void phy_task(phy_t const restrict phy)
             if (notify & NOTIFY_MASK_DIAG) {
 
                 if (phy->boss != phy->diag.boss) {
-                    phy->sync_time = 0;
-
                     if ((phy->boss = phy->diag.boss)) {
                         phy->chan.cur = CHAN_ID_INVALID;
                         notify |= NOTIFY_MASK_HOP;
-                    } else {
-                        ccrf_timer_stop(phy->hop_timer);
                     }
                 }
 
@@ -584,60 +574,83 @@ static void phy_task(phy_t const restrict phy)
                 ts = ccrf_clock();
                 tx_next = 0;
 
-                if (!phy->boss && !phy->chan.cur) {
-                    if (((ts - phy->sync_time) >= 5*(CHAN_TIME * PHY_CHAN_COUNT))) {
-                        phy_trace_debug("phy/%u: sync loss: last=%lu now=%lu", rdio_id(phy->rdio), CCRF_CLOCK_MSEC(phy->sync_time), CCRF_CLOCK_MSEC(ts));
-                        // TODO: Stop timer?
-                        phy->sync_time = 0;
-                        goto _inner_loop;
+                if (!phy->stay) {
 
-                    } else if ((ts - phy->sync_time) >= 2*CHAN_TIME) {
-                        phy_trace_verbose("phy/%u: sync miss: last=%lu now=%lu", rdio_id(phy->rdio), CCRF_CLOCK_MSEC(phy->sync_time), CCRF_CLOCK_MSEC(ts));
+                    phy_chan_next(phy);
+
+                    _stay_end:
+
+                    if (phy->boss && !phy->chan.cur) {
+
+                        if (!phy->sync_time) {
+                            phy->sync_time = ts;
+                            ccrf_timer_start(phy->hop_timer);
+                        }
+
+                        sync_needed = !phy->diag.nosync;
+
+                        if (!--phy->cycle) {
+                            phy->stay = PHY_CHAN_COUNT;
+                            phy->cycle = PHY_SYNC_CYCLE_COUNT;
+                        } else {
+                            phy->stay = 0;
+                        }
                     }
-                }
+                } else if (!--phy->stay) goto _stay_end;
 
-                phy_chan_next(phy);
+                if (phy->sync) phy->sync(phy->stay ? (chan_id_t)PHY_CHAN_COUNT - phy->stay : phy->chan.cur);
 
-                if (phy->boss && !phy->chan.cur) {
-                    if (!phy->sync_time) {
-                        phy->sync_time = ts;
-                        ccrf_timer_start(phy->hop_timer);
-                    }
+                if (!phy->stay) {
+                    if (!phy->boss && !phy->chan.cur) {
 
-                    sync_needed = !phy->diag.nosync;
-                }
+                        if (((ts - phy->sync_time) >= (PHY_SYNC_CYCLE_COUNT / 2) * (CHAN_TIME * PHY_CHAN_COUNT))) {
+                            phy_trace_verbose("sync loss: lead", rdio_id(phy->rdio));
+                            phy->boss = true;
+                            phy->stay = PHY_CHAN_COUNT;
+                            phy->cycle = 10;
+                            // NOTE: Needed to ensure we don't get multiple bosses
+                            //  running in sync parallel to each other. They will drift apart!
+                            vTaskDelay(pdUS_TO_TICKS(100 + (rand() % 1901)));
+                            ts = ccrf_clock();
+                            phy->sync_time = ts;
+                            ccrf_timer_restart(phy->hop_timer);
+                            sync_needed = !phy->diag.nosync;
 
-                if (phy->sync) phy->sync(phy->chan.cur);
-
-                if (pkt) {
-                    const u8 tx_bytes = rdio_reg_get(phy->rdio, CC1200_NUM_TXBYTES, NULL);
-
-                    /*if (tx_bytes == pkt->size + 1) {
-
-                    }*/
-
-                    rdio_strobe_txfl(phy->rdio);
-
-                    phy_trace_debug("chan: hop tx canned: len=%u txbytes=%u", pkt->size, tx_bytes);
-
-                    if (pkt == (rf_pkt_t *)&sq.pkt && sq.task) {
-                        xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);
-                    } else {
-                        // Packet disappears (pkt_ack or pkt_sync).
-                    }
-
-                    // TODO: Need common post-tx handler
-
-                    if ((void *) pkt == &phy->pkt_ack) {
-                        phy->pkt_ack.hdr.flag = 0;
-                        phy->pkt_ack.hdr.size = 0;
+                        } else if ((ts - phy->sync_time) >= 2 * CHAN_TIME) {
+                            phy_trace_verbose("sync: miss last=%lu", CCRF_CLOCK_MSEC(ts) - CCRF_CLOCK_MSEC(phy->sync_time));
+                        }
                     }
 
-                    ++phy->stat.tx.errors;
+                    if (pkt) {
+                        const u8 tx_bytes = rdio_reg_get(phy->rdio, CC1200_NUM_TXBYTES, NULL);
 
-                    if (phy->diag.cw) rdio_cw_set(phy->rdio, false);
+                        /*if (tx_bytes == pkt->size + 1) {
 
-                    pkt = NULL;
+                        }*/
+
+                        rdio_strobe_txfl(phy->rdio);
+
+                        phy_trace_debug("chan: hop tx canned: len=%u txbytes=%u", pkt->size, tx_bytes);
+
+                        if (pkt == (rf_pkt_t *) &sq.pkt && sq.task) {
+                            xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);
+                        } else {
+                            // Packet disappears (pkt_ack or pkt_sync).
+                        }
+
+                        // TODO: Need common post-tx handler
+
+                        if ((void *) pkt == &phy->pkt_ack) {
+                            phy->pkt_ack.hdr.flag = 0;
+                            phy->pkt_ack.hdr.size = 0;
+                        }
+
+                        ++phy->stat.tx.errors;
+
+                        if (phy->diag.cw) rdio_cw_set(phy->rdio, false);
+
+                        pkt = NULL;
+                    }
                 }
             }
 
@@ -650,8 +663,6 @@ static void phy_task(phy_t const restrict phy)
             tx_next = 0;
         }
 
-        _inner_loop:;
-
         if (sync_needed) {
             sync_needed = false;
 
@@ -659,8 +670,9 @@ static void phy_task(phy_t const restrict phy)
             pkt = (rf_pkt_t *) &pkt_sync;
 
             pkt_sync.hdr.cell = phy->cell;
+            pkt_sync.stay = phy->stay != 0;
 
-            rdio_mode_idle(phy->rdio); // TODO: Perhaps always strobing here would be better/more predictable
+            rdio_mode_idle(phy->rdio);
 
             if (phy->diag.cw) rdio_cw_set(phy->rdio, false);
 
@@ -686,7 +698,7 @@ static void phy_task(phy_t const restrict phy)
                 remaining = ccrf_timer_remaining(phy->hop_timer);
                 chan_elapsed = CHAN_TIME - remaining;
 
-                u32 lead_time = 200 + ((!phy->boss && !phy->chan.cur) ? 500 + tx_times[pkt_sync.hdr.size] : 0);
+                u32 lead_time = (phy->stay ? 0 : 200) + ((!phy->boss && !phy->chan.cur && !phy->stay) ? 500 + tx_times[pkt_sync.hdr.size] : 0);
 
                 if (chan_elapsed < lead_time) {
                     tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(lead_time);
@@ -694,7 +706,7 @@ static void phy_task(phy_t const restrict phy)
                     goto _restart_rx;
                 }
 
-                if (remaining < (750 + tx_times[pkt->size])) { // TODO: Give more time for CCA-TX? (non-imm)
+                if (remaining < (750 + tx_times[pkt->size])) {
                     tx_next = 0;
                     pkt = NULL;
                     goto _restart_rx;
@@ -704,7 +716,7 @@ static void phy_task(phy_t const restrict phy)
             if (pkt != (rf_pkt_t *)&phy->pkt_ack) {
                 xQueueReceive(phy->txq, &sq, 0);
 
-                if (!synced) {
+                if (!phy->stay && !synced) {
                     if (((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)
                         ((phy_pkt_t *)pkt)->hdr.flag &= ~PHY_PKT_FLAG_IMMEDIATE;
                 }
@@ -827,10 +839,13 @@ static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
         const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *) pkt;
 
         if (spkt->magic == PHY_SYNC_MAGIC) {
-            if (!phy->boss) {
-                phy->sync_time = ccrf_clock();
-                ccrf_timer_restart(phy->hop_timer);
-                return;
+            phy->stay = spkt->stay ? (chan_id_t)PHY_CHAN_COUNT : (chan_id_t)0u;
+            phy->sync_time = ccrf_clock();
+            ccrf_timer_restart(phy->hop_timer);
+
+            if (phy->boss) {
+                phy->boss = false;
+                phy_trace_verbose("sync: follow");
             }
         }
 

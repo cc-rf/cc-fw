@@ -230,13 +230,6 @@ net_size_t net_send(net_t net, bool trxn_repl, net_path_t path, net_size_t size,
         return 0;
     }
 
-    /*if (!net->boss.boss && !phy_sync(mac_phy(net->mac.mac))) {
-        net->boss.addr = 0;
-        net_evnt_assoc(net, NET_NODE_NONE);
-        net_trace_warn("unable to send: not synced");
-        return 0;
-    }*/
-
     path.info.mode = 0;
     
     net_mesg_t *mesg = net_mesg_init(net, path, size, data);
@@ -259,15 +252,6 @@ void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t
     INIT_LIST_HEAD(rslt);
 
     // TODO: Check that this is not the RX task. Will deadlock!
-
-    /*if (!net->boss.boss && !phy_sync(mac_phy(net->mac.mac))) {
-        net->boss.addr = 0;
-
-        net_evnt_assoc(net, NET_NODE_NONE);
-
-        net_trace_warn("unable to send trxn: not synced");
-        return;
-    }*/
 
     path.info.mode = 0;
 

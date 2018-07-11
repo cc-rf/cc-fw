@@ -20,7 +20,6 @@ typedef void (* phy_recv_t)(void *param, u8 flag, u8 size, u8 data[], pkt_meta_t
 
 typedef struct __packed {
     rdio_id_t rdid;
-    bool boss;
     phy_cell_t cell;
     phy_sync_t sync;
     phy_recv_t recv;
