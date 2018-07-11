@@ -19,7 +19,7 @@
 #define MAC_PEER_MAX            64
 
 #define MAC_PEND_TIME           10
-#define MAC_PEND_RETRY          5
+#define MAC_PEND_RETRY          10
 
 #define MAC_TXQ_COUNT           7 // This should eventually reflect the number of threads waiting on messages
 #define MAC_TXQ_SIZE            (MAC_TXQ_COUNT)
@@ -141,7 +141,7 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt);
 static void mac_task_send(mac_t mac);
 static void mac_task_recv(mac_t mac);
 
-static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta);
+static void mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta);
 
 
 static struct mac macs[CCRF_CONFIG_RDIO_COUNT];
@@ -507,18 +507,15 @@ static void mac_task_recv(mac_t mac)
 }
 
 
-static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta)
+static void mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta)
 {
     mac_pkt_t *pkt = (mac_pkt_t *)data;
-    bool unblock = false;
 
     if (size != sizeof(mac_pkt_t) + MIN(pkt->size, MAC_PKT_SIZE_MAX)) {
         mac_trace_debug("(rx) bad length: len=%u != size=%u + base=%u", size, MIN(pkt->size, MAC_PKT_SIZE_MAX), sizeof(mac_pkt_t));
         ++mac->stat.rx.errors;
 
     } else {
-        if (pkt->seq.msg && !pkt->seq.end)
-            unblock = false;
 
         if (pkt->dest == 0 || pkt->dest == mac->addr) {
             mac_peer_t *const peer = mac_peer_get(mac, pkt->addr);
@@ -553,8 +550,6 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
                             if (mac->pend.task)
                                 xTaskNotify(mac->pend.task, MAC_NOTIFY_ACK, eSetBits);
 
-                            unblock = true;
-
                         } else {
                             mac_trace_verbose("ack-dup\n");
                         }
@@ -567,16 +562,13 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
                     if (!(flag & MAC_FLAG_ACK_RQR) || (peer->seq.num != pkt->seq.num)) {
                         peer->seq.num = pkt->seq.num;
 
-                        if (!unblock && !(flag & PHY_PKT_FLAG_IMMEDIATE))
-                            unblock = true;
-
                         mac_recv_data_t recv = {
                                 .meta = meta,
                                 .peer = peer,
                                 .dest = pkt->dest,
                                 .size = pkt->size,
                                 .seq  = pkt->seq,
-                                .flag = flag & MAC_FLAG_MASK,
+                                .flag = flag & MAC_FLAG_MASK
                         };
 
                         if (recv.size) memcpy(recv.data, pkt->data, MIN(recv.size, MAC_PKT_SIZE_MAX));
@@ -591,6 +583,4 @@ static bool mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
             }
         }
     }
-
-    return unblock;
 }

@@ -129,8 +129,8 @@ struct __packed phy {
 
 static void phy_task(phy_t const restrict phy);
 
-static bool phy_recv(phy_t phy, bool flush);
-static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi);
+static void phy_recv(phy_t phy);
+static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi);
 
 static inline void phy_chan_next(phy_t phy);
 static inline void phy_chan_set(phy_t phy, chan_id_t chan);
@@ -479,21 +479,7 @@ static void phy_task(phy_t const restrict phy)
 
                 switch (ms) {
                     case CC1200_MARC_STATUS1_RX_FINISHED:
-                        if (phy_recv(phy, true)) {
-                            if (tx_next && (phy->sync_time || phy->boss)) tx_next = 0;
-                        } else {
-                            if (!tx_next) {
-                                /**
-                                 * This is meant for rare cases when we want to force
-                                 * back into rx at the clear expectation of more packets.
-                                 * In some cases, this does not matter, such as when an
-                                 * immediate (e.g. ack) is sent after this.
-                                 */
-                                tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 6));
-                            }
-                        }
-
-                        // Temporary: disable tx block mechanism
+                        phy_recv(phy);
                         tx_next = 0;
 
                         if (pkt) goto _cca_fail;
@@ -535,8 +521,6 @@ static void phy_task(phy_t const restrict phy)
                             if ((void*)pkt == &phy->pkt_ack) {
                                 phy->pkt_ack.hdr.flag = 0;
                                 phy->pkt_ack.hdr.size = 0;
-
-                                // If using tx_next for all packets, should not use it here
                             }
 
                             if ((void*)pkt == &pkt_sync) {
@@ -555,8 +539,7 @@ static void phy_task(phy_t const restrict phy)
                                 rdio_cca_end(phy->rdio, ccac);
                             }
 
-                            //tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 6));
-                            tx_next = 0; // probably redundant
+                            tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(1000 + (rand() % 2000));
 
                             if (phy->diag.cw) rdio_cw_set(phy->rdio, true);
 
@@ -779,20 +762,20 @@ static void phy_task(phy_t const restrict phy)
 }
 
 
-static bool phy_recv(phy_t phy, bool flush)
+static void phy_recv(phy_t phy)
 {
     const static u8 PKT_OVERHEAD = 3; // length, 2x status
 
     u8 len = rdio_reg_get(phy->rdio, CC1200_NUM_RXBYTES, NULL);
 
     if (len < PKT_OVERHEAD) {
-        if (flush) rdio_strobe_rxfl(phy->rdio);
-        return false;
+        phy->stat.rx.errors++;
+        rdio_strobe_rxfl(phy->rdio);
+        return;
     }
 
     rf_pkt_t *spkt;
     u8 *buf = alloca(len);
-    bool unblock = false;
 
     rdio_fifo_read(phy->rdio, buf, len);
 
@@ -800,10 +783,12 @@ static bool phy_recv(phy_t phy, bool flush)
         spkt = (rf_pkt_t *)buf;
 
         if (spkt->size > PHY_RF_FRAME_SIZE_MAX) {
+            phy->stat.rx.errors++;
             break;
         }
 
         if (spkt->size > (len - PKT_OVERHEAD)) {
+            phy->stat.rx.errors++;
             break;
         }
 
@@ -813,9 +798,11 @@ static bool phy_recv(phy_t phy, bool flush)
             const u8 lqi = spkt->data[spkt->size + 1] & (u8) CC1200_LQI_EST_BM;
 
             if (crc_ok) {
-                unblock |= phy_recv_packet(phy, spkt, rssi, lqi);
+                phy_recv_packet(phy, spkt, rssi, lqi);
             } else {
-                break; // TODO: Log error? What about autoflush?
+                // Does autoflush mean we never see this?
+                phy->stat.rx.errors++;
+                break;
             }
         } else {
             break;
@@ -824,20 +811,16 @@ static bool phy_recv(phy_t phy, bool flush)
         len -= spkt->size + PKT_OVERHEAD;
         buf += spkt->size + PKT_OVERHEAD;
     }
-
-    if (flush && len) rdio_strobe_rxfl(phy->rdio);
-
-    return unblock;
 }
 
 
-static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
+static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
 {
     phy_pkt_t *const ppkt = (phy_pkt_t *)pkt;
 
     if (ppkt->hdr.size < sizeof(phy_pkt_hdr_t)) {
         ++phy->stat.rx.errors;
-        return false;
+        return;
     }
 
     if (ppkt->hdr.flag & PHY_PKT_FLAG_SYNC) {
@@ -847,11 +830,11 @@ static bool phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
             if (!phy->boss) {
                 phy->sync_time = ccrf_clock();
                 ccrf_timer_restart(phy->hop_timer);
-                return true;
+                return;
             }
         }
 
-        return false;
+        return;
     }
 
     ++phy->stat.rx.count;

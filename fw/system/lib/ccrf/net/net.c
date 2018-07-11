@@ -439,6 +439,9 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
         return;
     }
 
+    if (dest && (dest != net->mac.addr))
+        return;
+
     if (!(mesg->info.mode & NET_MODE_FLAG_CORE)) {
         net_trace_verbose(
                 "net: %04X->%04X %u:%u:%u",
@@ -446,9 +449,6 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
                 mesg->info.mode, mesg->info.port, mesg->info.type
         );
     }
-
-    if (dest && (dest != net->mac.addr))
-        return;
 
     if (!dest)
         mesg->info.mode |= NET_MODE_FLAG_BCST;

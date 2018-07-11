@@ -11,7 +11,7 @@
 #define MAC_FLAG_0          ((mac_flag_t) 0x20u)
 #define MAC_FLAG_1          ((mac_flag_t) 0x40u)
 #define MAC_FLAG_2          ((mac_flag_t) 0x80u)
-#define MAC_FLAG_MASK       (MAC_FLAG_0 | MAC_FLAG_1 | MAC_FLAG_2)
+#define MAC_FLAG_MASK       ((mac_flag_t) (MAC_FLAG_0 | MAC_FLAG_1 | MAC_FLAG_2))
 
 
 typedef struct mac *mac_t;

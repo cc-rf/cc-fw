@@ -16,7 +16,7 @@
 #define PHY_PKT_FLAG_USER_5     ((u8) 0x80)
 
 
-typedef bool (* phy_recv_t)(void *param, u8 flag, u8 size, u8 data[], pkt_meta_t meta);
+typedef void (* phy_recv_t)(void *param, u8 flag, u8 size, u8 data[], pkt_meta_t meta);
 
 typedef struct __packed {
     rdio_id_t rdid;
