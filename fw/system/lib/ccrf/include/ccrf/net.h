@@ -86,8 +86,6 @@ typedef struct __packed {
     struct __packed {
         rdio_id_t rdid;
         phy_cell_t cell;
-        phy_sync_t sync;
-        bool boss;
 
     } phy;
 

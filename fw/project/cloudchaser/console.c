@@ -45,6 +45,8 @@ void console_init(mac_t mac)
 
 void command_master(bool enable, bool nosync)
 {
+    // TODO: Figure out how to disable hopping with new mechanism.
+
     if (phy_diag_boss(console.phy, enable, nosync)) {
         if (enable)
             console_printf("master: enabled %s\r\n", nosync ? "(no sync)" : "");
@@ -318,13 +320,9 @@ void console_input(char *data)
         console_printf("  address:  %02X.%04X\r\n", phy_cell(console.phy), mac_addr(console.mac));
         console_printf("   uptime:  %lum%lus\r\n", min, sec);
 
-        if (phy_sync(console.phy))
-            console_printf("  channel:  (hopping)\r\n");
-        else {
-            u32 freq;
-            chan_id_t chan = phy_chan(console.phy, &freq);
-            console_printf("  channel:  %02u %lu Hz\r\n", chan, freq);
-        }
+        u32 freq;
+        chan_id_t chan = phy_chan_real(console.phy, &freq);
+        console_printf("  channel:  %02u %lu Hz\r\n", chan, freq); // TODO: Indicate hopping
 
         console_printf("    power:  %u%%\r\n", pwr_pct);
         console_printf("      hgm:  %s\r\n", phy_hgm(console.phy) ? "on" : "off");

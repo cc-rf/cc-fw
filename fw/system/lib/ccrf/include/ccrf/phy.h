@@ -33,19 +33,18 @@ typedef struct __packed {
 
 } phy_stat_t;
 
-typedef void (* phy_sync_t)(chan_id_t chan);
+void phy_stat(phy_t phy, phy_stat_t *stat);
+void phy_sync(phy_t phy, bool *resy);
 
-
-chan_id_t phy_chan(phy_t phy, u32 *freq);
+chan_id_t phy_chan_real(phy_t phy, u32 *freq);
+chan_id_t phy_chan(phy_t phy);
 u32 phy_freq(phy_t phy, chan_id_t chan);
 void phy_hops(phy_t phy, chan_id_t chan[]);
 
-void phy_stat(phy_t phy, phy_stat_t *stat);
+bool phy_boss(phy_t phy);
 phy_cell_t phy_cell(phy_t phy);
-bool phy_sync(phy_t phy);
 bool phy_hgm(phy_t phy);
 u8 phy_pwr(phy_t phy);
-
 
 bool phy_diag_boss(phy_t phy, bool boss, bool nosync);
 bool phy_diag_chan(phy_t phy, chan_id_t chan, u32 *freq);

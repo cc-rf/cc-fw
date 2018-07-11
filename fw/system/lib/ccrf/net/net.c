@@ -50,6 +50,8 @@ typedef struct __packed txni {
 struct __packed net {
     net_recv_t recv;
     net_evnt_t evnt;
+    
+    phy_t phy;
 
     struct {
         mac_t mac;
@@ -57,12 +59,6 @@ struct __packed net {
         mac_recv_t recv;
 
     } mac;
-    
-    struct {
-        mac_addr_t addr;
-        bool boss;
-
-    } boss;
     
     net_peer_t peer[NET_PEER_MAX];
 
@@ -99,9 +95,6 @@ net_t net_init(net_config_t *config)
 
     net->recv = config->net.recv;
     net->evnt = config->net.evnt;
-    
-    net->boss.boss = config->phy.boss;
-    net->boss.addr = 0;
 
     for (net_addr_t peer = 0; peer < NET_PEER_MAX; ++peer) {
         net->peer[peer].addr = NET_ADDR_NONE;
@@ -114,14 +107,14 @@ net_t net_init(net_config_t *config)
             .rdid = config->phy.rdid,
             .cell = config->phy.cell,
             .addr = config->mac.addr,
-            .boss = config->phy.boss,
-            .sync = config->phy.sync,
             .recv = net_mac_recv
     };
 
     if (!(net->mac.mac = mac_init(&mac_config))) {
         goto _fail;
     }
+
+    net->phy = mac_phy(net->mac.mac);
 
     net->mac.addr = mac_addr(net->mac.mac);
 
@@ -162,12 +155,6 @@ net_addr_t net_addr(net_t net)
 {
     return net->mac.addr;
 }
-
-
-/*net_addr_t net_boss(net_t net)
-{
-    return net->boss.addr;
-}*/
 
 
 void net_stat(net_t net, net_stat_t *stat)
@@ -220,6 +207,28 @@ static void net_mesg_free(net_mesg_t **mesg)
 
 void net_sync(net_t net)
 {
+    bool resy;
+    phy_sync(net->phy, &resy);
+
+    if (resy) {
+        // resyncing: clear peer table.
+        net_trace_debug("resync");
+
+        net_peer_t *peer;
+
+        for (net_addr_t pi = 0; pi < NET_PEER_MAX; ++pi) {
+            peer = &net->peer[pi];
+
+            if (peer->addr) {
+                net_addr_t addr = peer->addr;
+
+                peer->addr = 0;
+                peer->last = 0;
+
+                net_evnt_peer(net, addr, NET_EVENT_PEER_EXP);
+            }
+        }
+    }
 }
 
 
@@ -507,8 +516,6 @@ static void net_timer(TimerHandle_t timer)
 
         if (peer->addr && (now - peer->last) >= NET_PEER_EXPIRE_TIME) {
             net_addr_t addr = peer->addr;
-
-            net_trace_debug("expire %04X (%lu -> %lu)", peer->addr, peer->last, now);
 
             peer->addr = 0;
             peer->last = 0;

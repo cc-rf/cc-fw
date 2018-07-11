@@ -50,6 +50,10 @@
 
 #define PHY_SYNC_MAGIC          ((u8) 0x69)
 #define PHY_SYNC_CYCLE_COUNT    10
+#define PHY_SYNC_CYCLE_TIME     (CHAN_TIME * PHY_CHAN_COUNT)
+#define PHY_SYNC_DROP_TIME      (((PHY_SYNC_CYCLE_COUNT - 1) / 3) * PHY_SYNC_CYCLE_TIME)
+
+#define PHY_NOTIFY_SYNC         (1u<<7u)
 
 
 typedef struct __packed {
@@ -94,7 +98,7 @@ struct __packed phy {
     rdio_t rdio;
     bool boss;
     u8 cell;
-    phy_sync_t sync;
+    TaskHandle_t sync;
     phy_recv_t recv;
     void *recv_param;
 
@@ -158,7 +162,6 @@ phy_t phy_init(phy_config_t *config)
 
     phy->boss = true;
     phy->cell = config->cell;
-    phy->sync = config->sync;
     phy->recv = config->recv;
     phy->recv_param = config->recv_param;
 
@@ -236,11 +239,34 @@ void phy_stat(phy_t phy, phy_stat_t *stat)
 }
 
 
-chan_id_t phy_chan(phy_t phy, u32 *freq)
+void phy_sync(phy_t phy, bool *resy)
+{
+    u32 notify = 0;
+
+    *resy = phy->boss;
+    phy->sync = xTaskGetCurrentTaskHandle();
+
+    do {
+        if (!xTaskNotifyWait(0, PHY_NOTIFY_SYNC, &notify, portMAX_DELAY))
+            notify = 0;
+    } while ((notify & PHY_NOTIFY_SYNC) != PHY_NOTIFY_SYNC);
+
+    phy->sync = 0;
+    *resy = *resy != phy->boss;
+}
+
+
+chan_id_t phy_chan_real(phy_t phy, u32 *freq)
 {
     const chan_id_t chan = phy->chan.hop_table[phy->chan.cur];
     if (freq) *freq = phy->chan.channel[chan].freq;
     return chan;
+}
+
+
+chan_id_t phy_chan(phy_t phy)
+{
+    return phy->stay ? (chan_id_t)PHY_CHAN_COUNT - (phy->stay % PHY_CHAN_COUNT) : phy->chan.cur;
 }
 
 
@@ -261,15 +287,18 @@ rdio_t phy_rdio(phy_t phy)
     return phy->rdio;
 }
 
+
+bool phy_boss(phy_t phy)
+{
+    return phy->boss;
+}
+
+
 phy_cell_t phy_cell(phy_t phy)
 {
     return phy->cell;
 }
 
-bool phy_sync(phy_t phy)
-{
-    return phy->boss || phy->sync_time != 0;
-}
 
 bool phy_hgm(phy_t phy)
 {
@@ -441,7 +470,7 @@ static void phy_task(phy_t const restrict phy)
 
     bool sync_needed = false;
     phy->sync_time = 0;
-    phy->cycle = 1;
+    phy->cycle = 0;
 
     xTaskNotify(xTaskGetCurrentTaskHandle(), NOTIFY_MASK_HOP, eSetBits);
 
@@ -589,34 +618,60 @@ static void phy_task(phy_t const restrict phy)
 
                         sync_needed = !phy->diag.nosync;
 
-                        if (!--phy->cycle) {
+                        if (!phy->cycle) {
+                            // First time, stay for five rounds
+                            phy->stay = PHY_CHAN_COUNT * (PHY_SYNC_CYCLE_COUNT / 2);
+                            phy->cycle = PHY_SYNC_CYCLE_COUNT;
+
+                        } else if (!--phy->cycle) {
                             phy->stay = PHY_CHAN_COUNT;
                             phy->cycle = PHY_SYNC_CYCLE_COUNT;
                         } else {
                             phy->stay = 0;
                         }
                     }
-                } else if (!--phy->stay) goto _stay_end;
+                } else if (!--phy->stay) {
 
-                if (phy->sync) phy->sync(phy->stay ? (chan_id_t)PHY_CHAN_COUNT - phy->stay : phy->chan.cur);
+                    goto _stay_end;
+                }
+                else if (phy->boss && !(phy->stay % PHY_CHAN_COUNT)) {
 
-                if (!phy->stay) {
-                    if (!phy->boss && !phy->chan.cur) {
+                    sync_needed = !phy->diag.nosync;
+                }
 
-                        if (((ts - phy->sync_time) >= (PHY_SYNC_CYCLE_COUNT / 2) * (CHAN_TIME * PHY_CHAN_COUNT))) {
-                            phy_trace_verbose("sync loss: lead", rdio_id(phy->rdio));
+                if (phy->sync) {
+                    xTaskNotify(phy->sync, PHY_NOTIFY_SYNC, eSetBits);
+                }
+
+                if (phy->stay && !phy->boss) {
+                    if ((ts - phy->sync_time) >= PHY_SYNC_DROP_TIME)
+                        if (phy->stay == phy->cycle) {
+                            phy_trace_verbose("sync loss: lead");
+
                             phy->boss = true;
                             phy->stay = PHY_CHAN_COUNT;
-                            phy->cycle = 10;
+                            phy->cycle = PHY_SYNC_CYCLE_COUNT;
                             // NOTE: Needed to ensure we don't get multiple bosses
                             //  running in sync parallel to each other. They will drift apart!
-                            vTaskDelay(pdUS_TO_TICKS(100 + (rand() % 1901)));
+                            //  Not guaranteed to work, just a stopgap in case two
+                            // followers pick the same channel to resync on.
+                            vTaskDelay(pdUS_TO_TICKS(500 + (rand() % 501)));
                             ts = ccrf_clock();
                             phy->sync_time = ts;
                             ccrf_timer_restart(phy->hop_timer);
                             sync_needed = !phy->diag.nosync;
+                        }
+                }
 
-                        } else if ((ts - phy->sync_time) >= 2 * CHAN_TIME) {
+                if (!phy->stay) {
+                    if (!phy->boss && !phy->chan.cur) {
+
+                        if ((ts - phy->sync_time) >= PHY_SYNC_DROP_TIME) {
+                            phy->stay = PHY_CHAN_COUNT;
+                            phy->cycle = (u8) (1 + rand() % (PHY_CHAN_COUNT - 1));
+                            phy_trace_verbose("sync loss: stay to %u", phy->cycle);
+
+                        } else if ((ts - phy->sync_time) >= PHY_SYNC_CYCLE_TIME) {
                             phy_trace_verbose("sync: miss last=%lu", CCRF_CLOCK_MSEC(ts) - CCRF_CLOCK_MSEC(phy->sync_time));
                         }
                     }

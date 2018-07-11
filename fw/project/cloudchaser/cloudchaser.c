@@ -271,7 +271,6 @@ void cloudchaser_main(void)
             .phy = {
                     .rdid = 0,
                     .cell = 0,
-                    .sync = sync_hook,
             },
 
             .mac = {
@@ -308,7 +307,6 @@ void cloudchaser_main(void)
     #if CLOUDCHASER_RDIO_COUNT > 1
 
         net_config.phy.rdid = 1;
-        net_config.phy.sync = NULL;
         net_config.mac.addr += 1;
 
         if (!(nets[1] = net_init(&net_config))) {
@@ -330,6 +328,13 @@ void cloudchaser_main(void)
     }
 
     fabi_init();
+
+    phy_t phy = mac_phy(macs[0]);
+
+    while (1) {
+        net_sync(nets[0]);
+        sync_hook(phy_chan(phy));
+    }
 }
 
 
@@ -465,8 +470,6 @@ static void sync_hook(chan_id_t chan)
     }
 
     stat_prev = stat;
-
-    if (!chan) net_sync(nets[0]);
 }
 
 

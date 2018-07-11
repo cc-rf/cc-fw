@@ -34,8 +34,6 @@ typedef struct __packed {
     rdio_id_t rdid;
     phy_cell_t cell;
     mac_addr_t addr;
-    bool boss;
-    phy_sync_t sync;
     mac_recv_t recv;
 
 } mac_config_t;
