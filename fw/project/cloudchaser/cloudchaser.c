@@ -55,9 +55,15 @@ typedef struct __packed {
     u64 serial;
     u32 uptime;
     u16 macid;
-    mac_stat_t stat;
 
-    // TODO: Add error stats, maybe fragment stats, and heap stats
+    struct __packed {
+        phy_stat_t phy;
+        mac_stat_t mac;
+        net_stat_t net;
+
+    } stat;
+
+    // TODO: Maybe add heap stats
 
 } code_status_t;
 
@@ -248,20 +254,18 @@ void rainbow(void)
     const TickType_t delay = 0;
     const u16 resolution = 1000;
     sync_blink = false;
-    led_run_program(resolution, delay, rainbow_colors, COUNT_OF(rainbow_colors));
+    led_run_program(resolution, delay, rainbow_colors, ARRAY_SIZE(rainbow_colors));
     sync_blink = true;
 }
 
 
 void cloudchaser_main(void)
 {
-    status = (code_status_t){
-            .version = 0,
-            .serial = uid(),
-            .uptime = 0,
-            .macid = uid_short(),
-            .stat = {{0}}
-    };
+    memset(&status, 0, sizeof(status));
+
+    status.version = 1;
+    status.serial = uid();
+    status.macid = uid_short();
 
     net_config_t net_config = {
             .phy = {
@@ -422,8 +426,8 @@ static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t des
 
 static void sync_hook(chan_id_t chan)
 {
-    static mac_stat_t stat_prev = {0};
-    static mac_stat_t stat;
+    static net_stat_t stat_prev = {0};
+    static net_stat_t stat;
 
     if (sync_blink) {
 
@@ -440,7 +444,7 @@ static void sync_hook(chan_id_t chan)
         led_set(LED_3, (chan == 17) ? LED_ON : LED_OFF);
         #endif
 
-        mac_stat(macs[0], &stat);
+        net_stat(nets[0], &stat);
 
         if (stat.rx.count != stat_prev.rx.count) {
             led_set(LED_RGB0_GREEN, 60);
@@ -448,10 +452,22 @@ static void sync_hook(chan_id_t chan)
             led_set(LED_RGB0_GREEN, 0);
         }
 
+        if (stat.rx.errors != stat_prev.rx.errors) {
+            led_set(LED_RGB0_RED, 60);
+        } else {
+            led_set(LED_RGB0_RED, 0);
+        }
+
         if (stat.tx.count != stat_prev.tx.count) {
             led_set(LED_RGB1_BLUE, 80);
         } else {
             led_set(LED_RGB1_BLUE, 0);
+        }
+
+        if (stat.tx.errors != stat_prev.tx.errors) {
+            led_set(LED_RGB1_RED, 60);
+        } else {
+            led_set(LED_RGB1_RED, 0);
         }
     }
 
@@ -737,7 +753,11 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
     (void)data;
 
     status.uptime = SCLK_MSEC(sclk_time());
-    mac_stat(macs[0], &status.stat);
+
+    phy_stat(mac_phy(macs[0]), &status.stat.phy);
+    mac_stat(macs[0], &status.stat.mac);
+    net_stat(nets[0], &status.stat.net);
+    net_stat(nets[0], &status.stat.net);
 
     write_code_status(port, &status);
 }

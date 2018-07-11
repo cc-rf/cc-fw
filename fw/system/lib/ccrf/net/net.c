@@ -75,6 +75,8 @@ struct __packed net {
     StaticTimer_t timer_static;
 
     struct list_head txni;
+
+    net_stat_t stat;
 };
 
 
@@ -172,6 +174,12 @@ net_addr_t net_addr(net_t net)
 {
     return net->boss.addr;
 }*/
+
+
+void net_stat(net_t net, net_stat_t *stat)
+{
+    *stat = net->stat;
+}
 
 
 size_t net_peers(net_t net, net_peer_t **peer)
@@ -342,37 +350,51 @@ static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size
 }
 
 
+static void stat_tx_add(net_t net, net_size_t size, mac_size_t rslt)
+{
+    if (rslt) {
+        net->stat.tx.count++;
+        net->stat.tx.bytes += size;
+    } else {
+        net->stat.tx.errors++;
+    }
+}
+
 
 static net_size_t net_send_base(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg)
 {
-    if (dest == MAC_ADDR_BCST) {
+    if (dest == MAC_ADDR_BCST)
         return net_send_base_bcst(net, size, mesg);
-    } else {
-        size += sizeof(net_mesg_t);
-        mesg->info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
-        mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_MESG, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, true);
 
-        if (sent) {
-            // was acked, add to table
-            net_peer_update(net, dest);
-        } else {
-            // remove?
-        }
+    size += sizeof(net_mesg_t);
+    mesg->info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
 
-        return sent;
+    mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_MESG, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, true);
+
+    stat_tx_add(net, size - sizeof(net_mesg_t), sent);
+
+    if (sent) {
+        // was acked, add to table
+        net_peer_update(net, dest);
     }
+
+    return sent;
 }
 
 
 static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg)
 {
-    if (dest == MAC_ADDR_BCST) {
+    if (dest == MAC_ADDR_BCST)
         return net_send_base(net, dest, size, mesg);
-    } else {
-        size += sizeof(net_mesg_t);
-        mesg->info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
-        return (net_size_t) mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, false);
-    }
+
+    size += sizeof(net_mesg_t);
+    mesg->info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
+
+    mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, false);
+
+    stat_tx_add(net, size - sizeof(net_mesg_t), sent);
+
+    return sent;
 }
 
 
@@ -380,7 +402,12 @@ static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mes
 {
     size += sizeof(net_mesg_t);
     mesg->info.mode |= NET_MODE_FLAG_BCST;
-    return (net_size_t) mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, MAC_ADDR_BCST, size, (u8 *) mesg, false);
+
+    mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, MAC_ADDR_BCST, size, (u8 *) mesg, false);
+
+    stat_tx_add(net, size - sizeof(net_mesg_t), sent);
+
+    return sent;
 }
 
 
@@ -408,6 +435,7 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
 
     if (!peer) {
         net_trace_warn("peer=0");
+        net->stat.rx.errors++;
         return;
     }
 
@@ -434,6 +462,10 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
             return net_core_recv(net, peer, size - sizeof(net_mesg_t), mesg);
         }
     } else {
+
+        net->stat.rx.count++;
+        net->stat.rx.bytes += size - sizeof(net_mesg_t);
+
         net_txni_t *txni;
 
         list_for_each_entry(txni, &net->txni, list) {

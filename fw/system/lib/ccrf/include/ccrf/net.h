@@ -79,7 +79,6 @@ typedef struct __packed {
 } net_event_peer_t;
 
 typedef void (* net_recv_t)(net_t net, net_path_t path, size_t size, u8 data[]);
-
 typedef void (* net_evnt_t)(net_t net, net_event_t event, void *info);
 
 typedef struct __packed {
@@ -106,6 +105,19 @@ typedef struct __packed {
 
 } net_config_t;
 
+typedef struct __packed {
+    u32 count;
+    u32 bytes;
+    u32 errors;
+
+} net_stat_item_t;
+
+typedef struct __packed {
+    net_stat_item_t rx;
+    net_stat_item_t tx;
+
+} net_stat_t;
+
 
 net_t net_init(net_config_t *config);
 
@@ -113,6 +125,7 @@ net_time_t net_time(net_t net);
 mac_t net_mac(net_t net);
 net_addr_t net_addr(net_t net);
 //net_addr_t net_boss(net_t net);
+void net_stat(net_t net, net_stat_t *stat);
 size_t net_peers(net_t net, net_peer_t **peer);
 void net_sync(net_t net);
 

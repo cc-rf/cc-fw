@@ -493,6 +493,9 @@ static void phy_task(phy_t const restrict phy)
                             }
                         }
 
+                        // Temporary: disable tx block mechanism
+                        tx_next = 0;
+
                         if (pkt) goto _cca_fail;
                         break;
 
@@ -532,6 +535,8 @@ static void phy_task(phy_t const restrict phy)
                             if ((void*)pkt == &phy->pkt_ack) {
                                 phy->pkt_ack.hdr.flag = 0;
                                 phy->pkt_ack.hdr.size = 0;
+
+                                // If using tx_next for all packets, should not use it here
                             }
 
                             if ((void*)pkt == &pkt_sync) {
@@ -550,7 +555,8 @@ static void phy_task(phy_t const restrict phy)
                                 rdio_cca_end(phy->rdio, ccac);
                             }
 
-                            tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 6));
+                            //tx_next = xTaskGetTickCount() + pdMS_TO_TICKS(1 + (rand() % 6));
+                            tx_next = 0; // probably redundant
 
                             if (phy->diag.cw) rdio_cw_set(phy->rdio, true);
 
