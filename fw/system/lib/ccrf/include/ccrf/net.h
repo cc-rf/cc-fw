@@ -133,12 +133,10 @@ net_size_t net_send(net_t net, bool trxn_repl, net_path_t path, net_size_t size,
 void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry, net_trxn_rslt_t *rslt);
 void net_trxn_rslt_free(net_trxn_rslt_t *rslt);
 
+
 static inline bool net_path_info_match(net_info_t *info_a, net_info_t *info_b)
 {
-    return *(u16 *)info_a == *(u16 *)info_b;
-}
-
-static inline bool net_path_info_match_port_type(net_info_t *info_a, net_info_t *info_b)
-{
-    return info_a->port == info_b->port && info_a->type == info_b->type;
+    return info_a->port == info_b->port &&
+           info_a->type == info_b->type &&
+            (info_a->mode & NET_MODE_FLAG_CORE) == (info_b->mode & NET_MODE_FLAG_CORE);
 }

@@ -23,19 +23,14 @@
 
 #define NET_PEER_MAX            64u
 #define NET_PEER_EXPIRE_TIME    600u
-#define NET_ASGN_BASE           32u
 
 #define NET_NOTIFY_TRXN_DONE    (1u << 18u)
 
 #define NET_MAC_FLAG_NETLAYER   MAC_FLAG_0
 
-#define NET_BOSS_IO_PORT        ((net_port_t) 1u)
-#define NET_BOSS_IO_TYPE_ASGN   ((net_type_t) 1u)
-
-#define NET_EVENT_PORT          ((net_port_t) 2u)
-#define NET_EVENT_TYPE_JOIN     ((net_type_t) 1u)
-#define NET_EVENT_TYPE_HERE     ((net_type_t) 2u)
-
+//#define NET_PATH_CMD_PORT          ((net_port_t) 0xBEu)
+//#define NET_PATH_CMD_TYPE_PING_REQ ((net_type_t) 0x01u)
+//#define NET_PATH_CMD_TYPE_PING_RSP ((net_type_t) 0x02u)
 
 typedef struct __packed {
     net_info_t info;
@@ -88,8 +83,7 @@ static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size
 static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg);
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
 static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
-static void net_core_recv_boss(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg);
-static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg);
+static void net_core_recv(net_t net, net_size_t size, net_mesg_t *mesg);
 static void net_peer_update(net_t net, net_addr_t addr);
 static void net_timer(TimerHandle_t timer);
 
@@ -260,10 +254,11 @@ net_size_t net_send(net_t net, bool trxn_repl, net_path_t path, net_size_t size,
 
 void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry, net_trxn_rslt_t *rslt)
 {
-    // TODO: Check that this is NOT receive queue task. Will deadlock.
     if (!expiry || expiry >= portMAX_DELAY || !rslt) return;
 
     INIT_LIST_HEAD(rslt);
+
+    // TODO: Check that this is not the RX task. Will deadlock!
 
     /*if (!net->boss.boss && !phy_sync(mac_phy(net->mac.mac))) {
         net->boss.addr = 0;
@@ -385,7 +380,7 @@ static net_size_t net_send_base(net_t net, mac_addr_t dest, net_size_t size, net
 static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg)
 {
     if (dest == MAC_ADDR_BCST)
-        return net_send_base(net, dest, size, mesg);
+        return net_send_base_bcst(net, size, mesg);
 
     size += sizeof(net_mesg_t);
     mesg->info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
@@ -455,44 +450,41 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
 
     net_peer_update(net, peer);
 
-    if (mesg->info.mode & NET_MODE_FLAG_CORE) {
-        if (net->boss.boss) {
-            return net_core_recv_boss(net, peer, size - sizeof(net_mesg_t), mesg);
-        } else if (peer) {
-            return net_core_recv(net, peer, size - sizeof(net_mesg_t), mesg);
-        }
-    } else {
+    if (mesg->info.mode & NET_MODE_FLAG_CORE)
+        return net_core_recv(net, size - sizeof(net_mesg_t), mesg);
 
-        net->stat.rx.count++;
-        net->stat.rx.bytes += size - sizeof(net_mesg_t);
+    net->stat.rx.count++;
+    net->stat.rx.bytes += size - sizeof(net_mesg_t);
 
-        net_txni_t *txni;
+    net_txni_t *txni;
 
-        list_for_each_entry(txni, &net->txni, list) {
+    list_for_each_entry(txni, &net->txni, list) {
+        const bool match = net_path_info_match(&txni->path.info, &mesg->info);
 
-            const bool match = net_path_info_match_port_type(&txni->path.info, &mesg->info);
-
-            if (match)
-                return net_trxn_resp(net, peer, txni, size - sizeof(net_mesg_t), mesg->data);
-        }
-
-        net_path_t path = {
-                .addr = peer,
-                .info = mesg->info
-        };
-
-        return net->recv(net, path, size - sizeof(net_mesg_t), mesg->data);
+        if (match)
+            return net_trxn_resp(net, peer, txni, size - sizeof(net_mesg_t), mesg->data);
     }
+
+    net_path_t path = {
+            .addr = peer,
+            .info = mesg->info
+    };
+
+    return net->recv(net, path, size - sizeof(net_mesg_t), mesg->data);
 }
 
 
-static void net_core_recv_boss(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg)
+static void net_core_recv(net_t net, net_size_t size, net_mesg_t *mesg)
 {
-}
-
-
-static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg)
-{
+    /*switch (path.info.port) {
+        case NET_PATH_CMD_PORT:
+            switch (path.info.type) {
+                case NET_PATH_CMD_TYPE_PING_REQ:
+                    path.info.type = NET_PATH_CMD_TYPE_PING_RSP;
+                    mesg->info
+                    net_send_base_dgrm(net, path.addr, 0, mesg);
+            }
+    }*/
 }
 
 
