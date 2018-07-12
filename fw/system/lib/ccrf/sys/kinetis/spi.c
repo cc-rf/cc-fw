@@ -48,10 +48,6 @@ static struct {
 
 bool ccrf_spi_init(rdio_t rdio)
 {
-    /**
-     * TODO: Pass a bit mask to be used for task notifications instead of using semaphores.
-     */
-    
     const spi_config_t *const cfg = &cc_interface[rdio_id(rdio)].spi;
 
     #ifdef CC_SPI_LOCK
@@ -64,11 +60,19 @@ bool ccrf_spi_init(rdio_t rdio)
     #endif
 
     dspi_master_config_t spi_config;
+
     DSPI_MasterGetDefaultConfig(&spi_config);
+
+    spi_config.whichCtar = kDSPI_Ctar0;
     spi_config.whichPcs = (dspi_which_pcs_t)(1u << cfg->pcs);
     spi_config.ctarConfig.pcsToSckDelayInNanoSec = 0;
     spi_config.ctarConfig.lastSckToPcsDelayInNanoSec = 1000;
     spi_config.ctarConfig.betweenTransferDelayInNanoSec = 0;
+    spi_config.ctarConfig.baudRate = 16000000;
+
+    DSPI_MasterInit(cfg->spi, &spi_config, CLOCK_GetBusClkFreq());
+
+    spi_config.whichCtar = kDSPI_Ctar1;
     spi_config.ctarConfig.baudRate = 8000000;
 
     DSPI_MasterInit(cfg->spi, &spi_config, CLOCK_GetBusClkFreq());
@@ -205,7 +209,7 @@ rdio_status_t ccrf_spi_io(rdio_t rdio, u8 flag, u16 addr, u8 *tx, u8 *rx, size_t
             .txData = xbuf,
             .rxData = xbuf,
             .dataSize = xlen,
-            .configFlags = kDSPI_MasterCtar0 | (cfg->pcs << DSPI_MASTER_PCS_SHIFT) | kDSPI_MasterPcsContinuous
+            .configFlags = (addr < 0x2F00 ? kDSPI_MasterCtar0 : kDSPI_MasterCtar1) | (cfg->pcs << DSPI_MASTER_PCS_SHIFT) | kDSPI_MasterPcsContinuous
     };
 
     #ifdef CC_SPI_DMA
