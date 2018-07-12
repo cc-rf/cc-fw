@@ -115,6 +115,12 @@
  *      - 0x55/0x0D for long-range FCC mode (2GFSK dev 100kHz, compliant at 60% power),
  *      - 0x55/0x0C for 50-chan or optimal 25-chan (2GFSK dev 50kHz, was too narrow for FCC),
  *      - 0x55/0x2D for 50-chan high-speed (4GFSK dev 100kHz)
+ *      - 0x55/0x2E ^ but dev is 200kHz, better when rx bw is 800kHz.
+ * PA_CFG1: 0x77->0x7F. Not abiding by SmartRF studio because maxing this does increase tx power.
+ * AGC_CFG2: 0x00->0x20. Gain mode from optimized to normal. Unsure if ideal but gives higher rssi.
+ * IFAMP: 0x09->0x0D. single-side bw 1MHz->1.5MHz. Giving better low-rssi performance.
+ * FS_DIG0: 0x55->0x58. RX FS Loop BW 300kHz->400kHz, TX 300kHz->200kHz.
+ * CHAN_BW: 0x03->0x02. RX filter BW 500kHz->800kHz. Important for low rssi rx.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -136,11 +142,11 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_IQIC,              0xD8},
         {CC1200_DEVIATION_M,       0x47},
         #endif
-        {CC1200_MODCFG_DEV_E,      0x2D},
+        {CC1200_MODCFG_DEV_E,      0x2E},
         {CC1200_DCFILT_CFG,        0x0E},
         {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
-        {CC1200_CHAN_BW,           0x03},
+        {CC1200_CHAN_BW,           0x02},
         {CC1200_MDMCFG1,           0x42},
         {CC1200_MDMCFG0,           0x05},
         #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
@@ -154,12 +160,12 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         #endif
         {CC1200_AGC_REF,           0x35},
         {CC1200_AGC_CFG3,          0x31},
-        {CC1200_AGC_CFG2,          0x00},
+        {CC1200_AGC_CFG2,          0x20},
         {CC1200_AGC_CFG1,          0x27},
         {CC1200_AGC_CFG0,          0x4F},
         {CC1200_FIFO_CFG,          0x00},
         {CC1200_FS_CFG,            0x12},
-        {CC1200_PA_CFG1,           0x77}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
+        {CC1200_PA_CFG1,           0x7f}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
         {CC1200_PA_CFG0,           0x51},
         {CC1200_IF_MIX_CFG,        0x18}, // % INTERMEDIATE FREQ
         {CC1200_FREQOFF_CFG,       0x0C},
@@ -171,7 +177,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_IF_ADC1,           0xEE},
         {CC1200_IF_ADC0,           0x10},
         {CC1200_FS_DIG1,           0x04},
-        {CC1200_FS_DIG0,           0x55},
+        {CC1200_FS_DIG0,           0x58},
         {CC1200_FS_CAL1,           0x40},
         {CC1200_FS_CAL0,           0x0E},
         {CC1200_FS_DIVTWO,         0x03},
@@ -182,7 +188,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_FS_REG_DIV_CML,    0x1C},
         {CC1200_FS_SPARE,          0xAC},
         {CC1200_FS_VCO0,           0xB5},
-        {CC1200_IFAMP,             0x09}, // % SINGLE SIDE BW
+        {CC1200_IFAMP,             0x0D}, // % SINGLE SIDE BW
         {CC1200_XOSC5,             0x0E},
         {CC1200_XOSC1,             0x03},
 };
