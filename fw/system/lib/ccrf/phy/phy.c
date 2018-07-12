@@ -381,7 +381,7 @@ bool phy_diag_hgm(phy_t phy, bool hgm)
 
 u32 phy_delay(u8 size)
 {
-    return 1000 + tx_times[size];
+    return tx_times[size + 1];
 }
 
 
