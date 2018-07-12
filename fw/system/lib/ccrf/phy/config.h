@@ -26,7 +26,7 @@ static const rdio_reg_config_t PHY_RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_FIFO_CFG,   CC1200_FIFO_CFG_CRC_AUTOFLUSH},
 
         {CC1200_AGC_GAIN_ADJUST,    (u8)CC_RSSI_OFFSET},
-        {CC1200_AGC_CS_THR,         (u8)(-93 - CC_RSSI_OFFSET)},
+        {CC1200_AGC_CS_THR,         (u8)(-97 - CC_RSSI_OFFSET)},
 
         {CC1200_SETTLING_CFG, 0x3}, // Defaults except never auto calibrate
 

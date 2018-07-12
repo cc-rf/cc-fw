@@ -723,7 +723,7 @@ static void phy_task(phy_t const restrict phy)
             pkt_sync.hdr.cell = phy->cell;
             pkt_sync.stay = phy->stay != 0;
 
-            rdio_mode_idle(phy->rdio);
+            rdio_strobe_idle(phy->rdio);
 
             if (phy->diag.cw) rdio_cw_set(phy->rdio, false);
 
