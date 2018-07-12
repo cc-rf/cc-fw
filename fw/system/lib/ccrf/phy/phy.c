@@ -619,7 +619,8 @@ static void phy_task(phy_t const restrict phy)
                         sync_needed = !phy->diag.nosync;
 
                         if (!phy->cycle) {
-                            // First time, stay for five rounds
+                            // First time, stay for five rounds, do not send first sync however
+                            sync_needed = false;
                             phy->stay = PHY_CHAN_COUNT * (PHY_SYNC_CYCLE_COUNT / 2);
                             phy->cycle = PHY_SYNC_CYCLE_COUNT;
 
@@ -645,17 +646,12 @@ static void phy_task(phy_t const restrict phy)
 
                 if (phy->stay && !phy->boss) {
                     if ((ts - phy->sync_time) >= PHY_SYNC_DROP_TIME)
-                        if (phy->stay == phy->cycle) {
-                            phy_trace_verbose("sync loss: lead");
+                        if (!--phy->cycle) {
+                            phy_trace_verbose("sync loss: lead c=%u", phy_chan(phy));
 
                             phy->boss = true;
                             phy->stay = PHY_CHAN_COUNT;
                             phy->cycle = PHY_SYNC_CYCLE_COUNT;
-                            // NOTE: Needed to ensure we don't get multiple bosses
-                            //  running in sync parallel to each other. They will drift apart!
-                            //  Not guaranteed to work, just a stopgap in case two
-                            // followers pick the same channel to resync on.
-                            vTaskDelay(pdUS_TO_TICKS(500 + (rand() % 501)));
                             ts = ccrf_clock();
                             phy->sync_time = ts;
                             ccrf_timer_restart(phy->hop_timer);
