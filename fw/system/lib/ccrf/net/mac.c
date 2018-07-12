@@ -333,7 +333,7 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
             (u8)(!imm || needs_ack ? PHY_PKT_FLAG_BLOCK : 0);
 
     u8 retry = MAC_PEND_RETRY;
-    TickType_t backoff = pdMS_TO_TICKS(10 + (rand() % 11));
+    TickType_t backoff = pdMS_TO_TICKS(5 + (rand() % 6));
 
     if (!(flag & MAC_FLAG_PKT_BLK)) {
         mac_send_queue_t sq = {
@@ -342,7 +342,7 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
 
         memcpy(&sq.pkt, pkt, pkt_len);
 
-        if (!xQueueSend(mac->txq, &sq, pdMS_TO_TICKS(100))) {
+        if (!xQueueSend(mac->txq, &sq, portMAX_DELAY)) {
             mac_trace_debug("mac/tx: queue failed");
             return false;
         }
@@ -368,13 +368,13 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
         // Always retry on tx fail, nothing else to do.
         mac_trace_warn("retry: %04X/%03u/%03u [tx fail]", pkt->dest, pkt->seq.num, pkt->size);
 
+        // ...except back off a good amount.
+        vTaskDelay(backoff);
+
         backoff *= 2;
 
         if (backoff > pdMS_TO_TICKS(100))
             backoff = pdMS_TO_TICKS(100);
-
-        // ...except back off a good amount.
-        vTaskDelay(backoff);
 
         goto _retry_tx;
     }
@@ -402,8 +402,8 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
                             pkt->dest, pkt->seq.num, pkt_len//, elaps
                     );
 
-                    backoff = (backoff * 3) / 2;
                     vTaskDelay(backoff);
+                    backoff = (backoff * 3) / 2;
 
                     goto _retry_tx;
 
