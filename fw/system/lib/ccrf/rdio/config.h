@@ -136,7 +136,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_IQIC,              0xD8},
         {CC1200_DEVIATION_M,       0x47},
         #endif
-        {CC1200_MODCFG_DEV_E,      0x0D},
+        {CC1200_MODCFG_DEV_E,      0x2D},
         {CC1200_DCFILT_CFG,        0x0E},
         {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
@@ -286,6 +286,9 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_1[] = {
  * AGC_CFG2: 0x00->0x60. SmartRF (Zero-IF).
  * AGC_REF: 0x33->0x39.
  * PREAMBLE_CFG1: 0x20->0x18->0x28->0x30->0x28. Preamble 6->4->8->24->8 bytes.
+ * DEVIATION_M/DEV_E: 0xFF/0x2F->0x55/0x2F->back. dev 600kHz->400kHz->600kHz. Necessary.
+ * FS_DIG0: 0xA3->0xAB. FS Loop BW 200kHz->400kHz. https://e2e.ti.com/support/wireless_connectivity/low_power_rf_tools/f/155/t/330911?CC1200-maximum-symbol-rate
+ * AGC_CFG2: 0x60->0x20. Gain table mode Normal -> Zero-IF. ^
  *
  */
 static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_MAXRATE[] = {
@@ -295,7 +298,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_MAXRATE[] = {
         {CC1200_SYNC0,             0x66},
         {CC1200_PA_CFG1,           0x47},
 
-        {CC1200_SYNC_CFG1,         0xAA},
+        {CC1200_SYNC_CFG1,         0xA9},
         {CC1200_SYNC_CFG0,         0x03},
         #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
         {CC1200_DEVIATION_M,       0xFF},
@@ -335,7 +338,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_MAXRATE[] = {
         {CC1200_IF_ADC1,           0xEE},
         {CC1200_IF_ADC0,           0x10},
         {CC1200_FS_DIG1,           0x04},
-        {CC1200_FS_DIG0,           0xA3},
+        {CC1200_FS_DIG0,           0xAB},
         {CC1200_FS_CAL1,           0x40},
         {CC1200_FS_CAL0,           0x0E},
         {CC1200_FS_DIVTWO,         0x03},
