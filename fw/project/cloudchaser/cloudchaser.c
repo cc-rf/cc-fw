@@ -462,34 +462,34 @@ static void sync_hook(chan_id_t chan)
         led_set(LED_1, (chan == 15*2) ? LED_ON : LED_OFF);
         led_set(LED_3, (chan == 17*2) ? LED_ON : LED_OFF);
         #else
-        led_set(LED_0, (chan == 11) ? LED_ON : LED_OFF);
-        led_set(LED_2, (chan == 13) ? LED_ON : LED_OFF);
-        led_set(LED_1, (chan == 15) ? LED_ON : LED_OFF);
-        led_set(LED_3, (chan == 17) ? LED_ON : LED_OFF);
+        led_set(LED_0, (chan == 11) ? 2 : LED_OFF);
+        led_set(LED_2, (chan == 13) ? 2: LED_OFF);
+        led_set(LED_1, (chan == 15) ? 2 : LED_OFF);
+        led_set(LED_3, (chan == 17) ? 2 : LED_OFF);
         #endif
 
         net_stat(nets[0], &stat);
 
         if (stat.rx.count != stat_prev.rx.count) {
-            led_set(LED_RGB0_GREEN, 60);
+            led_set(LED_RGB0_GREEN, 20);
         } else {
             led_set(LED_RGB0_GREEN, 0);
         }
 
         if (stat.rx.errors != stat_prev.rx.errors) {
-            led_set(LED_RGB0_RED, 60);
+            led_set(LED_RGB0_RED, 20);
         } else {
             led_set(LED_RGB0_RED, 0);
         }
 
         if (stat.tx.count != stat_prev.tx.count) {
-            led_set(LED_RGB1_BLUE, 80);
+            led_set(LED_RGB1_BLUE, 30);
         } else {
             led_set(LED_RGB1_BLUE, 0);
         }
 
         if (stat.tx.errors != stat_prev.tx.errors) {
-            led_set(LED_RGB1_RED, 60);
+            led_set(LED_RGB1_RED, 30);
         } else {
             led_set(LED_RGB1_RED, 0);
         }
