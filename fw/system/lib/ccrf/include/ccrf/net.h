@@ -127,7 +127,9 @@ void net_stat(net_t net, net_stat_t *stat);
 size_t net_peers(net_t net, net_peer_t **peer);
 void net_sync(net_t net);
 
-net_size_t net_send(net_t net, bool trxn_repl, net_path_t path, net_size_t size, u8 data[]);
+net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[]);
+net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, u8 data[]);
+net_size_t net_resp(net_t net, net_path_t path, net_size_t size, u8 data[]);
 void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry, net_trxn_rslt_t *rslt);
 void net_trxn_rslt_free(net_trxn_rslt_t *rslt);
 

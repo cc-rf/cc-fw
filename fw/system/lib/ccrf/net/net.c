@@ -74,7 +74,8 @@ struct __packed net {
 static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, u8 data[]);
 static void net_mesg_free(net_mesg_t **mesg);
 static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, u8 data[]);
-static net_size_t net_send_base(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg);
+static net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, u8 data[]);
+static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg);
 static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg);
 static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg);
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
@@ -232,21 +233,39 @@ void net_sync(net_t net)
 }
 
 
-net_size_t net_send(net_t net, bool trxn_repl, net_path_t path, net_size_t size, u8 data[])
+net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[])
 {
-    if (trxn_repl && !path.addr) {
-        net_trace_warn("unable to send trxn reply: dest not set");
+    return net_send_base(net, true, path, size, data);
+}
+
+
+net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, u8 data[])
+{
+    if (!path.addr) {
+        net_trace_warn("unable to send mesg: dest not set");
         return 0;
     }
 
+    return net_send_base(net, false, path, size, data);
+}
+
+
+net_size_t net_resp(net_t net, net_path_t path, net_size_t size, u8 data[])
+{
+    return net_mesg(net, path, size, data);
+}
+
+
+net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, u8 data[])
+{
     path.info.mode = 0;
-    
+
     net_mesg_t *mesg = net_mesg_init(net, path, size, data);
 
-    if (trxn_repl)
-        size = net_send_base(net, path.addr, size, mesg);
-    else
+    if (dgrm)
         size = net_send_base_dgrm(net, path.addr, size, mesg);
+    else
+        size = net_send_base_mesg(net, path.addr, size, mesg);
 
     net_mesg_free(&mesg);
 
@@ -275,7 +294,7 @@ void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t
 
     list_add_tail(&txni.list, &net->txni);
 
-    if (!net_send_base(net, path.addr, size, mesg)) {
+    if (!net_send_base_mesg(net, path.addr, size, mesg)) {
         net_trace_warn("trxn send fail");
         goto _fail;
     }
@@ -349,7 +368,7 @@ static void stat_tx_add(net_t net, net_size_t size, mac_size_t rslt)
 }
 
 
-static net_size_t net_send_base(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg)
+static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg)
 {
     if (dest == MAC_ADDR_BCST)
         return net_send_base_bcst(net, size, mesg);

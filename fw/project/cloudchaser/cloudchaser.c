@@ -27,12 +27,14 @@
 #define CODE_ID_MAC_SEND        2
 #define CODE_ID_MAC_RECV        3
 #define CODE_ID_SEND            4
-#define CODE_ID_RECV            5
-#define CODE_ID_TRXN            6
-#define CODE_ID_TRXN_REPL       7
-#define CODE_ID_EVNT            8
-#define CODE_ID_PEER            9
-#define CODE_ID_RESET           11
+#define CODE_ID_MESG            5
+#define CODE_ID_MESG_SENT       5
+#define CODE_ID_RECV            6
+#define CODE_ID_TRXN            7
+#define CODE_ID_RESP            8
+#define CODE_ID_EVNT            9
+#define CODE_ID_PEER            10
+#define CODE_ID_RESET           17
 #define CODE_ID_UART            26
 #define CODE_ID_LED             27
 #define CODE_ID_RAINBOW         29
@@ -174,8 +176,10 @@ static void sync_hook(chan_id_t chan);
 static void frame_recv(u8 port, serf_t *frame, size_t size);
 
 static void handle_code_mac_send(u8 port, size_t size, u8 *data);
-static void handle_code_send(u8 port, size_t size, u8 *data, bool trxn_repl);
+static void handle_code_send(u8 port, size_t size, u8 *data);
+static void handle_code_mesg(u8 port, size_t size, u8 *data);
 static void handle_code_trxn(u8 port, size_t size, u8 *data);
+static void handle_code_resp(u8 port, size_t size, u8 *data);
 static void handle_code_reset(u8 port, size_t size, u8 *data);
 static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_peer(u8 port, size_t size, u8 *data);
@@ -192,6 +196,7 @@ static void write_code_status(u8 port, code_status_t *code_status);
 static void write_code_peer(u8 port, size_t size, code_peer_t *code_peer);
 static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat);
 static void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat);
+static void write_code_mesg_sent(u8 port, net_size_t size);
 
 static void write_code_uart(code_uart_t *code_uart, size_t size);
 
@@ -572,13 +577,16 @@ static void frame_recv(u8 port, serf_t *frame, size_t size)
             return handle_code_mac_send(port, size, frame->data);
 
         case CODE_ID_SEND:
-            return handle_code_send(port, size, frame->data, false);
+            return handle_code_send(port, size, frame->data);
+
+        case CODE_ID_MESG:
+            return handle_code_mesg(port, size, frame->data);
 
         case CODE_ID_TRXN:
             return handle_code_trxn(port, size, frame->data);
 
-        case CODE_ID_TRXN_REPL:
-            return handle_code_send(port, size, frame->data, true);
+        case CODE_ID_RESP:
+            return handle_code_resp(port, size, frame->data);
 
         case CODE_ID_PEER:
             return handle_code_peer(port, size, frame->data);
@@ -647,7 +655,7 @@ static void handle_code_mac_send(u8 port, size_t size, u8 *data)
 }
 
 
-static void handle_code_send(u8 port, size_t size, u8 *data, bool trxn_repl)
+static void handle_code_send(u8 port, size_t size, u8 *data)
 {
     assert(size >= sizeof(code_send_t)); assert(data);
 
@@ -661,7 +669,27 @@ static void handle_code_send(u8 port, size_t size, u8 *data, bool trxn_repl)
             }
     };
 
-    net_send(nets[0], trxn_repl, path, (net_size_t)size - sizeof(code_send_t), code_send->data);
+    net_send(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
+}
+
+
+static void handle_code_mesg(u8 port, size_t size, u8 *data)
+{
+    assert(size >= sizeof(code_send_t)); assert(data);
+
+    code_send_t *const code_send = (code_send_t *)data;
+
+    net_path_t path = {
+            .addr = code_send->addr,
+            .info = {
+                    .port = code_send->port,
+                    .type = code_send->type
+            }
+    };
+
+    net_size_t sent = net_mesg(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
+
+    write_code_mesg_sent(port, sent);
 }
 
 
@@ -724,6 +752,24 @@ static void handle_code_trxn(u8 port, size_t size, u8 *data)
     }
 
     net_trxn_rslt_free(&rslt);
+}
+
+
+static void handle_code_resp(u8 port, size_t size, u8 *data)
+{
+    assert(size >= sizeof(code_send_t)); assert(data);
+
+    code_send_t *const code_send = (code_send_t *)data;
+
+    net_path_t path = {
+            .addr = code_send->addr,
+            .info = {
+                    .port = code_send->port,
+                    .type = code_send->type
+            }
+    };
+
+    net_resp(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
 }
 
 
@@ -913,6 +959,14 @@ static void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *cod
 {
     u8 *frame;
     const size_t fsize = serf_encode(CODE_ID_TRXN, (u8 *)code_trxn_stat, size + sizeof(code_trxn_stat_t), &frame);
+    if (frame) usb_write_direct(port, frame, fsize);
+}
+
+
+static void write_code_mesg_sent(u8 port, net_size_t size)
+{
+    u8 *frame;
+    const size_t fsize = serf_encode(CODE_ID_MESG_SENT, (u8 *)&size, sizeof(net_size_t), &frame);
     if (frame) usb_write_direct(port, frame, fsize);
 }
 
