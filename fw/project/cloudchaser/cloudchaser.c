@@ -148,6 +148,13 @@ typedef struct __packed {
 } code_peer_t;
 
 typedef struct __packed {
+    net_addr_t addr;
+    fabi_msg_t msg;
+    fabi_rgb_t data[];
+
+} code_led_t;
+
+typedef struct __packed {
     u8 code;
     u8 data[];
 
@@ -342,9 +349,23 @@ void cloudchaser_main(void)
     }
 }
 
+#define CCIO_PORT   0x01E0
+#define CCIO_LED    0x0B
 
 static void net_recv(net_t net, net_path_t path, size_t size, u8 data[])
 {
+    switch (path.info.port) {
+        case CCIO_PORT:
+            switch (path.info.type) {
+                case CCIO_LED: {
+                    fabi_msg_t *msg = (fabi_msg_t *)data;
+                    return fabi_write(msg->mask, (fabi_rgb_t *)msg->data, size - sizeof(msg->mask));
+                }
+                break;
+            }
+            break;
+    }
+
     return write_code_recv(path, size, data);
 }
 
@@ -872,8 +893,21 @@ static void handle_code_rainbow(size_t size, u8 *data)
 
 static void handle_code_led(size_t size, u8 *data)
 {
-    u8 mask = data[0];
-    fabi_write(mask, (fabi_rgb_t *) &data[1], size);
+    code_led_t *code_led = (code_led_t *)data;
+
+    if (code_led->addr == NET_ADDR_MASK || code_led->addr == net_addr(nets[0])) {
+        return fabi_write(code_led->msg.mask, code_led->data, size - sizeof(code_led_t));
+    } else {
+        net_path_t path = {
+                .addr = code_led->addr,
+                .info = {
+                        .port = CCIO_PORT,
+                        .type = CCIO_LED
+                }
+        };
+
+        net_send(nets[0], path, size - sizeof(code_led_t) + sizeof(fabi_msg_t), (u8 *)&code_led->msg);
+    }
 }
 
 
