@@ -56,7 +56,7 @@
 
 
 /* Composite device structure. */
-static usb_device_composite_struct_t g_composite;
+static usb_device_composite_struct_t g_composite = {0};
 extern usb_device_class_struct_t g_UsbDeviceCdcVcomConfig[USB_CDC_INSTANCE_COUNT];
 
 /* USB clock source and frequency*/

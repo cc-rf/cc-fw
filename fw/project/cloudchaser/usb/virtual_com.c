@@ -95,7 +95,7 @@ usb_status_t USB_DeviceCallback(usb_device_handle handle, uint32_t event, void *
 ******************************************************************************/
 extern usb_device_endpoint_struct_t g_cdcVcomDicEndpoints[USB_CDC_INSTANCE_COUNT][USB_CDC_VCOM_DIC_ENDPOINT_COUNT];
 
-static usb_device_composite_struct_t *g_deviceComposite;
+static usb_device_composite_struct_t *g_deviceComposite = NULL;
 
 /* Line codinig of cdc device */
 static uint8_t s_lineCoding[LINE_CODING_SIZE] = {
@@ -455,7 +455,7 @@ static inline bool isInterrupt()
 
 bool usb_attached(u8 port)
 {
-    return port < USB_CDC_INSTANCE_COUNT && g_deviceComposite->cdcVcom[port].attach && g_deviceComposite->cdcVcom[port].startTransactions;
+    return g_deviceComposite && port < USB_CDC_INSTANCE_COUNT && g_deviceComposite->cdcVcom[port].attach && g_deviceComposite->cdcVcom[port].startTransactions;
 }
 
 void usb_write(u8 port, u8 *buf, size_t len)
