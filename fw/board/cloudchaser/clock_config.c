@@ -151,7 +151,7 @@ void BOARD_BootClockHSRUN(void)
 void BOARD_BootClockOCHSRUN(void)
 {
     const mcg_pll_config_t pll0Config = {
-            .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x13U,
+            .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x16U,
     };
     const sim_clock_config_t simConfig = {
             .pllFllSel = 1U, .er32kSrc = 2U, .clkdiv1 = 0x01160000U,
