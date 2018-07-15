@@ -26,7 +26,7 @@ add_library(
         queue.c
         tasks.c
         timers.c
-        portable/GCC/ARM_CM4F/fsl_tickless_lptmr.c
+        portable/GCC/ARM_CM4F/fsl_tickless_systick.c
         portable/GCC/ARM_CM4F/port.c
         portable/MemMang/heap_4.c
         ${FREERTOS_KINETIS_DRIVERS}
@@ -43,7 +43,6 @@ target_link_libraries(
         ${NAME}
         PUBLIC kinetis_sdk_driver
         PUBLIC kinetis_freertos_config
-        PUBLIC kio
 )
 
 target_compile_definitions(

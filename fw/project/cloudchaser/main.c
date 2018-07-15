@@ -92,7 +92,7 @@ __attribute__((constructor, used)) void __init(void)
                CLOCK_GetFreq(kCLOCK_LpoClk)
     );*/
 
-    #if configUSE_TICKLESS_IDLE
+    #if configUSE_TICKLESS_IDLE && configUSE_LPTMR
     lptmr_config_t config;
     LPTMR_GetDefaultConfig(&config);
     config.prescalerClockSource = kLPTMR_PrescalerClock_1; // Clock 1 == LPO?
@@ -458,6 +458,8 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer, StackT
 
 #if configUSE_TICKLESS_IDLE
 
+#if configUSE_LPTMR
+
 LPTMR_Type *vPortGetLptrmBase(void)
 {
     return TICKLESS_LPTMR_BASE_PTR;
@@ -467,6 +469,8 @@ IRQn_Type vPortGetLptmrIrqn(void)
 {
     return TICKLESS_LPTMR_IRQn;
 }
+
+#endif
 
 void rtos_sleep_pre(TickType_t xExpectedIdleTime)
 {

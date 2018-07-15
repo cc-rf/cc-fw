@@ -115,12 +115,16 @@
 #define configUSE_PREEMPTION 0U
 #define configUSE_IDLE_HOOK 0U
 #define configUSE_TICK_HOOK 0U
-#define configUSE_TICKLESS_IDLE 0U
+#define configUSE_TICKLESS_IDLE 1U
+#define configUSE_LPTMR 0U // Mine
+
+#if configUSE_LPTMR
 #define configLPTMR_CLOCK_HZ CLOCK_GetFreq(kCLOCK_LpoClk)
 
 #define vPortLptmrIsr LPTMR0_IRQHandler
 #define TICKLESS_LPTMR_BASE_PTR LPTMR0
 #define TICKLESS_LPTMR_IRQn LPTMR0_IRQn
+#endif
 
 #if configUSE_TICKLESS_IDLE
 extern void rtos_sleep_pre(uint32_t xExpectedIdleTime);
