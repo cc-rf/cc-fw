@@ -108,6 +108,7 @@ struct __packed mac {
     phy_t phy;
     mac_addr_t addr;
     mac_recv_t recv;
+    pkt_meta_t recv_meta;
 
     mac_seq_t seq;
     mac_peer_t peer[MAC_PEER_MAX];
@@ -208,6 +209,12 @@ mac_addr_t mac_addr(mac_t mac)
 void mac_stat(mac_t mac, mac_stat_t *stat)
 {
     *stat = mac->stat;
+}
+
+
+pkt_meta_t mac_meta(mac_t mac)
+{
+    return mac->recv_meta;
 }
 
 
@@ -508,6 +515,8 @@ static void mac_task_recv(mac_t mac)
 static void mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta)
 {
     mac_pkt_t *pkt = (mac_pkt_t *)data;
+
+    mac->recv_meta = meta;
 
     if (size != sizeof(mac_pkt_t) + MIN(pkt->size, MAC_PKT_SIZE_MAX)) {
         mac_trace_debug("(rx) bad length: len=%u != size=%u + base=%u", size, MIN(pkt->size, MAC_PKT_SIZE_MAX), sizeof(mac_pkt_t));

@@ -46,9 +46,20 @@ typedef struct __packed {
 
 } net_path_t;
 
+typedef struct list_head net_peer_list_t;
+
 typedef struct __packed {
     net_addr_t addr;
+    net_addr_t peer;
     net_time_t last;
+    pkt_meta_t meta;
+
+} net_peer_info_t;
+
+typedef struct __packed {
+    net_peer_info_t info;
+    net_peer_list_t peer;
+    net_peer_list_t item;
 
 } net_peer_t;
 
@@ -123,9 +134,9 @@ net_t net_init(net_config_t *config);
 net_time_t net_time(net_t net);
 mac_t net_mac(net_t net);
 net_addr_t net_addr(net_t net);
-//net_addr_t net_boss(net_t net);
 void net_stat(net_t net, net_stat_t *stat);
-size_t net_peers(net_t net, net_peer_t **peer);
+void net_peers(net_t net, net_peer_list_t **peer);
+net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list);
 void net_sync(net_t net);
 
 net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[]);

@@ -143,7 +143,7 @@ typedef struct __packed {
 typedef struct __packed {
     net_addr_t addr;
     net_time_t time;
-    net_peer_t peer[];
+    net_peer_info_t peer[];
 
 } code_peer_t;
 
@@ -471,25 +471,25 @@ static void sync_hook(chan_id_t chan)
         net_stat(nets[0], &stat);
 
         if (stat.rx.count != stat_prev.rx.count) {
-            led_set(LED_RGB0_GREEN, 20);
+            led_set(LED_RGB0_GREEN, 5);
         } else {
             led_set(LED_RGB0_GREEN, 0);
         }
 
         if (stat.rx.errors != stat_prev.rx.errors) {
-            led_set(LED_RGB0_RED, 20);
+            led_set(LED_RGB0_RED, 5);
         } else {
             led_set(LED_RGB0_RED, 0);
         }
 
         if (stat.tx.count != stat_prev.tx.count) {
-            led_set(LED_RGB1_BLUE, 30);
+            led_set(LED_RGB1_BLUE, 8);
         } else {
             led_set(LED_RGB1_BLUE, 0);
         }
 
         if (stat.tx.errors != stat_prev.tx.errors) {
-            led_set(LED_RGB1_RED, 30);
+            led_set(LED_RGB1_RED, 8);
         } else {
             led_set(LED_RGB1_RED, 0);
         }
@@ -833,21 +833,15 @@ static void handle_code_peer(u8 port, size_t size, u8 *data)
 
     net_t net = nets[0];
 
-    net_peer_t *peer;
+    net_peer_info_t *peers;
+    net_size_t count = net_peers_flat(net, sizeof(code_peer_t), true, &peers);
 
-    size_t count = net_peers(net, &peer);
-    const size_t peer_size = count * sizeof(net_peer_t);
-
-    code_peer_t *code_peer = pvPortMalloc(sizeof(code_peer_t) + peer_size);
+    code_peer_t *code_peer = (code_peer_t *)peers;
 
     code_peer->addr = net_addr(net);
     code_peer->time = net_time(net);
 
-    memcpy(code_peer->peer, peer, peer_size);
-
-    if (peer) vPortFree(peer);
-
-    write_code_peer(port, peer_size, code_peer);
+    write_code_peer(port, count * sizeof(net_peer_info_t), code_peer);
 
     vPortFree(code_peer);
 }

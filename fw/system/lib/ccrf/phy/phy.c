@@ -650,7 +650,7 @@ static void phy_task(phy_t const restrict phy)
                             phy_trace_verbose("sync loss: lead c=%u", phy_chan(phy));
 
                             phy->boss = true;
-                            phy->stay = PHY_CHAN_COUNT;
+                            phy->stay = PHY_CHAN_COUNT; // TODO: Line up by staying only remaining channels. Need to add this to the sync packet.
                             phy->cycle = PHY_SYNC_CYCLE_COUNT;
                             ts = ccrf_clock();
                             phy->sync_time = ts;

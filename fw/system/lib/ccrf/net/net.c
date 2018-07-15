@@ -23,14 +23,15 @@
 
 #define NET_PEER_MAX            64u
 #define NET_PEER_EXPIRE_TIME    600u
+#define NET_TIMER_INTERVAL      10u
 
 #define NET_NOTIFY_TRXN_DONE    (1u << 18u)
 
 #define NET_MAC_FLAG_NETLAYER   MAC_FLAG_0
 
-//#define NET_PATH_CMD_PORT          ((net_port_t) 0xBEu)
-//#define NET_PATH_CMD_TYPE_PING_REQ ((net_type_t) 0x01u)
-//#define NET_PATH_CMD_TYPE_PING_RSP ((net_type_t) 0x02u)
+#define NET_CORE_PEER_PORT      1
+#define NET_CORE_PEER_TYPE      2
+
 
 typedef struct __packed {
     net_info_t info;
@@ -50,6 +51,12 @@ typedef struct __packed txni {
 struct __packed net {
     net_recv_t recv;
     net_evnt_t evnt;
+
+    struct {
+        net_time_t recv;
+        net_time_t send;
+
+    } last;
     
     phy_t phy;
 
@@ -60,7 +67,8 @@ struct __packed net {
 
     } mac;
     
-    net_peer_t peer[NET_PEER_MAX];
+    net_peer_list_t peer;
+    net_time_t peer_bcast_last;
 
     TimerHandle_t timer;
     StaticTimer_t timer_static;
@@ -80,8 +88,12 @@ static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size
 static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg);
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
 static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
-static void net_core_recv(net_t net, net_size_t size, net_mesg_t *mesg);
-static void net_peer_update(net_t net, net_addr_t addr);
+static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg);
+static void net_peer_bcast(net_t net);
+static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add);
+static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta);
+static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, net_peer_info_t *peers);
+static void net_peer_expire(net_t net, net_time_t time);
 static void net_timer(TimerHandle_t timer);
 
 
@@ -97,10 +109,7 @@ net_t net_init(net_config_t *config)
     net->recv = config->net.recv;
     net->evnt = config->net.evnt;
 
-    for (net_addr_t peer = 0; peer < NET_PEER_MAX; ++peer) {
-        net->peer[peer].addr = NET_ADDR_NONE;
-        net->peer[peer].last = 0;
-    }
+    INIT_LIST_HEAD(&net->peer);
 
     net->mac.recv = config->mac.recv;
 
@@ -120,7 +129,7 @@ net_t net_init(net_config_t *config)
     net->mac.addr = mac_addr(net->mac.mac);
 
     net->timer = xTimerCreateStatic(
-            "net.peer", pdSEC_TO_TICKS(NET_PEER_EXPIRE_TIME),
+            "net.peer", pdSEC_TO_TICKS(NET_TIMER_INTERVAL),
             pdTRUE, net, net_timer, &net->timer_static
     );
 
@@ -164,22 +173,42 @@ void net_stat(net_t net, net_stat_t *stat)
 }
 
 
-size_t net_peers(net_t net, net_peer_t **peer)
+void net_peers(net_t net, net_peer_list_t **peer)
 {
-    net_size_t count = 0;
+    *peer = &net->peer;
+}
 
-    *peer = NULL;
+net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list)
+{
+    net_size_t count = 0, next = 0;
+    net_peer_info_t *peers;
+    net_peer_t *peer, *peeri;
 
-    for (net_size_t pi = 0; pi < NET_PEER_MAX; ++pi)
-        if (net->peer[pi].addr) ++count;
+    *list = NULL;
 
-    if (count) {
-        *peer = pvPortMalloc(sizeof(net_peer_t) * count);
+    list_for_each_entry(peer, &net->peer, item) {
+        count++;
 
-        for (net_size_t pi = 0, ppi = 0; pi < NET_PEER_MAX; ++pi) {
-            if (net->peer[pi].addr)
-                (*peer)[ppi++] = net->peer[pi];
-        }
+        if (all)
+            list_for_each_entry(peeri, &peer->peer, item)
+                count++;
+    }
+
+    *list = peers = pvPortMalloc(extra + count * sizeof(net_peer_info_t));
+
+    if (extra) peers = (net_peer_info_t *) &((u8 *)peers)[extra];
+
+    net_time_t now = net_time(net);
+
+    list_for_each_entry(peer, &net->peer, item) {
+        peers[next] = peer->info;
+        peers[next++].last = now - peer->info.last;
+
+        if (all)
+            list_for_each_entry(peeri, &peer->peer, item) {
+                peers[next] = peeri->info;
+                peers[next++].last = peeri->info.last;
+            }
     }
 
     return count;
@@ -212,23 +241,7 @@ void net_sync(net_t net)
     phy_sync(net->phy, &resy);
 
     if (resy) {
-        // resyncing: clear peer table.
-        net_trace_debug("resync");
-
-        net_peer_t *peer;
-
-        for (net_addr_t pi = 0; pi < NET_PEER_MAX; ++pi) {
-            peer = &net->peer[pi];
-
-            if (peer->addr) {
-                net_addr_t addr = peer->addr;
-
-                peer->addr = 0;
-                peer->last = 0;
-
-                net_evnt_peer(net, addr, NET_EVENT_PEER_EXP);
-            }
-        }
+        net_peer_expire(net, 0);
     }
 }
 
@@ -362,6 +375,7 @@ static void stat_tx_add(net_t net, net_size_t size, mac_size_t rslt)
     if (rslt) {
         net->stat.tx.count++;
         net->stat.tx.bytes += size;
+        net->last.send = net_time(net);
     } else {
         net->stat.tx.errors++;
     }
@@ -378,11 +392,12 @@ static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size
 
     mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_MESG, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, true);
 
-    stat_tx_add(net, size - sizeof(net_mesg_t), sent);
+    if (!(mesg->info.mode & NET_MODE_FLAG_CORE))
+        stat_tx_add(net, size - sizeof(net_mesg_t), sent);
 
     if (sent) {
         // was acked, add to table
-        net_peer_update(net, dest);
+        net_peer_update(net, dest, mac_meta(net->mac.mac));
     }
 
     return sent;
@@ -399,7 +414,8 @@ static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size
 
     mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, false);
 
-    stat_tx_add(net, size - sizeof(net_mesg_t), sent);
+    if (!(mesg->info.mode & NET_MODE_FLAG_CORE))
+        stat_tx_add(net, size - sizeof(net_mesg_t), sent);
 
     return sent;
 }
@@ -412,7 +428,8 @@ static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mes
 
     mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, MAC_ADDR_BCST, size, (u8 *) mesg, false);
 
-    stat_tx_add(net, size - sizeof(net_mesg_t), sent);
+    if (!(mesg->info.mode & NET_MODE_FLAG_CORE))
+        stat_tx_add(net, size - sizeof(net_mesg_t), sent);
 
     return sent;
 }
@@ -460,13 +477,14 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
     if (!dest)
         mesg->info.mode |= NET_MODE_FLAG_BCST;
 
-    net_peer_update(net, peer);
+    net_peer_update(net, peer, meta);
 
     if (mesg->info.mode & NET_MODE_FLAG_CORE)
-        return net_core_recv(net, size - sizeof(net_mesg_t), mesg);
+        return net_core_recv(net, peer, size - sizeof(net_mesg_t), mesg);
 
     net->stat.rx.count++;
     net->stat.rx.bytes += size - sizeof(net_mesg_t);
+    net->last.recv = net_time(net);
 
     net_txni_t *txni;
 
@@ -486,39 +504,141 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
 }
 
 
-static void net_core_recv(net_t net, net_size_t size, net_mesg_t *mesg)
+static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg)
 {
-    /*switch (path.info.port) {
-        case NET_PATH_CMD_PORT:
-            switch (path.info.type) {
-                case NET_PATH_CMD_TYPE_PING_REQ:
-                    path.info.type = NET_PATH_CMD_TYPE_PING_RSP;
-                    mesg->info
-                    net_send_base_dgrm(net, path.addr, 0, mesg);
+    switch (mesg->info.port) {
+
+        case NET_CORE_PEER_PORT:
+
+            switch (mesg->info.type) {
+
+                case NET_CORE_PEER_TYPE: {
+                    net_size_t count = size / sizeof(net_peer_info_t);
+                    if (count) net_peer_update_list(net, addr,  count, (net_peer_info_t *) mesg->data);
+                    net_peer_bcast(net);
+                }
+
             }
-    }*/
+    }
 }
 
 
-static void net_peer_update(net_t net, net_addr_t addr)
+static void net_peer_bcast(net_t net)
 {
-    net_addr_t free = NET_PEER_MAX;
+    net_time_t now = net_time(net);
 
-    for (net_addr_t pi = 0; pi < NET_PEER_MAX; ++pi) {
-        net_peer_t *peer = &net->peer[pi];
+    if ((now - net->peer_bcast_last) <= 5) return;
+    if ((now - net->last.recv) < 5) return;
+    if ((now - net->last.send) < 5) return;
 
-        if (peer->addr == addr) {
-            peer->last = net_time(net);
-            return;
+    net->peer_bcast_last = now;
+
+    net_mesg_t *send;
+    net_peer_info_t *peers;
+    net_size_t count = net_peers_flat(net, sizeof(net_mesg_t), false, &peers);
+
+    send = (net_mesg_t *) peers;
+    send->info.mode = NET_MODE_FLAG_CORE;
+    send->info.port = NET_CORE_PEER_PORT;
+    send->info.type = NET_CORE_PEER_TYPE;
+    net_send_base_bcst(net, count * sizeof(net_peer_info_t), send);
+
+    vPortFree(peers);
+}
+
+
+static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add)
+{
+    net_peer_t *peer, *temp;
+
+    list_for_each_entry_safe(peer, temp, &net->peer, item) {
+        if (peer->info.peer == addr) {
+            return peer;
         }
-
-        if (free > pi && !peer->addr) free = pi;
     }
 
-    if (free < NET_PEER_MAX) {
-        net->peer[free].addr = addr;
-        net->peer[free].last = net_time(net);
-        net_evnt_peer(net, addr, NET_EVENT_PEER_SET);
+    if (!add) return NULL;
+
+    peer = pvPortMalloc(sizeof(net_peer_t));
+
+    memset(peer, 0, sizeof(*peer));
+
+    peer->info.addr = net_addr(net);
+    peer->info.peer = addr;
+    peer->info.last = net_time(net);
+
+    INIT_LIST_HEAD(&peer->peer);
+
+    list_add(&peer->item, &net->peer);
+
+    net_evnt_peer(net, addr, NET_EVENT_PEER_SET);
+
+    return peer;
+}
+
+
+static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta)
+{
+    net_peer_t *peer = net_peer_get(net, addr, true);
+    peer->info.last = net_time(net);
+    peer->info.meta = meta;
+}
+
+
+static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, net_peer_info_t *peers)
+{
+    net_peer_t *peer = net_peer_get(net, addr, true);
+    net_time_t now = net_time(net);
+    net_peer_t *peeri;
+    bool found;
+
+    for (net_size_t pi = 0; pi < count; ++pi) {
+        found = false;
+
+        list_for_each_entry(peeri, &peer->peer, item) {
+            if ((peeri->info.addr == peers[pi].addr) && (peeri->info.peer == peers[pi].peer)) {
+                peeri->info.last = now - peers[pi].last/*expected relative*/;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            peeri = pvPortMalloc(sizeof(net_peer_t));
+
+            INIT_LIST_HEAD(&peeri->peer);
+
+            peeri->info = peers[pi];
+
+            list_add(&peeri->item, &peer->peer);
+        }
+    }
+}
+
+
+static void net_peer_expire(net_t net, net_time_t time)
+{
+    net_peer_t *peer, *temp, *peeri, *tempi;
+
+    list_for_each_entry_safe(peer, temp, &net->peer, item) {
+        if (peer->info.addr && (!time || (time - peer->info.last) >= NET_PEER_EXPIRE_TIME)) {
+            net_addr_t addr = peer->info.addr;
+
+            peer->info.addr = NET_ADDR_NONE;
+            peer->info.peer = NET_ADDR_NONE;
+            peer->info.last = NET_ADDR_NONE;
+
+            net_evnt_peer(net, addr, NET_EVENT_PEER_EXP);
+
+            list_for_each_entry_safe(peeri, tempi, &peer->peer, item) {
+                assert(list_empty(&peeri->peer));
+                list_del(&peeri->item);
+                vPortFree(peeri);
+            }
+
+            list_del(&peer->item);
+            vPortFree(peer);
+        }
     }
 }
 
@@ -527,19 +647,6 @@ static void net_timer(TimerHandle_t timer)
 {
     net_t net = pvTimerGetTimerID(timer);
     net_time_t now = net_time(net);
-    net_peer_t *peer;
-
-    for (net_addr_t pi = 0; pi < NET_PEER_MAX; ++pi) {
-
-        peer = &net->peer[pi];
-
-        if (peer->addr && (now - peer->last) >= NET_PEER_EXPIRE_TIME) {
-            net_addr_t addr = peer->addr;
-
-            peer->addr = 0;
-            peer->last = 0;
-
-            net_evnt_peer(net, addr, NET_EVENT_PEER_EXP);
-        }
-    }
+    net_peer_expire(net, now);
+    net_peer_bcast(net);
 }
