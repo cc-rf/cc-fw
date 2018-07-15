@@ -69,6 +69,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "fsl_tickless_generic.h"
+#include <kio/itm.h>
+
 
 #if configUSE_TICKLESS_IDLE == 1
 #include "fsl_lptmr.h"
@@ -133,12 +135,14 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 
 		pxLptmrBase = vPortGetLptrmBase();
 		if (pxLptmrBase == 0) return;
+
 		/* Make sure the SysTick reload value does not overflow the counter. */
 		if( xExpectedIdleTime > xMaximumPossibleSuppressedTicks )
 		{
 			xExpectedIdleTime = xMaximumPossibleSuppressedTicks;
 		}
-		if (xExpectedIdleTime == 0) return;
+
+        if (xExpectedIdleTime == 0) return;
 		/* Calculate the reload value required to wait xExpectedIdleTime
 		tick periods.  -1 is used because this code will execute part way
 		through one of the tick periods. */
@@ -257,6 +261,7 @@ void vPortSetupTimerInterrupt( void )
 	{
 		ulTimerCountsForOneTick = ( configSYSTICK_CLOCK_HZ / configTICK_RATE_HZ );
 		ulLPTimerCountsForOneTick = ( configLPTMR_CLOCK_HZ / configTICK_RATE_HZ );
+		// TODO: Need to handle the case where configLPTMR_CLOCK_HZ < configTICK_RATE_HZ (e.g. 1000 vs. 10000)
 		xMaximumPossibleSuppressedTicks = portMAX_16_BIT_NUMBER / ulLPTimerCountsForOneTick;
 		NVIC_EnableIRQ(vPortGetLptmrIrqn());
 	}

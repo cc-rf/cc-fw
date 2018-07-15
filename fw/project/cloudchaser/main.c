@@ -9,6 +9,8 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <fsl_port.h>
+#include <fsl_lptmr.h>
+#include <fsl_tickless_generic.h>
 
 #include "cloudchaser.h"
 #include "led.h"
@@ -90,6 +92,15 @@ __attribute__((constructor, used)) void __init(void)
                CLOCK_GetFreq(kCLOCK_LpoClk)
     );*/
 
+    #if configUSE_TICKLESS_IDLE
+    lptmr_config_t config;
+    LPTMR_GetDefaultConfig(&config);
+    config.prescalerClockSource = kLPTMR_PrescalerClock_1; // Clock 1 == LPO?
+    config.bypassPrescaler = true;
+
+    LPTMR_Init(TICKLESS_LPTMR_BASE_PTR, &config);
+    LPTMR_EnableInterrupts(TICKLESS_LPTMR_BASE_PTR, kLPTMR_TimerInterruptEnable);
+    #endif
 }
 
 
@@ -115,6 +126,11 @@ static void main_task(void *param)
         itm_puts(0, "usb: init fail\r\n");
         goto _end;
     }
+
+    /*while (1) {
+        itm_printf(0, "hello! t=%lu\n", pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }*/
 
 
     /**
@@ -439,6 +455,30 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer, StackT
     *ppxTimerTaskStackBuffer = uxTimerTaskStack;
     *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
 }
+
+#if configUSE_TICKLESS_IDLE
+
+LPTMR_Type *vPortGetLptrmBase(void)
+{
+    return TICKLESS_LPTMR_BASE_PTR;
+}
+
+IRQn_Type vPortGetLptmrIrqn(void)
+{
+    return TICKLESS_LPTMR_IRQn;
+}
+
+void rtos_sleep_pre(TickType_t xExpectedIdleTime)
+{
+    //itm_printf(0, "sleep-pre %lu\n", xExpectedIdleTime);
+}
+
+void rtos_sleep_post(TickType_t xExpectedIdleTime)
+{
+    //itm_printf(0, "sleep-post %lu\n", xExpectedIdleTime);
+}
+
+#endif
 
 // -
 #include "fault.c"

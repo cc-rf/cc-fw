@@ -91,6 +91,56 @@ void BOARD_BootClockVLPR(void)
     }
 }
 
+void BOARD_BootClockLPRUN(void)
+{
+    // 96MHz
+    /*const mcg_pll_config_t pll0Config = {
+            .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x00U,
+    };
+
+    const sim_clock_config_t simConfig = {
+            .pllFllSel = 1U, .pllFllDiv = 0U, .pllFllFrac = 0U, .er32kSrc = 2U, .clkdiv1 = 0x00020000U,
+    };*/
+
+    // 64MHz
+    const mcg_pll_config_t pll0Config = {
+            .enableMode = 0U, .prdiv = 0x02U, .vdiv = 0x00U,
+    };
+
+    const sim_clock_config_t simConfig = {
+            .pllFllSel = 1U, .pllFllDiv = 0U, .pllFllFrac = 0U, .er32kSrc = 2U, .clkdiv1 = 0x00010000U,
+    };
+
+    // 32MHz
+    /*const mcg_pll_config_t pll0Config = {
+            .enableMode = 0U, .prdiv = 0x05U, .vdiv = 0x00U,
+    };
+
+    const sim_clock_config_t simConfig = {
+            .pllFllSel = 1U, .pllFllDiv = 0U, .pllFllFrac = 0U, .er32kSrc = 2U, .clkdiv1 = 0x00000000U,
+    };*/
+
+
+
+    CLOCK_SetSimSafeDivs();
+
+    BOARD_InitOsc0();
+
+    CLOCK_BootToPeeMode(kMCG_OscselOsc, kMCG_PllClkSelPll0, &pll0Config);
+
+    CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0U); // TODO: Find out why I was using FCRDIV of 5?
+
+    CLOCK_SetSimConfig(&simConfig);
+
+    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
+
+    SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
+    SMC_SetPowerModeRun(SMC);
+    while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateRun)
+    {
+    }
+}
+
 void BOARD_BootClockRUN(void)
 {
     const mcg_pll_config_t pll0Config = {
@@ -151,10 +201,10 @@ void BOARD_BootClockHSRUN(void)
 void BOARD_BootClockOCHSRUN(void)
 {
     const mcg_pll_config_t pll0Config = {
-            .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x16U,
+            .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x14U,
     };
     const sim_clock_config_t simConfig = {
-            .pllFllSel = 1U, .er32kSrc = 2U, .clkdiv1 = 0x01160000U,
+            .pllFllSel = 1U, .er32kSrc = 2U, .clkdiv1 = 0x01170000U,
     };
 
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);

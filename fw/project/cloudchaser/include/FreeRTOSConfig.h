@@ -116,9 +116,21 @@
 #define configUSE_IDLE_HOOK 0U
 #define configUSE_TICK_HOOK 0U
 #define configUSE_TICKLESS_IDLE 0U
+#define configLPTMR_CLOCK_HZ CLOCK_GetFreq(kCLOCK_LpoClk)
+
+#define vPortLptmrIsr LPTMR0_IRQHandler
+#define TICKLESS_LPTMR_BASE_PTR LPTMR0
+#define TICKLESS_LPTMR_IRQn LPTMR0_IRQn
+
+#if configUSE_TICKLESS_IDLE
+extern void rtos_sleep_pre(uint32_t xExpectedIdleTime);
+extern void rtos_sleep_post(uint32_t xExpectedIdleTime);
+#define configPRE_SLEEP_PROCESSING(x) rtos_sleep_pre(x)
+#define configPOST_SLEEP_PROCESSING(x) rtos_sleep_post(x)
+#endif
 
 #define configCPU_CLOCK_HZ (SystemCoreClock)
-#define configTICK_RATE_HZ ((TickType_t)10000U)
+#define configTICK_RATE_HZ ((TickType_t) 10000U)
 #define configMAX_PRIORITIES (18U)
 #define configMINIMAL_STACK_SIZE ((unsigned short) 192U)
 #define configTOTAL_HEAP_SIZE ((size_t)(72U * 1024U))
@@ -144,7 +156,7 @@
 #define configUSE_TIMERS 1U
 #define configTIMER_TASK_PRIORITY (configMAX_PRIORITIES - 1U)
 #define configTIMER_QUEUE_LENGTH 10U
-#define configTIMER_TASK_STACK_DEPTH (configMINIMAL_STACK_SIZE * 2U)
+#define configTIMER_TASK_STACK_DEPTH TASK_STACK_SIZE_LARGE
 
 /* Set the following definitions to 1 to include the API function, or zero
 to exclude the API function. */
