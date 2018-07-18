@@ -243,7 +243,7 @@ void phy_sync(phy_t phy, bool *resy)
 {
     u32 notify = 0;
 
-    *resy = phy->boss;
+    if (resy) *resy = phy->boss;
     phy->sync = xTaskGetCurrentTaskHandle();
 
     do {
@@ -252,7 +252,7 @@ void phy_sync(phy_t phy, bool *resy)
     } while ((notify & PHY_NOTIFY_SYNC) != PHY_NOTIFY_SYNC);
 
     phy->sync = 0;
-    *resy = *resy != phy->boss;
+    if (resy) *resy = *resy != phy->boss;
 }
 
 

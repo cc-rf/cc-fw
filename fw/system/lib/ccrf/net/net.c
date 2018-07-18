@@ -237,12 +237,7 @@ static void net_mesg_free(net_mesg_t **mesg)
 
 void net_sync(net_t net)
 {
-    bool resy;
-    phy_sync(net->phy, &resy);
-
-    if (resy) {
-        net_peer_expire(net, 0);
-    }
+    phy_sync(net->phy, NULL);
 }
 
 
@@ -591,6 +586,8 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
     net_time_t now = net_time(net);
     net_peer_t *peeri;
     bool found;
+
+    peer->info.last = now;
 
     for (net_size_t pi = 0; pi < count; ++pi) {
         found = false;
