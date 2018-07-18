@@ -18,7 +18,9 @@
 #define GPIO_REG_BYTE(x)    (x) // ((u8 *)&(x))[1]
 
 
-#define FABI_NOTIFY         (1u<<23u)
+#define FABI_NOTIFY             (1u<<23u)
+#define FABI_TASK_STACK_SIZE    (TASK_STACK_SIZE_DEFAULT / sizeof(StackType_t))
+
 
 #define FABI_CHAN_MASK      ((u8)((u8)(1u << (u8)FABI_CHAN_COUNT) - 1u))
 
@@ -40,6 +42,12 @@ static edma_transfer_config_t tr[3] = {{0}};
 
 static u8 band_in[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section("m_band") __aligned(32);
 static fabi_out_t band_out[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section("m_band") __aligned(32);
+
+static void fabi_task(void *param);
+TaskHandle_t fabi_task_handle;
+StaticTask_t fabi_task_static;
+StackType_t fabi_task_stack[FABI_TASK_STACK_SIZE];
+
 
 void fabi_init(void)
 {
@@ -160,10 +168,41 @@ void fabi_init(void)
         }
     }*/
 
+    fabi_task_handle = xTaskCreateStatic(
+            (TaskFunction_t) fabi_task, "fabi", FABI_TASK_STACK_SIZE, NULL, TASK_PRIO_DEFAULT, fabi_task_stack, &fabi_task_static
+    );
+}
 
-    /*u16 i;
+
+static void fabi_task(void *param)
+{
+    #define INIT_COUNT 144
+
+    fabi_rgb_t *init1 = pvPortMalloc(sizeof(fabi_rgb_t) * INIT_COUNT);
+    fabi_rgb_t *init2 = pvPortMalloc(sizeof(fabi_rgb_t) * INIT_COUNT);
+
+    memset(init1, 0, sizeof(fabi_rgb_t) * INIT_COUNT);
+    memset(init2, 0, sizeof(fabi_rgb_t) * INIT_COUNT);
+
+    u16 counter, i;
 
     while (1) {
+
+        for (counter = 0; counter <= UINT8_MAX; ++counter) {
+
+            for (i = 0; i < INIT_COUNT; ++i) {
+                init1[i] = (fabi_rgb_t) {(8 - i % 8u)*2, (i % 8u)*3, (counter > 127 ? 255 - counter : counter)/4 };
+                init2[i] = (fabi_rgb_t) {(8 - i % 8u)*2, (counter > 127 ? 255 - counter : counter)/4, (i % 8u)*3 };
+            }
+
+            fabi_write(1, init1, INIT_COUNT);
+            fabi_write(2, init2, INIT_COUNT);
+
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+    }
+
+    /*while (1) {
 
         for (i = 0; i < INIT_COUNT; ++i) {
             init1[i] = (fabi_rgb_t) { 0xff, 0xff, 0xff };
@@ -176,7 +215,6 @@ void fabi_init(void)
 
     }*/
 }
-
 
 fabi_rgb_t *fabi_buffer(void)
 {
