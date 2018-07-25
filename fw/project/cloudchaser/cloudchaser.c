@@ -300,9 +300,12 @@ void cloudchaser_main(void)
     else if (uflag2_set())  net_config.phy.cell = 0xA2;
     else                    net_config.phy.cell = 0xA0;
 
+    const u32 serial_hi = (u32)(status.serial >> 32);
+    const u32 serial_lo = (u32)status.serial;
+
     printf(
             "\r\nCloud Chaser %08lX%08lX@%02X.%04X\r\n\r\n",
-            (u32)(status.serial >> 32), (u32)status.serial, net_config.phy.cell, status.macid
+            serial_hi, serial_lo, net_config.phy.cell, status.macid
     );
 
     //rainbow();
