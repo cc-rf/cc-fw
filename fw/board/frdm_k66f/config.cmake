@@ -1,2 +1,0 @@
-set(CONFIG_KINETIS_CPU "mk66f18" CACHE STRING "Target Kinetis CPU (frdm_k66f)")
-set(CONFIG_KINETIS_CPU_PART "MK66FN2M0VMD18" CACHE STRING "Target Kinetis CPU Part (frdm_k66f)")
