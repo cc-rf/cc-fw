@@ -154,7 +154,7 @@ void uart_write(uart_t const uart, const u8 *buf, u8 len)
     out_buf[0] = len;*/
 
     uart_transfer_t xfer = {
-            .data = buf,
+            .data = (u8 *)buf,
             .dataSize = len
     };
 
@@ -276,7 +276,7 @@ size_t uart_read_frame(uart_t const uart, serf_t *frame, size_t size)
     u8 ch = 0;
     size_t in_size = 0;
     size_t frame_size;
-    u32 status;
+    //u32 status;
 
     while (1) {
         // read length first
