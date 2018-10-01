@@ -176,7 +176,7 @@ void fabi_init(void)
 
 static void fabi_task(void *param)
 {
-    #define INIT_COUNT 144
+    #define INIT_COUNT 60
 
     fabi_rgb_t *init1 = pvPortMalloc(sizeof(fabi_rgb_t) * INIT_COUNT);
     fabi_rgb_t *init2 = pvPortMalloc(sizeof(fabi_rgb_t) * INIT_COUNT);
@@ -186,7 +186,7 @@ static void fabi_task(void *param)
 
     u16 counter, i;
 
-    while (1) {
+    /*while (1) {
 
         for (counter = 0; counter <= UINT8_MAX; ++counter) {
 
@@ -200,20 +200,20 @@ static void fabi_task(void *param)
 
             vTaskDelay(pdMS_TO_TICKS(2));
         }
-    }
+    }*/
 
-    /*while (1) {
+    while (1) {
 
         for (i = 0; i < INIT_COUNT; ++i) {
-            init1[i] = (fabi_rgb_t) { 0xff, 0xff, 0xff };
+            init1[i] = (fabi_rgb_t) { 0x00, 0xff, 0x00 };
 
             fabi_write(0b11, init1, INIT_COUNT);
             //vTaskDelay(pdMS_TO_TICKS(2));
 
-            init1[i] = (fabi_rgb_t) { 0x00, 0x00, 0x00 };
+            init1[i] = (fabi_rgb_t) { 0x00, i, 0x00 };
         }
 
-    }*/
+    }
 }
 
 fabi_rgb_t *fabi_buffer(void)
