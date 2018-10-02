@@ -490,7 +490,7 @@ u32 rdio_util_get_tx_time(rdio_t rdio, u32 len)
     //       The current assumption is: preamble/6, sync/4, len/1, data/len, crc/2,
     //         symbol rate = 200ksps * modmul/1 (=1 for 2-ary, 0.25 for DSSS, 2 for 4-ary)
 
-    #define MODMUL  2  // 2GFSK: 1 4GFSK: 2
+    #define MODMUL  1  // 2GFSK: 1 4GFSK: 2
 
     const static u32 overhead = (4/*preamble*/ + 4/*sync*/)*MODMUL/*4GFSK sends these as 2GFSK*/ + 1/*len*/ + 2/*crc*/;
     const static u32 symbol_rate = 200000 * MODMUL/*modmul*/;

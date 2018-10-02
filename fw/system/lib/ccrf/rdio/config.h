@@ -121,6 +121,8 @@
  * IFAMP: 0x09->0x0D. single-side bw 1MHz->1.5MHz. Giving better low-rssi performance.
  * FS_DIG0: 0x55->0x58. RX FS Loop BW 300kHz->400kHz, TX 300kHz->200kHz.
  * CHAN_BW: 0x03->0x02. RX filter BW 500kHz->800kHz. Important for low rssi rx.
+ * DEVIATION_M/DEV_E: 0x55/0x2E->0x55/0x0D. For certified field operation with 25 channels.
+ * CHAN_BW: 0x02->0x03. Dev back to 100kHz. ^ For this mode.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -142,11 +144,11 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_IQIC,              0xD8},
         {CC1200_DEVIATION_M,       0x47},
         #endif
-        {CC1200_MODCFG_DEV_E,      0x2E},
+        {CC1200_MODCFG_DEV_E,      0x0D},
         {CC1200_DCFILT_CFG,        0x0E},
         {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
-        {CC1200_CHAN_BW,           0x02},
+        {CC1200_CHAN_BW,           0x03},
         {CC1200_MDMCFG1,           0x42},
         {CC1200_MDMCFG0,           0x05},
         #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
