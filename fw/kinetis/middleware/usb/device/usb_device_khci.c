@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * Copyright 2016 NXP
+ * Copyright 2016 - 2018 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -82,9 +86,9 @@ static void USB_DeviceKhciInterruptSleep(usb_device_khci_state_struct_t *khciSta
 static void USB_DeviceKhciInterruptResume(usb_device_khci_state_struct_t *khciState);
 #endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 static void USB_DeviceKhciInterruptStall(usb_device_khci_state_struct_t *khciState);
-#if defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING > 0U)
+#if defined(USB_DEVICE_CONFIG_ERROR_HANDLING) && (USB_DEVICE_CONFIG_ERROR_HANDLING > 0U)
 static void USB_DeviceKhciInterruptError(usb_device_khci_state_struct_t *khciState);
-#endif /* USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING */
+#endif /* USB_DEVICE_CONFIG_ERROR_HANDLING */
 
 extern usb_status_t USB_DeviceNotificationTrigger(void *handle, void *msg);
 
@@ -96,16 +100,18 @@ extern usb_status_t USB_DeviceNotificationTrigger(void *handle, void *msg);
 USB_BDT USB_RAM_ADDRESS_ALIGNMENT(512) static uint8_t s_UsbDeviceKhciBdtBuffer[USB_DEVICE_CONFIG_KHCI][512U];
 
 /* Apply for khci device state structure */
-USB_GLOBAL static usb_device_khci_state_struct_t s_UsbDeviceKhciState[USB_DEVICE_CONFIG_KHCI];
+USB_GLOBAL USB_RAM_ADDRESS_ALIGNMENT(USB_DATA_ALIGN_SIZE) static usb_device_khci_state_struct_t
+    s_UsbDeviceKhciState[USB_DEVICE_CONFIG_KHCI];
 
 #if (defined(USB_DEVICE_CHARGER_DETECT_ENABLE) && (USB_DEVICE_CHARGER_DETECT_ENABLE > 0U)) && \
     (defined(FSL_FEATURE_SOC_USBDCD_COUNT) && (FSL_FEATURE_SOC_USBDCD_COUNT > 0U))
 /* Apply for device dcd state structure */
-USB_GLOBAL static usb_device_dcd_state_struct_t s_UsbDeviceDcdState[USB_DEVICE_CONFIG_KHCI];
+USB_GLOBAL USB_RAM_ADDRESS_ALIGNMENT(USB_DATA_ALIGN_SIZE) static usb_device_dcd_state_struct_t
+    s_UsbDeviceDcdState[USB_DEVICE_CONFIG_KHCI];
 #endif
 
 /* Apply for KHCI DMA aligned buffer when marco USB_DEVICE_CONFIG_KHCI_DMA_ALIGN enabled */
-USB_GLOBAL static uint32_t s_UsbDeviceKhciDmaAlignBuffer
+USB_GLOBAL USB_RAM_ADDRESS_ALIGNMENT(USB_DATA_ALIGN_SIZE) static uint32_t s_UsbDeviceKhciDmaAlignBuffer
     [USB_DEVICE_CONFIG_KHCI][((USB_DEVICE_CONFIG_KHCI_DMA_ALIGN_BUFFER_LENGTH - 1U) >> 2U) + 1U];
 
 /*******************************************************************************
@@ -253,10 +259,10 @@ static void USB_DeviceKhciSetDefaultState(usb_device_khci_state_struct_t *khciSt
     interruptFlag |= kUSB_KhciInterruptSleep;
 #endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 
-#if defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING > 0U)
+#if defined(USB_DEVICE_CONFIG_ERROR_HANDLING) && (USB_DEVICE_CONFIG_ERROR_HANDLING > 0U)
     /* Enable error interruprt */
     interruptFlag |= kUSB_KhciInterruptError;
-#endif /* USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING */
+#endif /* USB_DEVICE_CONFIG_ERROR_HANDLING */
     /* Write the interrupt enable register */
     khciState->registerBase->INTEN = interruptFlag;
 
@@ -315,6 +321,46 @@ static usb_status_t USB_DeviceKhciEndpointInit(usb_device_khci_state_struct_t *k
     /* Enable the endpoint. */
     khciState->registerBase->ENDPOINT[endpoint].ENDPT |=
         (USB_IN == direction) ? USB_ENDPT_EPTXEN_MASK : USB_ENDPT_EPRXEN_MASK;
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_LOW) && (FSL_FEATURE_USB_KHCI_HAS_STALL_LOW > 0U)
+    /*control endpoint bidirection stall default state shoule be enable, iso doesn't support stall*/
+    if ((USB_ENDPOINT_BULK == epInit->transferType) || (USB_ENDPOINT_INTERRUPT == epInit->transferType))
+    {
+        if(USB_IN == direction)
+        {
+            if (endpoint < 8)
+            {
+                khciState->registerBase->STALL_IL_DIS |= (1<<endpoint);
+            }
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH) && (FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH > 0U)
+            else if ((endpoint >= 8) && (endpoint < 16))
+            {
+                khciState->registerBase->STALL_IH_DIS |= (1<<(endpoint-8));
+            }
+#endif
+        }
+        else
+        {
+            if (endpoint < 8)
+            {
+                khciState->registerBase->STALL_OL_DIS |= (1<<endpoint);
+            }
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH) && (FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH > 0U)
+            else if ((endpoint >= 8) && (endpoint < 16))
+            {
+                khciState->registerBase->STALL_OH_DIS |= (1<<(endpoint-8));
+            }
+#endif
+        }
+    }
+    else if ((USB_ENDPOINT_CONTROL == epInit->transferType))
+    {
+       khciState->registerBase->STALL_IL_DIS &= ~(1<<endpoint);
+       khciState->registerBase->STALL_OL_DIS &= ~(1<<endpoint);
+    }
+    else
+    {
+    }
+#endif
 
     /* Prime a transfer to receive next setup packet when the endpoint is control out endpoint. */
     if ((USB_CONTROL_ENDPOINT == endpoint) && (USB_OUT == direction))
@@ -377,7 +423,37 @@ static usb_status_t USB_DeviceKhciEndpointStall(usb_device_khci_state_struct_t *
 
     /* Set endpoint stall flag. */
     khciState->endpointState[index].stateUnion.stateBitField.stalled = 1U;
-
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_LOW) && (FSL_FEATURE_USB_KHCI_HAS_STALL_LOW > 0U)
+    if (USB_CONTROL_ENDPOINT != endpoint)
+    {
+        if(USB_IN == direction)
+        {
+            if (endpoint < 8)
+            {
+                khciState->registerBase->STALL_IL_DIS &= ~(1<<endpoint);
+            }
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH) && (FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH > 0U)
+            else if ((endpoint >= 8) && (endpoint < 16))
+            {
+                khciState->registerBase->STALL_IH_DIS &= ~(1<<(endpoint-8));
+            }
+#endif
+        }
+        else
+        {
+            if (endpoint < 8)
+            {
+                khciState->registerBase->STALL_OL_DIS &= ~(1<<endpoint);
+            }
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH) && (FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH > 0U)
+            else if ((endpoint >= 8) && (endpoint < 16))
+            {
+                khciState->registerBase->STALL_OH_DIS &= ~(1<<(endpoint-8));
+            }
+#endif
+        }
+    }
+#endif
     /* Set endpoint stall in BDT. And then if the host send a IN/OUT tanscation, the device will response a STALL state.
      */
     USB_KHCI_BDT_SET_CONTROL(
@@ -404,7 +480,6 @@ static usb_status_t USB_DeviceKhciEndpointStall(usb_device_khci_state_struct_t *
  */
 static usb_status_t USB_DeviceKhciEndpointUnstall(usb_device_khci_state_struct_t *khciState, uint8_t ep)
 {
-    uint32_t control;
     uint8_t endpoint = ep & USB_ENDPOINT_NUMBER_MASK;
     uint8_t direction =
         (ep & USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_MASK) >> USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_SHIFT;
@@ -418,19 +493,51 @@ static usb_status_t USB_DeviceKhciEndpointUnstall(usb_device_khci_state_struct_t
     /* Clear stall state in BDT */
     for (uint8_t i = 0U; i < 2U; i++)
     {
-        control = USB_KHCI_BDT_GET_CONTROL((uint32_t)khciState->bdt, endpoint, direction, i);
-        if (control & USB_KHCI_BDT_STALL)
-        {
-            USB_KHCI_BDT_SET_CONTROL(
-                (uint32_t)khciState->bdt, endpoint, direction, i,
-                USB_LONG_TO_LITTLE_ENDIAN(
-                    (uint32_t)(USB_KHCI_BDT_BC(khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize) |
-                               USB_KHCI_BDT_DTS | USB_KHCI_BDT_DATA01(0U))));
-        }
+        USB_KHCI_BDT_SET_CONTROL(
+            (uint32_t)khciState->bdt, endpoint, direction, i,
+            USB_LONG_TO_LITTLE_ENDIAN(
+                (uint32_t)(USB_KHCI_BDT_BC(khciState->endpointState[index].stateUnion.stateBitField.maxPacketSize) |
+                           USB_KHCI_BDT_DTS | USB_KHCI_BDT_DATA01(0U))));
     }
 
     /* Clear stall state in endpoint control register */
     khciState->registerBase->ENDPOINT[endpoint].ENDPT &= ~USB_ENDPT_EPSTALL_MASK;
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_LOW) && (FSL_FEATURE_USB_KHCI_HAS_STALL_LOW > 0U)
+    if (USB_CONTROL_ENDPOINT != endpoint)
+    {
+        if(USB_IN == direction)
+        {
+            if (endpoint < 8)
+            {
+                khciState->registerBase->STALL_IL_DIS |= (1<<endpoint);
+            }
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH) && (FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH > 0U)
+            else if ((endpoint >= 8) && (endpoint < 16))
+            {
+                khciState->registerBase->STALL_IH_DIS |= (1<<(endpoint-8));
+            }
+#endif
+        }
+        else
+        {
+            if (endpoint < 8)
+            {
+                khciState->registerBase->STALL_OL_DIS |= (1<<endpoint);
+            }
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH) && (FSL_FEATURE_USB_KHCI_HAS_STALL_HIGH > 0U)
+            else if ((endpoint >= 8) && (endpoint < 16))
+            {
+                khciState->registerBase->STALL_OH_DIS |= (1<<(endpoint-8));
+            }
+#endif
+        }
+    }
+#endif
+    if ((USB_CONTROL_ENDPOINT != endpoint))
+    {
+        /* Cancel the transfer of the endpoint */
+        USB_DeviceKhciCancel(khciState, ep);
+    }
 
     /* Prime a transfer to receive next setup packet when the endpoint is a control out endpoint. */
     if ((USB_CONTROL_ENDPOINT == endpoint) && (USB_OUT == direction))
@@ -846,7 +953,7 @@ static void USB_DeviceKhciInterruptStall(usb_device_khci_state_struct_t *khciSta
     }
 }
 
-#if defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING > 0U)
+#if defined(USB_DEVICE_CONFIG_ERROR_HANDLING) && (USB_DEVICE_CONFIG_ERROR_HANDLING > 0U)
 static void USB_DeviceKhciInterruptError(usb_device_khci_state_struct_t *khciState)
 {
     usb_device_callback_message_struct_t message;
@@ -861,7 +968,7 @@ static void USB_DeviceKhciInterruptError(usb_device_khci_state_struct_t *khciSta
     /* Notify up layer the USB error detected. */
     USB_DeviceNotificationTrigger(khciState->deviceHandle, &message);
 }
-#endif /* USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING */
+#endif /* USB_DEVICE_CONFIG_ERROR_HANDLING */
 
 /*!
  * @brief Initialize the USB device KHCI instance.
@@ -933,8 +1040,12 @@ usb_status_t USB_DeviceKhciInit(uint8_t controllerId,
 #if defined(FSL_FEATURE_SOC_MCGLITE_COUNT) && (FSL_FEATURE_SOC_MCGLITE_COUNT > 0U)
     MCG->MC |= MCG_MC_HIRCLPEN_MASK;
 #endif
-    PMC->REGSC |= PMC_REGSC_BGEN_MASK | PMC_REGSC_VLPO_MASK;
+
 #endif
+#if defined(FSL_FEATURE_USB_KHCI_HAS_STALL_LOW) && (FSL_FEATURE_USB_KHCI_HAS_STALL_LOW > 0U)
+    khciState->registerBase->MISCCTRL |= USB_MISCCTRL_STL_ADJ_EN_MASK;
+#endif
+
     /* Set KHCI device state to default value. */
     USB_DeviceKhciSetDefaultState(khciState);
 
@@ -1389,13 +1500,13 @@ void USB_DeviceKhciIsrFunction(void *deviceHandle)
         khciState->registerBase->ISTAT = USB_ISTAT_SOFTOK_MASK;
     }
 #endif
-#if defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && (USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING > 0U)
+#if defined(USB_DEVICE_CONFIG_ERROR_HANDLING) && (USB_DEVICE_CONFIG_ERROR_HANDLING > 0U)
     /* Error interrupt */
     if (status & kUSB_KhciInterruptError)
     {
         USB_DeviceKhciInterruptError(khciState);
     }
-#endif /* USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING */
+#endif /* USB_DEVICE_CONFIG_ERROR_HANDLING */
     /* Token done interrupt */
     if (status & kUSB_KhciInterruptTokenDone)
     {

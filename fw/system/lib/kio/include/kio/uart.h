@@ -12,7 +12,7 @@ typedef struct uart *uart_t;
 uart_t uart_init(const uart_id_t id, const baud_t baud);
 void uart_free(uart_t const uart);
 
-void uart_write(uart_t const uart, const u8 *buf, u8 len);
+void uart_write(uart_t const uart, size_t size, const u8 *data);
 
 size_t uart_read(uart_t const uart, u8 *buf, size_t len);
 size_t uart_read_frame(uart_t const uart, serf_t *frame, size_t size);

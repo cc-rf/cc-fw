@@ -1,93 +1,52 @@
 /*
-    FreeRTOS V9.0.0 - Copyright (C) 2016 Real Time Engineers Ltd.
-    All rights reserved
+ * FreeRTOS Kernel V10.0.0
+ * Copyright (C) 2017 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software. If you wish to use our Amazon
+ * FreeRTOS name, please do so in a fair use way that does not cause confusion.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * http://www.FreeRTOS.org
+ * http://aws.amazon.com/freertos
+ *
+ * 1 tab == 4 spaces!
+ */
 
-    VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
+/* Compiler includes. */
+#if defined(__ICCARM__)
+#include <intrinsics.h>
+#endif
 
-    This file is part of the FreeRTOS distribution.
-
-    FreeRTOS is free software; you can redistribute it and/or modify it under
-    the terms of the GNU General Public License (version 2) as published by the
-    Free Software Foundation >>>> AND MODIFIED BY <<<< the FreeRTOS exception.
-
-    ***************************************************************************
-    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
-    >>!   distribute a combined work that includes FreeRTOS without being   !<<
-    >>!   obliged to provide the source code for proprietary components     !<<
-    >>!   outside of the FreeRTOS kernel.                                   !<<
-    ***************************************************************************
-
-    FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
-    WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-    FOR A PARTICULAR PURPOSE.  Full license text is available on the following
-    link: http://www.freertos.org/a00114.html
-
-    ***************************************************************************
-     *                                                                       *
-     *    FreeRTOS provides completely free yet professionally developed,    *
-     *    robust, strictly quality controlled, supported, and cross          *
-     *    platform software that is more than just the market leader, it     *
-     *    is the industry's de facto standard.                               *
-     *                                                                       *
-     *    Help yourself get started quickly while simultaneously helping     *
-     *    to support the FreeRTOS project by purchasing a FreeRTOS           *
-     *    tutorial book, reference manual, or both:                          *
-     *    http://www.FreeRTOS.org/Documentation                              *
-     *                                                                       *
-    ***************************************************************************
-
-    http://www.FreeRTOS.org/FAQHelp.html - Having a problem?  Start by reading
-    the FAQ page "My application does not run, what could be wrong?".  Have you
-    defined configASSERT()?
-
-    http://www.FreeRTOS.org/support - In return for receiving this top quality
-    embedded software for free we request you assist our global community by
-    participating in the support forum.
-
-    http://www.FreeRTOS.org/training - Investing in training allows your team to
-    be as productive as possible as early as possible.  Now you can receive
-    FreeRTOS training directly from Richard Barry, CEO of Real Time Engineers
-    Ltd, and the world's leading authority on the world's leading RTOS.
-
-    http://www.FreeRTOS.org/plus - A selection of FreeRTOS ecosystem products,
-    including FreeRTOS+Trace - an indispensable productivity tool, a DOS
-    compatible FAT file system, and our tiny thread aware UDP/IP stack.
-
-    http://www.FreeRTOS.org/labs - Where new FreeRTOS products go to incubate.
-    Come and try FreeRTOS+TCP, our new open source TCP/IP stack for FreeRTOS.
-
-    http://www.OpenRTOS.com - Real Time Engineers ltd. license FreeRTOS to High
-    Integrity Systems ltd. to sell under the OpenRTOS brand.  Low cost OpenRTOS
-    licenses offer ticketed support, indemnification and commercial middleware.
-
-    http://www.SafeRTOS.com - High Integrity Systems also provide a safety
-    engineered and independently SIL3 certified version for use in safety and
-    mission critical applications that require provable dependability.
-
-    1 tab == 4 spaces!
-*/
+/* Scheduler includes. */
 #include "FreeRTOS.h"
 #include "task.h"
 #include "fsl_tickless_generic.h"
-#include <kio/itm.h>
-
 
 #if configUSE_TICKLESS_IDLE == 1
 #include "fsl_lptmr.h"
 #endif
 
-extern uint32_t SystemCoreClock; /* in Kinetis SDK, this contains the system core clock speed */
-
 /*
  * LPT timer base address and interrupt number
  */
-
 #if configUSE_TICKLESS_IDLE == 1
-   extern LPTMR_Type *vPortGetLptrmBase(void);
-   extern IRQn_Type vPortGetLptmrIrqn(void);
+	extern LPTMR_Type *vPortGetLptrmBase(void);
+	extern IRQn_Type vPortGetLptmrIrqn(void);
 #endif /* configUSE_TICKLESS_IDLE */
-
-/*-----------------------------------------------------------*/
 
 /*
  * The number of SysTick increments that make up one tick period.
@@ -122,12 +81,11 @@ extern uint32_t SystemCoreClock; /* in Kinetis SDK, this contains the system cor
 
 	void vPortLptmrIsr(void)
 	{
-	  ulLPTimerInterruptFired = true;
-	  LPTMR_ClearStatusFlags(vPortGetLptrmBase(), kLPTMR_TimerCompareFlag);
-
+		ulLPTimerInterruptFired = true;
+		LPTMR_ClearStatusFlags(vPortGetLptrmBase(), kLPTMR_TimerCompareFlag);
 	}
 
-void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
+	void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 	{
 		uint32_t ulReloadValue, ulCompleteTickPeriods;
 		TickType_t xModifiableIdleTime;
@@ -135,14 +93,12 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 
 		pxLptmrBase = vPortGetLptrmBase();
 		if (pxLptmrBase == 0) return;
-
 		/* Make sure the SysTick reload value does not overflow the counter. */
 		if( xExpectedIdleTime > xMaximumPossibleSuppressedTicks )
 		{
 			xExpectedIdleTime = xMaximumPossibleSuppressedTicks;
 		}
-
-        if (xExpectedIdleTime == 0) return;
+		if (xExpectedIdleTime == 0) return;
 		/* Calculate the reload value required to wait xExpectedIdleTime
 		tick periods.  -1 is used because this code will execute part way
 		through one of the tick periods. */
@@ -157,9 +113,9 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 
 		/* Enter a critical section but don't use the taskENTER_CRITICAL()
 		method as that will mask interrupts that should exit sleep mode. */
-		__asm volatile( "cpsid i" );
-		__asm volatile( "dsb" );
-		__asm volatile( "isb" );
+		__disable_irq();
+		__DSB();
+		__ISB();
 
 		/* If a context switch is pending or a task is waiting for the scheduler
 		to be unsuspended then abandon the low power entry. */
@@ -176,9 +132,9 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 			periods. */
 			portNVIC_SYSTICK_LOAD_REG = ulTimerCountsForOneTick - 1UL;
 
-			/* Re-enable interrupts - see comments above the cpsid instruction()
-			above. */
-			__asm volatile( "cpsie i" );
+			/* Re-enable interrupts - see comments above __disable_irq()
+			call above. */
+			__enable_irq();
 		}
 		else
 		{
@@ -187,7 +143,6 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 
 			/* Enable LPTMR. */
 			LPTMR_StartTimer(pxLptmrBase);
-
 
 			/* Sleep until something happens.  configPRE_SLEEP_PROCESSING() can
 			set its parameter to 0 to indicate that its implementation contains
@@ -198,22 +153,20 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 			configPRE_SLEEP_PROCESSING( xModifiableIdleTime );
 			if( xModifiableIdleTime > 0 )
 			{
-				__asm volatile( "dsb" );
-				__asm volatile( "wfi" );
-				__asm volatile( "isb" );
+				__DSB();
+				__WFI();
+				__ISB();
 			}
 			configPOST_SLEEP_PROCESSING( xExpectedIdleTime );
 
 			ulLPTimerInterruptFired = false;
 
-			/* Re-enable interrupts - see comments above the cpsid instruction()
-			above. */
-			__asm volatile( "cpsie i" );
+			/* Re-enable interrupts - see comments above __disable_irq()
+			call above. */
+			__enable_irq();
 			__NOP();
 			if( ulLPTimerInterruptFired )
 			{
-
-
 				/* The tick interrupt handler will already have pended the tick
 				processing in the kernel.  As the pending tick will be
 				processed as soon as this function exits, the tick value
@@ -229,8 +182,6 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 				periods (not the ulReload value which accounted for part
 				ticks). */
 				ulCompleteTickPeriods = LPTMR_GetCurrentTimerCount(pxLptmrBase)/ulLPTimerCountsForOneTick;
-
-
 			}
 
 			/* Stop LPTMR when CPU waked up then set portNVIC_SYSTICK_LOAD_REG back to its standard
@@ -247,8 +198,7 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 			portEXIT_CRITICAL();
 		}
 	}
-#endif /* #if configUSE_TICKLESS_IDLE */
-/*-----------------------------------------------------------*/
+#endif /* configUSE_TICKLESS_IDLE */
 
 /*
  * Setup the systick timer to generate the tick interrupts at the required
@@ -257,14 +207,12 @@ void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime )
 void vPortSetupTimerInterrupt( void )
 {
 	/* Calculate the constants required to configure the tick interrupt. */
-	#if( configUSE_TICKLESS_IDLE == 1 )
-	{
+	#if configUSE_TICKLESS_IDLE == 1
 		ulTimerCountsForOneTick = ( configSYSTICK_CLOCK_HZ / configTICK_RATE_HZ );
 		ulLPTimerCountsForOneTick = ( configLPTMR_CLOCK_HZ / configTICK_RATE_HZ );
-		// TODO: Need to handle the case where configLPTMR_CLOCK_HZ < configTICK_RATE_HZ (e.g. 1000 vs. 10000)
+		// TODO(phillip): Need to handle the case where configLPTMR_CLOCK_HZ < configTICK_RATE_HZ (e.g. 1000 vs. 10000)
 		xMaximumPossibleSuppressedTicks = portMAX_16_BIT_NUMBER / ulLPTimerCountsForOneTick;
 		NVIC_EnableIRQ(vPortGetLptmrIrqn());
-	}
 	#endif /* configUSE_TICKLESS_IDLE */
 
 	/* Configure SysTick to interrupt at the requested rate. */

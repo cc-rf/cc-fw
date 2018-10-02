@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016 NXP
+ * Copyright 2016 - 2017 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -44,7 +48,7 @@
 
 #define USB_OSA_FREERTOS_EVENT_COUNT (2U)
 #define USB_OSA_FREERTOS_SEM_COUNT (1U)
-#define USB_OSA_FREERTOS_MUTEX_COUNT (9U) // phillip: need more mutexes, 3 per CDC instance
+#define USB_OSA_FREERTOS_MUTEX_COUNT (3U)
 #define USB_OSA_FREERTOS_MSGQ_COUNT (1U)
 #define USB_OSA_FREERTOS_MSG_COUNT (8U)
 #define USB_OSA_FREERTOS_MSG_SIZE (4U)
@@ -445,9 +449,9 @@ usb_osa_status_t USB_OsaSemPost(usb_osa_sem_handle handle)
 {
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
     usb_osa_sem_struct_t *osaSem = (usb_osa_sem_struct_t *)handle;
-    xSemaphoreHandle sem;
+    SemaphoreHandle_t sem;
 #else
-    xSemaphoreHandle sem = (xSemaphoreHandle)handle;
+    SemaphoreHandle_t sem = (SemaphoreHandle_t)handle;
 #endif
     portBASE_TYPE taskToWake = pdFALSE;
 
@@ -457,7 +461,7 @@ usb_osa_status_t USB_OsaSemPost(usb_osa_sem_handle handle)
     }
 
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
-    sem = (xSemaphoreHandle)osaSem->handle;
+    sem = (SemaphoreHandle_t)osaSem->handle;
 #endif
 #if defined(__GIC_PRIO_BITS)
     if ((__get_CPSR() & CPSR_M_Msk) == 0x13)
@@ -487,9 +491,9 @@ usb_osa_status_t USB_OsaSemWait(usb_osa_sem_handle handle, uint32_t timeout)
 {
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
     usb_osa_sem_struct_t *osaSem = (usb_osa_sem_struct_t *)handle;
-    xSemaphoreHandle sem;
+    SemaphoreHandle_t sem;
 #else
-    xSemaphoreHandle sem = (xSemaphoreHandle)handle;
+    SemaphoreHandle_t sem = (SemaphoreHandle_t)handle;
 #endif
 
     if (!handle)
@@ -497,7 +501,7 @@ usb_osa_status_t USB_OsaSemWait(usb_osa_sem_handle handle, uint32_t timeout)
         return kStatus_USB_OSA_Error;
     }
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
-    sem = (xSemaphoreHandle)osaSem->handle;
+    sem = (SemaphoreHandle_t)osaSem->handle;
 #endif
     if (!timeout)
     {
@@ -585,9 +589,9 @@ usb_osa_status_t USB_OsaMutexLock(usb_osa_mutex_handle handle)
 {
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
     usb_osa_sem_struct_t *osaMutex = (usb_osa_sem_struct_t *)handle;
-    xSemaphoreHandle mutex;
+    SemaphoreHandle_t mutex;
 #else
-    xSemaphoreHandle mutex = (xSemaphoreHandle)handle;
+    SemaphoreHandle_t mutex = (SemaphoreHandle_t)handle;
 #endif
 
     if (!handle)
@@ -595,7 +599,7 @@ usb_osa_status_t USB_OsaMutexLock(usb_osa_mutex_handle handle)
         return kStatus_USB_OSA_Error;
     }
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
-    mutex = (xSemaphoreHandle)osaMutex->handle;
+    mutex = (SemaphoreHandle_t)osaMutex->handle;
 #endif
     if (xSemaphoreTakeRecursive(mutex, portMAX_DELAY) == pdFALSE)
     {
@@ -609,9 +613,9 @@ usb_osa_status_t USB_OsaMutexUnlock(usb_osa_mutex_handle handle)
 {
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
     usb_osa_sem_struct_t *osaMutex = (usb_osa_sem_struct_t *)handle;
-    xSemaphoreHandle mutex;
+    SemaphoreHandle_t mutex;
 #else
-    xSemaphoreHandle mutex = (xSemaphoreHandle)handle;
+    SemaphoreHandle_t mutex = (SemaphoreHandle_t)handle;
 #endif
 
     if (!handle)
@@ -619,7 +623,7 @@ usb_osa_status_t USB_OsaMutexUnlock(usb_osa_mutex_handle handle)
         return kStatus_USB_OSA_Error;
     }
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
-    mutex = (xSemaphoreHandle)osaMutex->handle;
+    mutex = (SemaphoreHandle_t)osaMutex->handle;
 #endif
     if (xSemaphoreGiveRecursive(mutex) == pdFALSE)
     {
@@ -687,12 +691,12 @@ usb_osa_status_t USB_OsaMsgqDestroy(usb_osa_msgq_handle handle)
     }
 
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
-    vQueueDelete((xQueueHandle)(msgq->handle));
+    vQueueDelete((QueueHandle_t)(msgq->handle));
     USB_OSA_ENTER_CRITICAL();
     msgq->isUsed = 0U;
     USB_OSA_EXIT_CRITICAL();
 #else
-    vQueueDelete((xQueueHandle)handle);
+    vQueueDelete((QueueHandle_t)handle);
 #endif
     return kStatus_USB_OSA_Success;
 }
@@ -701,9 +705,9 @@ usb_osa_status_t USB_OsaMsgqSend(usb_osa_msgq_handle handle, void *msg)
 {
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
     usb_osa_msgq_struct_t *osaMsgq = (usb_osa_msgq_struct_t *)handle;
-    xQueueHandle msgq;
+    QueueHandle_t msgq;
 #else
-    xQueueHandle msgq = (xQueueHandle)handle;
+    QueueHandle_t msgq = (QueueHandle_t)handle;
 #endif
     portBASE_TYPE taskToWake = pdFALSE;
 
@@ -744,9 +748,9 @@ usb_osa_status_t USB_OsaMsgqRecv(usb_osa_msgq_handle handle, void *msg, uint32_t
 {
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
     usb_osa_msgq_struct_t *osaMsgq = (usb_osa_msgq_struct_t *)handle;
-    xQueueHandle msgq;
+    QueueHandle_t msgq;
 #else
-    xQueueHandle msgq = (xQueueHandle)handle;
+    QueueHandle_t msgq = (QueueHandle_t)handle;
 #endif
 
     if (!handle)
@@ -777,9 +781,9 @@ usb_osa_status_t USB_OsaMsgqCheck(usb_osa_msgq_handle handle, void *msg)
 {
 #if (defined(configSUPPORT_STATIC_ALLOCATION) && (configSUPPORT_STATIC_ALLOCATION > 0U))
     usb_osa_msgq_struct_t *osaMsgq = (usb_osa_msgq_struct_t *)handle;
-    xQueueHandle msgq;
+    QueueHandle_t msgq;
 #else
-    xQueueHandle msgq = (xQueueHandle)handle;
+    QueueHandle_t msgq = (QueueHandle_t)handle;
 #endif
 
     if (!handle)

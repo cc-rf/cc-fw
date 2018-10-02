@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -107,6 +111,9 @@ static void USB_HostHubControlCallback(void *param, usb_host_transfer_t *transfe
     hubInstance->controlTransfer = NULL;
     if (hubInstance->controlCallbackFn)
     {
+        /* callback to application, callback function is initialized in the USB_HostPrinterControl,
+        USB_HostPrinterSetInterface
+        or USB_HostHubClassRequestCommon, but is the same function */
         hubInstance->controlCallbackFn(hubInstance->controlCallbackParam, transfer->transferBuffer,
                                        transfer->transferSofar, status); /* callback to application */
     }
@@ -119,6 +126,7 @@ static void USB_HostHubInPipeCallback(void *param, usb_host_transfer_t *transfer
 
     if (hubInstance->inCallbackFn)
     {
+        /* callback to application, callback function is initialized in the USB_HostHubInterruptRecv */
         hubInstance->inCallbackFn(hubInstance->inCallbackParam, transfer->transferBuffer, transfer->transferSofar,
                                   status); /* callback to application */
     }
@@ -169,11 +177,11 @@ static usb_status_t USB_HostHubClassRequestCommon(usb_host_class_handle classHan
     transfer->transferLength = bufferLength;
     transfer->callbackFn = USB_HostHubControlCallback;
     transfer->callbackParam = hubInstance;
-    transfer->setupPacket.bmRequestType = requestType;
-    transfer->setupPacket.bRequest = request;
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(wvalue);
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(windex);
-    transfer->setupPacket.wLength = USB_SHORT_TO_LITTLE_ENDIAN(bufferLength);
+    transfer->setupPacket->bmRequestType = requestType;
+    transfer->setupPacket->bRequest = request;
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(wvalue);
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(windex);
+    transfer->setupPacket->wLength = USB_SHORT_TO_LITTLE_ENDIAN(bufferLength);
 
     /* send transfer */
     if (USB_HostSendSetup(hubInstance->hostHandle, hubInstance->controlPipe, transfer) != kStatus_USB_Success)
@@ -193,12 +201,20 @@ usb_status_t USB_HostHubInit(usb_device_handle deviceHandle, usb_host_class_hand
     /* malloc the hub instance */
     usb_host_hub_instance_t *hubInstance =
         (usb_host_hub_instance_t *)USB_OsaMemoryAllocate(sizeof(usb_host_hub_instance_t));
+
     uint32_t infoValue;
 
     if (hubInstance == NULL)
     {
         return kStatus_USB_AllocFail;
     }
+
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+    hubInstance->hubDescriptor = (uint8_t *)SDK_Malloc(7 + (USB_HOST_HUB_MAX_PORT >> 3) + 1, USB_CACHE_LINESIZE);
+    hubInstance->portStatusBuffer = (uint8_t *)SDK_Malloc(4, USB_CACHE_LINESIZE);
+    hubInstance->hubStatusBuffer = (uint8_t *)SDK_Malloc(4, USB_CACHE_LINESIZE);
+    hubInstance->hubBitmapBuffer = (uint8_t *)SDK_Malloc((USB_HOST_HUB_MAX_PORT >> 3) + 1, USB_CACHE_LINESIZE);
+#endif
 
     /* initialize hub instance structure */
     hubInstance->deviceHandle = deviceHandle;
@@ -341,6 +357,12 @@ usb_status_t USB_HostHubDeinit(usb_device_handle deviceHandle, usb_host_class_ha
 
         /* notify host driver that the interface will not be used */
         USB_HostCloseDeviceInterface(deviceHandle, hubInstance->interfaceHandle);
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+        SDK_Free(hubInstance->hubDescriptor);
+        SDK_Free(hubInstance->portStatusBuffer);
+        SDK_Free(hubInstance->hubStatusBuffer);
+        SDK_Free(hubInstance->hubBitmapBuffer);
+#endif
         USB_OsaMemoryFree(hubInstance);
     }
     else
@@ -422,12 +444,12 @@ usb_status_t USB_HostHubSendPortReset(usb_host_class_handle classHandle, uint8_t
     transfer->transferLength = 0;
     transfer->callbackFn = USB_HostHubResetCallback;
     transfer->callbackParam = hubInstance;
-    transfer->setupPacket.bmRequestType =
+    transfer->setupPacket->bmRequestType =
         USB_REQUEST_TYPE_DIR_OUT | USB_REQUEST_TYPE_TYPE_CLASS | USB_REQUEST_TYPE_RECIPIENT_OTHER;
-    transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_FEATURE;
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(PORT_RESET);
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(portNumber);
-    transfer->setupPacket.wLength = 0;
+    transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_SET_FEATURE;
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(PORT_RESET);
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(portNumber);
+    transfer->setupPacket->wLength = 0;
 
     /* send the transfer */
     if (USB_HostSendSetup(hubInstance->hostHandle, hubInstance->controlPipe, transfer) != kStatus_USB_Success)

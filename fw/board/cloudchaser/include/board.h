@@ -15,3 +15,8 @@
 #define BOARD_LED_GPIO_2    2u
 #define BOARD_LED_GPIO_3    3u
 #endif
+
+/* USB PHY condfiguration */
+#define BOARD_USB_PHY_D_CAL (0x0CU)
+#define BOARD_USB_PHY_TXCAL45DP (0x06U)
+#define BOARD_USB_PHY_TXCAL45DM (0x06U)

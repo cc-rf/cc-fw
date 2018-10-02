@@ -328,10 +328,10 @@ static usb_status_t USB_HostProcessState(usb_host_device_instance_t *deviceInsta
         transfer->callbackParam = deviceInstance;
 
         /* reset transfer fields */
-        transfer->setupPacket.bmRequestType = 0x00;
-        transfer->setupPacket.wIndex = 0;
-        transfer->setupPacket.wLength = 0;
-        transfer->setupPacket.wValue = 0;
+        transfer->setupPacket->bmRequestType = 0x00;
+        transfer->setupPacket->wIndex = 0;
+        transfer->setupPacket->wLength = 0;
+        transfer->setupPacket->wValue = 0;
     }
 
     switch (deviceInstance->state)
@@ -343,17 +343,17 @@ static usb_status_t USB_HostProcessState(usb_host_device_instance_t *deviceInsta
             {
                 getDescriptorParam.descriptorLength = 8;
             }
-            getDescriptorParam.descriptorBuffer = (uint8_t *)&deviceInstance->deviceDescriptor;
+            getDescriptorParam.descriptorBuffer = (uint8_t *)deviceInstance->deviceDescriptor;
             getDescriptorParam.descriptorType = USB_DESCRIPTOR_TYPE_DEVICE;
             getDescriptorParam.descriptorIndex = 0;
             getDescriptorParam.languageId = 0;
 
-            transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
-            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
+            transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
+            transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
             status = USB_HostStandardSetGetDescriptor(deviceInstance, transfer, &getDescriptorParam);
             break;
         case kStatus_DEV_SetAddress: /* set address state */
-            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_ADDRESS;
+            transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_SET_ADDRESS;
             status = USB_HostStandardSetAddress(deviceInstance, transfer, &deviceInstance->allocatedAddress);
             break;
 
@@ -364,8 +364,8 @@ static usb_status_t USB_HostProcessState(usb_host_device_instance_t *deviceInsta
             getDescriptorParam.descriptorLength = 9;
             getDescriptorParam.languageId = 0;
 
-            transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
-            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
+            transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
+            transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
             status = USB_HostStandardSetGetDescriptor(deviceInstance, transfer, &getDescriptorParam);
             break;
 
@@ -376,15 +376,15 @@ static usb_status_t USB_HostProcessState(usb_host_device_instance_t *deviceInsta
             getDescriptorParam.descriptorLength = deviceInstance->configurationLen;
             getDescriptorParam.languageId = 0;
 
-            transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
-            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
+            transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
+            transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_GET_DESCRIPTOR;
             status = USB_HostStandardSetGetDescriptor(deviceInstance, transfer, &getDescriptorParam);
             break;
 
         case kStatus_DEV_SetCfg: /* set configuration state */
-            transfer->setupPacket.wValue =
+            transfer->setupPacket->wValue =
                 USB_SHORT_TO_LITTLE_ENDIAN(deviceInstance->configuration.configurationDesc->bConfigurationValue);
-            transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_CONFIGURATION;
+            transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_SET_CONFIGURATION;
             status = USB_HostCh9RequestCommon(deviceInstance, transfer, NULL, 0);
             break;
 
@@ -414,13 +414,15 @@ static usb_status_t USB_HostProcessCallback(usb_host_device_instance_t *deviceIn
     switch (deviceInstance->state)
     {
         case kStatus_DEV_GetDes8: /* process get 8 bytes descriptor result */
-            pipe->maxPacketSize = deviceInstance->deviceDescriptor.bMaxPacketSize0;
+            pipe->maxPacketSize = deviceInstance->deviceDescriptor->bMaxPacketSize0;
+            /* the callbackFn is initialized in USB_HostGetControllerInterface */
             hostInstance->controllerTable->controllerIoctl(
                 hostInstance->controllerHandle, kUSB_HostUpdateControlPacketSize, deviceInstance->controlPipe);
             break;
 
         case kStatus_DEV_SetAddress: /* process set address result */
             deviceInstance->setAddress = deviceInstance->allocatedAddress;
+            /* the callbackFn is initialized in USB_HostGetControllerInterface */
             hostInstance->controllerTable->controllerIoctl(
                 hostInstance->controllerHandle, kUSB_HostUpdateControlEndpointAddress, deviceInstance->controlPipe);
             break;
@@ -435,18 +437,32 @@ static usb_status_t USB_HostProcessCallback(usb_host_device_instance_t *deviceIn
             deviceInstance->configurationLen = USB_SHORT_FROM_LITTLE_ENDIAN_ADDRESS(configureDesc->wTotalLength);
             if (deviceInstance->configurationDesc != NULL)
             {
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+                SDK_Free(deviceInstance->configurationDesc);
+#else
                 USB_OsaMemoryFree(deviceInstance->configurationDesc);
+#endif
                 deviceInstance->configurationDesc = NULL;
             }
             /* for KHCI, the start address and the length should be 4 byte align */
             if ((deviceInstance->configurationLen & 0x03) != 0)
             {
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+                deviceInstance->configurationDesc =
+                    (uint8_t *)SDK_Malloc((deviceInstance->configurationLen & 0xFFFFFFFCu) + 4, USB_CACHE_LINESIZE);
+#else
                 deviceInstance->configurationDesc =
                     (uint8_t *)USB_OsaMemoryAllocate((deviceInstance->configurationLen & 0xFFFFFFFCu) + 4);
+#endif
             }
             else
             {
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+                deviceInstance->configurationDesc =
+                    (uint8_t *)SDK_Malloc(deviceInstance->configurationLen, USB_CACHE_LINESIZE);
+#else
                 deviceInstance->configurationDesc = (uint8_t *)USB_OsaMemoryAllocate(deviceInstance->configurationLen);
+#endif
             }
             if (deviceInstance->configurationDesc == NULL)
             {
@@ -472,7 +488,7 @@ static usb_status_t USB_HostProcessCallback(usb_host_device_instance_t *deviceIn
             if (status != kStatus_USB_Success)
             {
                 /* next configuration */
-                if (deviceInstance->configurationValue < deviceInstance->deviceDescriptor.bNumConfigurations)
+                if (deviceInstance->configurationValue < deviceInstance->deviceDescriptor->bNumConfigurations)
                 {
                     return kStatus_USB_Retry;
                 }
@@ -531,8 +547,8 @@ static usb_status_t USB_HostNotifyDevice(usb_host_device_instance_t *deviceInsta
 
     if ((haveNoHub == 1) && (hostInstance->deviceCallback != NULL))
     {
-        status1 = hostInstance->deviceCallback(deviceInstance, &deviceInstance->configuration,
-                                               eventCode); /* notify application event */
+        /* call host callback function, function is initialized in USB_HostInit */
+        status1 = hostInstance->deviceCallback(deviceInstance, &deviceInstance->configuration, eventCode);
     }
     if (haveHub)
     {
@@ -555,8 +571,8 @@ static usb_status_t USB_HostNotifyDevice(usb_host_device_instance_t *deviceInsta
 #else
     if (hostInstance->deviceCallback != NULL)
     {
-        status1 = hostInstance->deviceCallback(deviceInstance, &deviceInstance->configuration,
-                                               eventCode); /* call host callback function */
+        /* call host callback function, function is initialized in USB_HostInit */
+        status1 = hostInstance->deviceCallback(deviceInstance, &deviceInstance->configuration, eventCode);
     }
 #endif
     return status1;
@@ -674,13 +690,21 @@ static void USB_HostReleaseDeviceResource(usb_host_instance_t *hostInstance, usb
     /* free configuration buffer */
     if (deviceInstance->configurationDesc != NULL)
     {
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+        SDK_Free(deviceInstance->configurationDesc);
+#else
         USB_OsaMemoryFree(deviceInstance->configurationDesc);
+#endif
     }
 
 #if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
     level = deviceInstance->level;
 #endif
-
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+    SDK_Free(deviceInstance->deviceDescriptor);
+#else
+    USB_OsaMemoryFree(deviceInstance->deviceDescriptor);
+#endif
     /* free device instance buffer */
     USB_OsaMemoryFree(deviceInstance);
 
@@ -982,7 +1006,27 @@ usb_status_t USB_HostAttachDevice(usb_host_handle hostHandle,
     newInstance->enumRetries = USB_HOST_CONFIG_ENUMERATION_MAX_RETRIES;
     newInstance->setAddress = 0;
     newInstance->deviceAttachState = kStatus_device_Attached;
-
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+    newInstance->deviceDescriptor =
+        (usb_descriptor_device_t *)SDK_Malloc(sizeof(usb_descriptor_device_t) + 9, USB_CACHE_LINESIZE);
+#else
+    newInstance->deviceDescriptor =
+        (usb_descriptor_device_t *)USB_OsaMemoryAllocate(sizeof(usb_descriptor_device_t) + 9);
+#endif
+    if (newInstance->deviceDescriptor == NULL)
+    {
+#ifdef HOST_ECHO
+        usb_echo("allocate newInstance->deviceDescriptor fail\r\n");
+#endif
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+        SDK_Free(newInstance->deviceDescriptor);
+#else
+        USB_OsaMemoryFree(newInstance->deviceDescriptor);
+#endif
+        USB_OsaMemoryFree(newInstance);
+        return kStatus_USB_AllocFail;
+    }
+    newInstance->enumBuffer = (uint8_t *)((uint8_t *)newInstance->deviceDescriptor + sizeof(usb_descriptor_device_t));
 #if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
     newInstance->hubNumber = hubNumber;
     newInstance->portNumber = portNumber;
@@ -1009,6 +1053,11 @@ usb_status_t USB_HostAttachDevice(usb_host_handle hostHandle,
         usb_echo("allocate address fail\r\n");
 #endif
         USB_HostUnlock();
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+        SDK_Free(newInstance->deviceDescriptor);
+#else
+        USB_OsaMemoryFree(newInstance->deviceDescriptor);
+#endif
         USB_OsaMemoryFree(newInstance);
         return kStatus_USB_Error;
     }
@@ -1032,6 +1081,12 @@ usb_status_t USB_HostAttachDevice(usb_host_handle hostHandle,
     {
         /* don't need release resource, resource is released when detach */
         *deviceHandle = newInstance;
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+        SDK_Free(newInstance->deviceDescriptor);
+#else
+        USB_OsaMemoryFree(newInstance->deviceDescriptor);
+#endif
+        USB_OsaMemoryFree(newInstance);
         return kStatus_USB_Error;
     }
 
@@ -1146,7 +1201,7 @@ static usb_status_t USB_HostControlBus(usb_host_handle hostHandle, uint8_t contr
     {
         return kStatus_USB_InvalidHandle;
     }
-
+    /* the callbackFn is initialized in USB_HostGetControllerInterface */
     status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl,
                                                             &controlType);
 

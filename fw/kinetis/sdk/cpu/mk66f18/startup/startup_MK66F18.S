@@ -1,38 +1,45 @@
-/* ---------------------------------------------------------------------------------------*/
-/*  @file:    startup_MK66F18.s                                                           */
-/*  @purpose: CMSIS Cortex-M4 Core Device Startup File                                    */
-/*            MK66F18                                                                     */
-/*  @version: 3.0                                                                         */
-/*  @date:    2015-3-25                                                                   */
-/*  @build:   b170112                                                                     */
-/* ---------------------------------------------------------------------------------------*/
-/*                                                                                        */
-/* Copyright (c) 1997 - 2016, Freescale Semiconductor, Inc.                               */
-/* Copyright 2016 - 2017 NXP                                                              */
-/* Redistribution and use in source and binary forms, with or without modification,       */
-/* are permitted provided that the following conditions are met:                          */
-/*                                                                                        */
-/* o Redistributions of source code must retain the above copyright notice, this list     */
-/*   of conditions and the following disclaimer.                                          */
-/*                                                                                        */
-/* o Redistributions in binary form must reproduce the above copyright notice, this       */
-/*   list of conditions and the following disclaimer in the documentation and/or          */
-/*   other materials provided with the distribution.                                      */
-/*                                                                                        */
-/* o Neither the name of the copyright holder nor the names of its                        */
-/*   contributors may be used to endorse or promote products derived from this            */
-/*   software without specific prior written permission.                                  */
-/*                                                                                        */
-/* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND        */
-/* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED          */
-/* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE                 */
-/* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR       */
-/* ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES         */
-/* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;           */
-/* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON         */
-/* ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT                */
-/* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS          */
-/* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                           */
+/* ------------------------------------------------------------------------- */
+/*  @file:    startup_MK66F18.s                                              */
+/*  @purpose: CMSIS Cortex-M4 Core Device Startup File                       */
+/*            MK66F18                                                        */
+/*  @version: 3.0                                                            */
+/*  @date:    2015-3-25                                                      */
+/*  @build:   b171205                                                        */
+/* ------------------------------------------------------------------------- */
+/*                                                                           */
+/* The Clear BSD License                                                     */
+/* Copyright 1997-2016 Freescale Semiconductor, Inc.                         */
+/* Copyright 2016-2017 NXP                                                   */
+/* All rights reserved.                                                      */
+/*                                                                           */
+/* Redistribution and use in source and binary forms, with or without        */
+/* modification, are permitted (subject to the limitations in the            */
+/* disclaimer below) provided that the following conditions are met:         */
+/*                                                                           */
+/* * Redistributions of source code must retain the above copyright          */
+/*   notice, this list of conditions and the following disclaimer.           */
+/*                                                                           */
+/* * Redistributions in binary form must reproduce the above copyright       */
+/*   notice, this list of conditions and the following disclaimer in the     */
+/*   documentation and/or other materials provided with the distribution.    */
+/*                                                                           */
+/* * Neither the name of the copyright holder nor the names of its           */
+/*   contributors may be used to endorse or promote products derived from    */
+/*   this software without specific prior written permission.                */
+/*                                                                           */
+/* NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE           */
+/* GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT       */
+/* HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED               */
+/* WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF      */
+/* MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE                  */
+/* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE     */
+/* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR       */
+/* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF      */
+/* SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR           */
+/* BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,     */
+/* WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE      */
+/* OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN    */
+/* IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                             */
 /*****************************************************************************/
 /* Version: GCC for ARM Embedded Processors                                  */
 /*****************************************************************************/
@@ -341,6 +348,7 @@ Reset_Handler:
  *      linker script.
  *      __etext: End of code section, i.e., begin of data sections to copy from.
  *      __data_start__/__data_end__: RAM address range that data should be
+ *      __noncachedata_start__/__noncachedata_end__ : none cachable region
  *      copied to. Both must be aligned to 4 bytes boundary.  */
 
     ldr    r1, =__etext
@@ -367,6 +375,35 @@ Reset_Handler:
     bgt    .LC0
 .LC1:
 #endif
+#ifdef __STARTUP_INITIALIZE_NONCACHEDATA
+    ldr    r2, =__noncachedata_start__
+    ldr    r3, =__noncachedata_init_end__
+#if 1
+.LC2:
+    cmp     r2, r3
+    ittt    lt
+    ldrlt   r0, [r1], #4
+    strlt   r0, [r2], #4
+    blt    .LC2
+#else
+    subs    r3, r2
+    ble    .LC3
+.LC2:
+    subs    r3, #4
+    ldr    r0, [r1, r3]
+    str    r0, [r2, r3]
+    bgt    .LC2
+.LC3:
+#endif
+/* zero inited ncache section initialization */
+    ldr r3, =__noncachedata_end__
+    movs    r0,0
+.LC4:
+    cmp    r2,r3
+    itt    lt
+    strlt   r0,[r2],#4
+    blt    .LC4
+#endif /* __STARTUP_INITIALIZE_NONCACHEDATA */
 
 #ifdef __STARTUP_CLEAR_BSS
 /*     This part of work usually is done in C library startup code. Otherwise,
@@ -381,11 +418,11 @@ Reset_Handler:
     ldr r2, =__bss_end__
 
     movs    r0, 0
-.LC2:
+.LC5:
     cmp     r1, r2
     itt    lt
     strlt   r0, [r1], #4
-    blt    .LC2
+    blt    .LC5
 #endif /* __STARTUP_CLEAR_BSS */
 
     cpsie   i               /* Unmask interrupts */

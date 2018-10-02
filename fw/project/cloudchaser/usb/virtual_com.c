@@ -81,7 +81,7 @@ static struct usb_vcom {
 
     u8 instance;
 
-    USB_DATA_ALIGNMENT usb_cdc_acm_info_t acm;
+    usb_cdc_acm_info_t acm;
 
 } usb_vcom[USB_CDC_INSTANCE_COUNT]; // __attribute__((section(".heap")));
 

@@ -278,13 +278,17 @@ void USB_DeviceApplicationInit(void)
     CLOCK_EnableUsbhs0Clock(USB_HS_CLK_SRC, USB_HS_CLK_FREQ);
 #endif
 
-    USB_EhciPhyInit(CONTROLLER_ID, BOARD_XTAL0_CLK_HZ);
+    usb_phy_config_struct_t phy_config = {
+            .D_CAL = BOARD_USB_PHY_D_CAL,
+            .TXCAL45DP = BOARD_USB_PHY_TXCAL45DP,
+            .TXCAL45DM = BOARD_USB_PHY_TXCAL45DM
+    };
+
+    USB_EhciPhyInit(CONTROLLER_ID, BOARD_XTAL0_CLK_HZ, &phy_config);
 #endif
 #if defined(USB_DEVICE_CONFIG_KHCI) && (USB_DEVICE_CONFIG_KHCI > 0)
     uint8_t khciIrq[] = USB_IRQS;
     irqNumber = khciIrq[CONTROLLER_ID - kUSB_ControllerKhci0];
-
-    SystemCoreClockUpdate();
 
     CLOCK_EnableUsbfs0Clock(USB_FS_CLK_SRC, USB_FS_CLK_FREQ);
 #endif

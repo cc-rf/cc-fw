@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -70,6 +74,7 @@
 #define EHCI_HOST_QH_STATUS_NOSTALL_ERROR_MASK (0x0000003EU)
 
 #define EHCI_HOST_QTD_DT_SHIFT (31U)
+#define EHCI_HOST_QTD_DT_MASK (0x80000000U)
 #define EHCI_HOST_QTD_TOTAL_BYTES_SHIFT (16U)
 #define EHCI_HOST_QTD_TOTAL_BYTES_MASK (0x7FFF0000U)
 #define EHCI_HOST_QTD_IOC_MASK (0x00008000U)
@@ -170,7 +175,7 @@
  */
 #define USB_HOST_EHCI_ISO_BOUNCE_UFRAME_NUMBER (16U)
 /*! @brief Control or bulk transaction timeout value (unit: 100 ms) */
-#define USB_HOST_EHCI_CONTROL_BULK_TIME_OUT_VALUE (20U)
+#define USB_HOST_EHCI_CONTROL_BULK_TIME_OUT_VALUE (50U)
 
 #if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
 typedef enum _bus_ehci_suspend_request_state
@@ -307,24 +312,30 @@ typedef struct _usb_host_ehci_iso
 /*! @brief EHCI instance structure */
 typedef struct _usb_host_ehci_instance
 {
-    usb_host_handle hostHandle;              /*!< Related host handle*/
-    uint32_t *ehciUnitBase;                  /*!< Keep the QH/QTD/ITD/SITD buffer pointer for release*/
-    usb_host_ehci_qh_t *ehciQhList;          /*!< Idle QH list pointer */
-    usb_host_ehci_qtd_t *ehciQtdHead;        /*!< Idle QTD list pointer head */
-    usb_host_ehci_qtd_t *ehciQtdTail;        /*!< Idle QTD list pointer tail (recently used qTD will be used)*/
-    usb_host_ehci_itd_t *ehciItdList;        /*!< Idle ITD list pointer*/
-    usb_host_ehci_sitd_t *ehciSitdIndexBase; /*!< SITD buffer's start pointer*/
-    usb_host_ehci_sitd_t *ehciSitdList;      /*!< Idle SITD list pointer*/
-    usb_host_ehci_iso_t *ehciIsoList;        /*!< Idle ISO list pointer*/
-    USBHS_Type *ehciIpBase;                  /*!< EHCI IP base address*/
-    usb_host_ehci_qh_t *shedFirstQh;         /*!< First async QH*/
-    usb_host_ehci_pipe_t *ehciPipeIndexBase; /*!< Pipe buffer's start pointer*/
-    usb_host_ehci_pipe_t *ehciPipeList;      /*!< Idle pipe list pointer*/
+    usb_host_handle hostHandle;                /*!< Related host handle*/
+    uint32_t *ehciUnitBase;                    /*!< Keep the QH/QTD/ITD/SITD buffer pointer for release*/
+    uint8_t *ehciFrameList;                    /*!< The frame list of the current ehci instance*/
+    usb_host_ehci_qh_t *ehciQhList;            /*!< Idle QH list pointer */
+    usb_host_ehci_qtd_t *ehciQtdHead;          /*!< Idle QTD list pointer head */
+    usb_host_ehci_qtd_t *ehciQtdTail;          /*!< Idle QTD list pointer tail (recently used qTD will be used)*/
+    usb_host_ehci_itd_t *ehciItdList;          /*!< Idle ITD list pointer*/
+    usb_host_ehci_sitd_t *ehciSitdIndexBase;   /*!< SITD buffer's start pointer*/
+    usb_host_ehci_sitd_t *ehciSitdList;        /*!< Idle SITD list pointer*/
+    usb_host_ehci_iso_t *ehciIsoList;          /*!< Idle ISO list pointer*/
+    USBHS_Type *ehciIpBase;                    /*!< EHCI IP base address*/
+    usb_host_ehci_qh_t *shedFirstQh;           /*!< First async QH*/
+    usb_host_ehci_pipe_t *ehciPipeIndexBase;   /*!< Pipe buffer's start pointer*/
+    usb_host_ehci_pipe_t *ehciPipeList;        /*!< Idle pipe list pointer*/
     usb_host_ehci_pipe_t *ehciRunningPipeList; /*!< Running pipe list pointer*/
     usb_osa_mutex_handle ehciMutex;            /*!< EHCI mutex*/
     usb_osa_event_handle taskEventHandle;      /*!< EHCI task event*/
 #if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
     uint64_t matchTick;
+    USBPHY_Type *registerPhyBase; /*!< The base address of the PHY register */
+#if (defined(FSL_FEATURE_SOC_USBNC_COUNT) && (FSL_FEATURE_SOC_USBNC_COUNT > 0U))
+    USBNC_Type *registerNcBase; /*!< The base address of the USBNC register */
+#endif
+
 #endif
     uint8_t controllerId;     /*!< EHCI controller ID*/
     uint8_t deviceAttached;   /*!< Device attach/detach state, see #host_ehci_device_state_t */
@@ -336,6 +347,29 @@ typedef struct _usb_host_ehci_instance
     bus_ehci_suspend_request_state_t busSuspendStatus; /*!< Bus Suspend Status*/
 #endif
 } usb_host_ehci_instance_t;
+
+/*! @brief EHCI data structure */
+typedef struct _usb_host_ehci_data
+{
+#if ((defined(USB_HOST_CONFIG_EHCI_MAX_QH)) && (USB_HOST_CONFIG_EHCI_MAX_QH > 0U))
+    usb_host_ehci_qh_t ehciQh[USB_HOST_CONFIG_EHCI_MAX_QH]; /*!< Idle QH list array*/
+#endif
+#if ((defined(USB_HOST_CONFIG_EHCI_MAX_QTD)) && (USB_HOST_CONFIG_EHCI_MAX_QTD > 0U))
+    usb_host_ehci_qtd_t ehciQtd[USB_HOST_CONFIG_EHCI_MAX_QTD]; /*!< Idle QTD list array*/
+#endif
+#if ((defined(USB_HOST_CONFIG_EHCI_MAX_ITD)) && (USB_HOST_CONFIG_EHCI_MAX_ITD > 0U))
+    usb_host_ehci_itd_t ehciItd[USB_HOST_CONFIG_EHCI_MAX_ITD]; /*!< Idle ITD list array*/
+#endif
+#if ((defined(USB_HOST_CONFIG_EHCI_MAX_SITD)) && (USB_HOST_CONFIG_EHCI_MAX_SITD > 0U))
+    usb_host_ehci_sitd_t ehciSitd[USB_HOST_CONFIG_EHCI_MAX_SITD]; /*!< Idle SITD list array*/
+#endif
+#if ((defined(USB_HOST_EHCI_ISO_NUMBER)) && (USB_HOST_EHCI_ISO_NUMBER > 0U))
+    usb_host_ehci_iso_t ehciIso[USB_HOST_EHCI_ISO_NUMBER]; /*!< Idle ISO list array*/
+#endif
+#if ((defined(USB_HOST_CONFIG_MAX_PIPES)) && (USB_HOST_CONFIG_MAX_PIPES > 0U))
+    usb_host_ehci_pipe_t ehciPipe[USB_HOST_CONFIG_MAX_PIPES]; /*!< Idle pipe list array*/
+#endif
+} usb_host_ehci_data_t;
 
 /*******************************************************************************
  * API

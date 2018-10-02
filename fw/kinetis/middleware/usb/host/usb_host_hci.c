@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -29,10 +33,14 @@
  */
 
 #include "usb_host_config.h"
+#include "fsl_common.h"
 #include "usb_host.h"
 #include "usb_host_hci.h"
 #include "usb_host_devices.h"
 #include "fsl_device_registers.h"
+#if ((defined USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE))
+#include "fsl_cache.h"
+#endif
 
 /*******************************************************************************
  * Definitions
@@ -72,7 +80,6 @@ static void USB_HostReleaseInstance(usb_host_instance_t *hostInstance);
  */
 static void USB_HostGetControllerInterface(uint8_t controllerId,
                                            const usb_host_controller_interface_t **controllerTable);
-
 
 #if ((defined USB_HOST_CONFIG_COMPLIANCE_TEST) && (USB_HOST_CONFIG_COMPLIANCE_TEST))
 #if ((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI))
@@ -124,9 +131,11 @@ static const usb_host_controller_interface_t s_Ip3516HsInterface = \
     USB_HostIp3516HsWritePipe, USB_HostIp3516HsReadPipe, USB_HostIp3516HsIoctl,
 };
 #endif /* USB_HOST_CONFIG_IP3516HS */
-       /*******************************************************************************
-        * Code
-        ******************************************************************************/
+
+USB_DMA_NONINIT_DATA_ALIGN(USB_DATA_ALIGN_SIZE) static uint8_t s_Setupbuffer[USB_HOST_CONFIG_MAX_HOST][USB_HOST_CONFIG_MAX_TRANSFERS][USB_DATA_ALIGN_SIZE_MULTIPLE(8)];
+/*******************************************************************************
+* Code
+******************************************************************************/
 
 #if ((defined USB_HOST_CONFIG_COMPLIANCE_TEST) && (USB_HOST_CONFIG_COMPLIANCE_TEST))
 /*FUNCTION*----------------------------------------------------------------
@@ -140,7 +149,8 @@ static const usb_host_controller_interface_t s_Ip3516HsInterface = \
 *END*--------------------------------------------------------------------*/
 usb_status_t USB_HostTestModeInit(usb_device_handle deviceHandle)
 {
-#if (((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI)) || ((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS)))
+#if (((defined USB_HOST_CONFIG_EHCI) && (USB_HOST_CONFIG_EHCI)) || \
+     ((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS)))
     usb_host_device_instance_t *deviceInstance = (usb_host_device_instance_t *)deviceHandle;
     usb_host_instance_t *hostInstance = (usb_host_instance_t *)deviceInstance->hostHandle;
 #endif
@@ -170,11 +180,11 @@ usb_status_t USB_HostTestModeInit(usb_device_handle deviceHandle)
         {
             USB_HostEhciTestModeInit(deviceHandle);
         }
-#elif ((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS))
+#elif((defined USB_HOST_CONFIG_IP3516HS) && (USB_HOST_CONFIG_IP3516HS))
         if (hostInstance->controllerTable == &s_Ip3516HsInterface)
         {
             USB_HostIp3516HsTestModeInit(deviceHandle);
-        }   
+        }
 #endif
     }
 
@@ -185,6 +195,7 @@ usb_status_t USB_HostTestModeInit(usb_device_handle deviceHandle)
 static usb_host_instance_t *USB_HostGetInstance(void)
 {
     uint8_t i = 0;
+    uint32_t index = 0;
     USB_OSA_SR_ALLOC();
     USB_OSA_ENTER_CRITICAL();
     for (; i < USB_HOST_CONFIG_MAX_HOST; i++)
@@ -198,6 +209,11 @@ static usb_host_instance_t *USB_HostGetInstance(void)
             }
             g_UsbHostInstance[i].occupied = 1;
             USB_OSA_EXIT_CRITICAL();
+            for (index = 0; index < USB_HOST_CONFIG_MAX_TRANSFERS; ++index)
+            {
+                g_UsbHostInstance[i].transferList[index].setupPacket =
+                    (usb_setup_struct_t *)&(s_Setupbuffer[i][index][0]);
+            }
             return &g_UsbHostInstance[i];
         }
     }
@@ -301,7 +317,7 @@ usb_status_t USB_HostInit(uint8_t controllerId, usb_host_handle *hostHandle, hos
         transferPrev = transferPrev->next;
     }
 
-    /* controller create */
+    /* controller create, the callbackFn is initialized in USB_HostGetControllerInterface */
     status =
         hostInstance->controllerTable->controllerCreate(controllerId, hostInstance, &(hostInstance->controllerHandle));
     if ((status != kStatus_USB_Success) || (hostInstance->controllerHandle == NULL))
@@ -337,7 +353,7 @@ usb_status_t USB_HostDeinit(usb_host_handle hostHandle)
         USB_HostDetachDeviceInternal(hostHandle, deviceInstance);
     }
 
-    /* controller instance destory */
+    /* controller instance destory, the callbackFn is initialized in USB_HostGetControllerInterface */
     status = hostInstance->controllerTable->controllerDestory(hostInstance->controllerHandle);
     hostInstance->controllerHandle = NULL;
     if (status != kStatus_USB_Success)
@@ -370,7 +386,7 @@ usb_status_t USB_HostOpenPipe(usb_host_handle hostHandle,
         return kStatus_USB_InvalidHandle;
     }
 
-    /* call controller open pipe interface */
+    /* call controller open pipe interface, the callbackFn is initialized in USB_HostGetControllerInterface */
     status = hostInstance->controllerTable->controllerOpenPipe(hostInstance->controllerHandle, pipeHandle, pipeInit);
 
     return status;
@@ -386,7 +402,7 @@ usb_status_t USB_HostClosePipe(usb_host_handle hostHandle, usb_host_pipe_handle 
         return kStatus_USB_InvalidHandle;
     }
 
-    /* call controller close pipe interface */
+    /* call controller close pipe interface, the callbackFn is initialized in USB_HostGetControllerInterface */
     status = hostInstance->controllerTable->controllerClosePipe(hostInstance->controllerHandle, pipeHandle);
 
     return status;
@@ -420,9 +436,10 @@ usb_status_t USB_HostSend(usb_host_handle hostHandle, usb_host_pipe_handle pipeH
 #if ((defined USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE))
     if (transfer->transferLength > 0)
     {
-        USB_CacheFlushLines((void *)transfer->transferBuffer, transfer->transferLength);
+        DCACHE_CleanByRange((uint32_t)transfer->transferBuffer, transfer->transferLength);
     }
 #endif
+    /* the callbackFn is initialized in USB_HostGetControllerInterface */
     status = hostInstance->controllerTable->controllerWritePipe(hostInstance->controllerHandle, pipeHandle, transfer);
 
     USB_HostUnlock();
@@ -445,7 +462,7 @@ usb_status_t USB_HostSendSetup(usb_host_handle hostHandle,
     transfer->transferSofar = 0;
     transfer->next = NULL;
     transfer->setupStatus = 0;
-    if ((transfer->setupPacket.bmRequestType & USB_REQUEST_TYPE_DIR_MASK) == USB_REQUEST_TYPE_DIR_IN)
+    if ((transfer->setupPacket->bmRequestType & USB_REQUEST_TYPE_DIR_MASK) == USB_REQUEST_TYPE_DIR_IN)
     {
         transfer->direction = USB_IN;
     }
@@ -466,11 +483,13 @@ usb_status_t USB_HostSendSetup(usb_host_handle hostHandle,
 #endif
 /* call controller write pipe interface */
 #if ((defined USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE))
+    DCACHE_CleanByRange((uint32_t)&transfer->setupPacket->bmRequestType, sizeof(usb_setup_struct_t));
     if (transfer->transferLength > 0)
     {
-        USB_CacheFlushLines((void *)transfer->transferBuffer, transfer->transferLength);
+        DCACHE_CleanInvalidateByRange((uint32_t)transfer->transferBuffer, transfer->transferLength);
     }
 #endif
+    /* the callbackFn is initialized in USB_HostGetControllerInterface */
     status = hostInstance->controllerTable->controllerWritePipe(hostInstance->controllerHandle, pipeHandle, transfer);
 
     USB_HostUnlock();
@@ -505,9 +524,10 @@ usb_status_t USB_HostRecv(usb_host_handle hostHandle, usb_host_pipe_handle pipeH
 #if ((defined USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE))
     if (transfer->transferLength > 0)
     {
-        USB_CacheInvalidateLines((void *)transfer->transferBuffer, transfer->transferLength);
+        DCACHE_CleanInvalidateByRange((uint32_t)transfer->transferBuffer, transfer->transferLength);
     }
 #endif
+    /* the callbackFn is initialized in USB_HostGetControllerInterface */
     status = hostInstance->controllerTable->controllerReadPipe(hostInstance->controllerHandle, pipeHandle, transfer);
 
     USB_HostUnlock();
@@ -532,6 +552,7 @@ usb_status_t USB_HostCancelTransfer(usb_host_handle hostHandle,
     cancelParam.transfer = transfer;
 
     /* USB_HostLock(); This api can be called by host task and app task */
+    /* the callbackFn is initialized in USB_HostGetControllerInterface */
     status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostCancelTransfer,
                                                             &cancelParam);
     /* USB_HostUnlock(); */
@@ -652,11 +673,11 @@ usb_status_t USB_HostHelperGetPeripheralInformation(usb_device_handle deviceHand
             break;
 
         case kUSB_HostGetDevicePID: /* device pid */
-            *infoValue = (uint32_t)USB_SHORT_FROM_LITTLE_ENDIAN_ADDRESS(deviceInstance->deviceDescriptor.idProduct);
+            *infoValue = (uint32_t)USB_SHORT_FROM_LITTLE_ENDIAN_ADDRESS(deviceInstance->deviceDescriptor->idProduct);
             break;
 
         case kUSB_HostGetDeviceVID: /* device vid */
-            *infoValue = (uint32_t)USB_SHORT_FROM_LITTLE_ENDIAN_ADDRESS(deviceInstance->deviceDescriptor.idVendor);
+            *infoValue = (uint32_t)USB_SHORT_FROM_LITTLE_ENDIAN_ADDRESS(deviceInstance->deviceDescriptor->idVendor);
             break;
 
         case kUSB_HostGetDeviceConfigIndex: /* device config index */
@@ -836,6 +857,7 @@ usb_status_t USB_HostSuspendDeviceResquest(usb_host_handle hostHandle, usb_devic
 #if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))
         status = USB_HostHubSuspendDevice(hostInstance);
 #else
+        /* the callbackFn is initialized in USB_HostGetControllerInterface */
         status =
             hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
 #endif
@@ -849,6 +871,7 @@ usb_status_t USB_HostSuspendDeviceResquest(usb_host_handle hostHandle, usb_devic
 #endif
             if (hostInstance->deviceList == deviceHandle)
             {
+                /* the callbackFn is initialized in USB_HostGetControllerInterface */
                 status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle,
                                                                         kUSB_HostBusControl, &type);
             }
@@ -892,6 +915,7 @@ usb_status_t USB_HostResumeDeviceResquest(usb_host_handle hostHandle, usb_device
 
     if (NULL == deviceHandle)
     {
+        /* the callbackFn is initialized in USB_HostGetControllerInterface */
         status =
             hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
     }
@@ -904,6 +928,7 @@ usb_status_t USB_HostResumeDeviceResquest(usb_host_handle hostHandle, usb_device
 #endif
             if (hostInstance->deviceList == deviceHandle)
             {
+                /* the callbackFn is initialized in USB_HostGetControllerInterface */
                 status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle,
                                                                         kUSB_HostBusControl, &type);
             }
@@ -944,6 +969,7 @@ usb_status_t USB_HostL1SleepDeviceResquest(usb_host_handle hostHandle,
         /*#if ((defined USB_HOST_CONFIG_HUB) && (USB_HOST_CONFIG_HUB))*/
         /*To do, implete hub L1 suspend device*/
         /*#else*/
+        /* the callbackFn is initialized in USB_HostGetControllerInterface */
         status =
             hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
         /*#endif*/
@@ -955,6 +981,7 @@ usb_status_t USB_HostL1SleepDeviceResquest(usb_host_handle hostHandle,
 #endif
         if (hostInstance->deviceList == deviceHandle)
         {
+            /* the callbackFn is initialized in USB_HostGetControllerInterface */
             status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl,
                                                                     &type);
         }
@@ -976,7 +1003,7 @@ usb_status_t USB_HostL1SleepDeviceResquestConfig(usb_host_handle hostHandle, uin
         return kStatus_USB_InvalidHandle;
     }
     hostInstance = (usb_host_instance_t *)hostHandle;
-
+    /* the callbackFn is initialized in USB_HostGetControllerInterface */
     status =
         hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostL1Config, lpmParam);
 
@@ -1001,6 +1028,7 @@ usb_status_t USB_HostL1ResumeDeviceResquest(usb_host_handle hostHandle,
 
     if (1U == sleepType)
     {
+        /* the callbackFn is initialized in USB_HostGetControllerInterface */
         status =
             hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl, &type);
     }
@@ -1012,6 +1040,7 @@ usb_status_t USB_HostL1ResumeDeviceResquest(usb_host_handle hostHandle,
 #endif
         if (hostInstance->deviceList == deviceHandle)
         {
+            /* the callbackFn is initialized in USB_HostGetControllerInterface */
             status = hostInstance->controllerTable->controllerIoctl(hostInstance->controllerHandle, kUSB_HostBusControl,
                                                                     &type);
         }

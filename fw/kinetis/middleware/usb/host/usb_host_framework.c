@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -161,7 +165,7 @@ usb_status_t USB_HostCh9RequestCommon(usb_host_device_instance_t *deviceInstance
                                       uint32_t bufferLen)
 {
     /* initialize transfer */
-    transfer->setupPacket.wLength = USB_SHORT_TO_LITTLE_ENDIAN(bufferLen);
+    transfer->setupPacket->wLength = USB_SHORT_TO_LITTLE_ENDIAN(bufferLen);
     transfer->transferBuffer = buffer;
     transfer->transferLength = bufferLen;
 
@@ -186,20 +190,20 @@ usb_status_t USB_HostStandardGetStatus(usb_host_device_instance_t *deviceInstanc
 
     /* initialize transfer */
     statusParam = (usb_host_get_status_param_t *)param;
-    transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_DIR_IN | USB_REQUEST_TYPE_TYPE_STANDARD;
+    transfer->setupPacket->bmRequestType = USB_REQUEST_TYPE_DIR_IN | USB_REQUEST_TYPE_TYPE_STANDARD;
     if (statusParam->requestType == kRequestDevice)
     {
-        transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_DEVICE;
+        transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_DEVICE;
     }
     else if (statusParam->requestType == kRequestInterface)
     {
-        transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
+        transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
     }
     else
     {
-        transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
+        transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
     }
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(statusParam->statusSelector);
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(statusParam->statusSelector);
 
     length = 2;
     if (statusParam->statusSelector == USB_REQUEST_STANDARD_GET_STATUS_OTG_STATUS_SELECTOR)
@@ -219,18 +223,18 @@ usb_status_t USB_HostStandardSetClearFeature(usb_host_device_instance_t *deviceI
     featureParam = (usb_host_process_feature_param_t *)param;
     if (featureParam->requestType == kRequestDevice)
     {
-        transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_DEVICE;
+        transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_DEVICE;
     }
     else if (featureParam->requestType == kRequestInterface)
     {
-        transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
+        transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
     }
     else
     {
-        transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
+        transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
     }
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(featureParam->featureSelector);
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(featureParam->interfaceOrEndpoint);
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(featureParam->featureSelector);
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(featureParam->interfaceOrEndpoint);
 
     return USB_HostCh9RequestCommon(deviceInstance, transfer, NULL, 0);
 }
@@ -243,7 +247,7 @@ usb_status_t USB_HostStandardSetAddress(usb_host_device_instance_t *deviceInstan
 
     /* initialize transfer */
     address = *(uint8_t *)param;
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(address);
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(address);
 
     return USB_HostCh9RequestCommon(deviceInstance, transfer, NULL, 0);
 }
@@ -256,9 +260,9 @@ usb_status_t USB_HostStandardSetGetDescriptor(usb_host_device_instance_t *device
 
     /* initialize transfer */
     descriptorParam = (usb_host_process_descriptor_param_t *)param;
-    transfer->setupPacket.wValue =
-        ((uint16_t)((uint16_t)descriptorParam->descriptorType << 8) | descriptorParam->descriptorIndex);
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(descriptorParam->languageId);
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(
+        (uint16_t)((uint16_t)descriptorParam->descriptorType << 8) | descriptorParam->descriptorIndex);
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(descriptorParam->languageId);
     return USB_HostCh9RequestCommon(deviceInstance, transfer, descriptorParam->descriptorBuffer,
                                     descriptorParam->descriptorLength);
 }
@@ -271,9 +275,9 @@ usb_status_t USB_HostStandardGetInterface(usb_host_device_instance_t *deviceInst
 
     /* initialize transfer */
     interfaceParam = (usb_host_get_interface_param_t *)param;
-    transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
-    transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(interfaceParam->interface);
+    transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
+    transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(interfaceParam->interface);
 
     return USB_HostCh9RequestCommon(deviceInstance, transfer, interfaceParam->alternateInterfaceBuffer, 1);
 }
@@ -286,9 +290,9 @@ usb_status_t USB_HostStandardSetInterface(usb_host_device_instance_t *deviceInst
 
     /* initialize transfer */
     setParam = (usb_host_set_interface_param_t *)param;
-    transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(setParam->interface);
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(setParam->alternateSetting);
+    transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(setParam->interface);
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(setParam->alternateSetting);
 
     return USB_HostCh9RequestCommon(deviceInstance, transfer, NULL, 0);
 }
@@ -301,9 +305,9 @@ usb_status_t USB_HostStandardSyncFrame(usb_host_device_instance_t *deviceInstanc
 
     /* initialize transfer */
     frameParam = (usb_host_synch_frame_param_t *)param;
-    transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
-    transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(frameParam->endpoint);
+    transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
+    transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(frameParam->endpoint);
 
     return USB_HostCh9RequestCommon(deviceInstance, transfer, frameParam->frameNumberBuffer, 2);
 }
@@ -322,11 +326,11 @@ usb_status_t USB_HostRequestControl(usb_device_handle deviceHandle,
     }
 
     /* reset transfer fields */
-    transfer->setupPacket.bmRequestType = 0x00;
-    transfer->setupPacket.bRequest = usbRequest;
-    transfer->setupPacket.wIndex = 0;
-    transfer->setupPacket.wLength = 0;
-    transfer->setupPacket.wValue = 0;
+    transfer->setupPacket->bmRequestType = 0x00;
+    transfer->setupPacket->bRequest = usbRequest;
+    transfer->setupPacket->wIndex = 0;
+    transfer->setupPacket->wLength = 0;
+    transfer->setupPacket->wValue = 0;
 
     switch (usbRequest)
     {
@@ -347,19 +351,19 @@ usb_status_t USB_HostRequestControl(usb_device_handle deviceHandle,
         case USB_REQUEST_STANDARD_SET_DESCRIPTOR: /* standard set descriptor request */
             if (usbRequest == USB_REQUEST_STANDARD_GET_DESCRIPTOR)
             {
-                transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
+                transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
             }
             status = USB_HostStandardSetGetDescriptor(deviceInstance, transfer, param);
             break;
 
         case USB_REQUEST_STANDARD_GET_CONFIGURATION: /* standard get configuration descriptor request */
-            transfer->setupPacket.bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
+            transfer->setupPacket->bmRequestType |= USB_REQUEST_TYPE_DIR_IN;
             status =
                 USB_HostCh9RequestCommon((usb_host_device_instance_t *)deviceHandle, transfer, (uint8_t *)param, 1);
             break;
 
         case USB_REQUEST_STANDARD_SET_CONFIGURATION: /* standard set configuration request */
-            transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(*((uint8_t *)param));
+            transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(*((uint8_t *)param));
             status = USB_HostCh9RequestCommon((usb_host_device_instance_t *)deviceHandle, transfer, NULL, 0);
             break;
 

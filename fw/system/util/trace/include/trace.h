@@ -20,7 +20,7 @@ static inline void trace_write(const u8 *const buf, const size_t len)
         itm_write(TRACE_ITM_PORT, buf, len);
     if (semi_available())
         semi_write(buf, len);
-    uart_write(buf, len);
+    uart_write(len, buf);
 }
 
 static inline void trace_puts(const char *const str)

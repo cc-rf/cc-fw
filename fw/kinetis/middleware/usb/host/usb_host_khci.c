@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 - 2017 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -57,7 +61,7 @@
 
 #endif
 
-USB_RAM_ADDRESS_ALIGNMENT(512) static uint8_t bdt[512];
+USB_CONTROLLER_DATA USB_RAM_ADDRESS_ALIGNMENT(512) static uint8_t bdt[512];
 
 /*******************************************************************************
  * Code
@@ -650,6 +654,7 @@ static void _USB_HostKhciProcessTrCallback(usb_host_controller_handle controller
                                            int32_t err)
 {
     usb_status_t status = kStatus_USB_Success;
+    usb_host_pipe_t *pipePointer = NULL;
 
     if (err == USB_KHCI_ATOM_TR_STALL)
     {
@@ -672,6 +677,37 @@ static void _USB_HostKhciProcessTrCallback(usb_host_controller_handle controller
     {
     }
 
+    if (status == kStatus_USB_Success)
+    {
+        if ((transfer->transferPipe->pipeType == USB_ENDPOINT_CONTROL) &&
+            (transfer->setupPacket->bRequest == USB_REQUEST_STANDARD_CLEAR_FEATURE) &&
+            (transfer->setupPacket->bmRequestType == USB_REQUEST_TYPE_RECIPIENT_ENDPOINT) &&
+            ((USB_SHORT_FROM_LITTLE_ENDIAN(transfer->setupPacket->wValue) & 0x00FFu) ==
+             USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT))
+        {
+            pipePointer = ((usb_khci_host_state_struct_t *)controllerHandle)->pipeDescriptorBasePointer;
+            while (NULL != pipePointer)
+            {
+                /* only compute bulk and interrupt pipe */
+                if (((pipePointer->endpointAddress |
+                      (pipePointer->direction << USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_SHIFT)) ==
+                     (uint8_t)(USB_SHORT_FROM_LITTLE_ENDIAN(transfer->setupPacket->wIndex))) &&
+                    (pipePointer->deviceHandle == transfer->transferPipe->deviceHandle))
+                {
+                    break;
+                }
+                pipePointer = pipePointer->next;
+            }
+
+            if ((pipePointer != NULL) &&
+                ((pipePointer->pipeType == USB_ENDPOINT_INTERRUPT) || (pipePointer->pipeType == USB_ENDPOINT_BULK)))
+            {
+                pipePointer->nextdata01 = 0;
+            }
+        }
+    }
+
+    /* callback function is different from the current condition */
     transfer->callbackFn(transfer->callbackParam, transfer, status);
 }
 
@@ -1015,7 +1051,7 @@ static khci_tr_state_t _USB_HostKhciStartTranfer(usb_host_controller_handle hand
         if ((transfer->setupStatus == kTransfer_Setup0))
         {
             transferResult = _USB_HostKhciAtomNonblockingTransaction(usbHostPointer, kTr_Ctrl, transfer->transferPipe,
-                                                                     (uint8_t *)&transfer->setupPacket, 8U);
+                                                                     (uint8_t *)transfer->setupPacket, 8U);
         }
         else if (transfer->setupStatus == kTransfer_Setup1)
         {
@@ -1190,6 +1226,7 @@ void _USB_HostKhciTransferClearUp(usb_host_controller_handle controllerHandle)
     while (trCancel != NULL)
     {
         _USB_HostKhciUnlinkTrRequestFromList(controllerHandle, trCancel);
+        /* callback function is different from the current condition */
         trCancel->callbackFn(trCancel->callbackParam, trCancel, kStatus_USB_TransferCancel);
         USB_HostKhciLock();
         trCancel = usbHostPointer->periodicListPointer;
@@ -1202,6 +1239,7 @@ void _USB_HostKhciTransferClearUp(usb_host_controller_handle controllerHandle)
     while (trCancel != NULL)
     {
         _USB_HostKhciUnlinkTrRequestFromList(controllerHandle, trCancel);
+        /* callback function is different from the current condition */
         trCancel->callbackFn(trCancel->callbackParam, trCancel, kStatus_USB_TransferCancel);
         USB_HostKhciLock();
         trCancel = usbHostPointer->asyncListPointer;
@@ -1546,7 +1584,6 @@ usb_status_t USB_HostKhciCreate(uint8_t controllerId,
         USB_HostKhciDestory(usbHostPointer);
         return kStatus_USB_AllocFail;
     } /* Endif */
-
 
     usbHostPointer->asyncListAvtive = 0U;
     usbHostPointer->periodicListAvtive = 0U;
@@ -1926,6 +1963,7 @@ static usb_status_t _USB_HostKhciCancelPipe(usb_host_controller_handle handle,
             ((trPointer == NULL) || (trPointer == temptr)))
         {
             _USB_HostKhciUnlinkTrRequestFromList(handle, temptr);
+            /* callback function is different from the current condition */
             temptr->callbackFn(temptr->callbackParam, temptr, kStatus_USB_TransferCancel);
             return kStatus_USB_Success;
         }

@@ -39,9 +39,9 @@
 #define CODE_ID_LED             27
 #define CODE_ID_RAINBOW         29
 
-#define RESET_MAGIC         0xD1E00D1E
+#define RESET_MAGIC             0xD1E00D1E
 
-#define CODE_SEND_FLAG_WAIT 1
+#define CODE_SEND_FLAG_WAIT     1
 
 #if CLOUDCHASER_FCC_MODE
     #define SERF_USB_PORT       1
@@ -49,7 +49,10 @@
     #define SERF_USB_PORT       0
 #endif
 
-#define CC_MAC_FLAG         0
+#define CC_MAC_FLAG             0
+
+#define RF_UART_ID              0
+#define RF_UART_BAUD            115200
 
 
 typedef struct __packed {
@@ -1011,7 +1014,7 @@ static void write_code_uart(code_uart_t *code_uart, size_t size)
         frame_size = serf_encode(code_uart->code, code_uart->data, size, &frame);
 
         if (frame) {
-            uart_write(uart, frame, frame_size);
+            uart_write(uart, frame_size, frame);
             vPortFree(frame);
         }
     }

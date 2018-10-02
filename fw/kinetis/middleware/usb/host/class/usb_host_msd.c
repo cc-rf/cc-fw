@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -245,11 +249,11 @@ static usb_status_t USB_HostMsdClearHalt(usb_host_msd_instance_t *msdInstance,
     transfer->callbackParam = msdInstance;
     transfer->transferBuffer = NULL;
     transfer->transferLength = 0;
-    transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_CLEAR_FEATURE;
-    transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT);
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(endpoint);
-    transfer->setupPacket.wLength = 0;
+    transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_CLEAR_FEATURE;
+    transfer->setupPacket->bmRequestType = USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT);
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(endpoint);
+    transfer->setupPacket->wLength = 0;
     status = USB_HostSendSetup(msdInstance->hostHandle, msdInstance->controlPipe, transfer);
 
     if (status != kStatus_USB_Success)
@@ -280,6 +284,8 @@ static void USB_HostMsdResetDone(usb_host_msd_instance_t *msdInstance, usb_statu
     {
         if (msdInstance->controlCallbackFn != NULL)
         {
+            /* callback to application, callback function is initialized in the USB_HostMsdControl,
+            or USB_HostMsdSetInterface, but is the same function */
             msdInstance->controlCallbackFn(msdInstance->controlCallbackParam, NULL, 0,
                                            status); /* callback to application */
         }
@@ -346,6 +352,8 @@ static void USB_HostMsdControlCallback(void *param, usb_host_transfer_t *transfe
     msdInstance->controlTransfer = NULL;
     if (msdInstance->controlCallbackFn != NULL)
     {
+        /* callback to application, callback function is initialized in the USB_HostMsdControl,
+        or USB_HostMsdSetInterface, but is the same function */
         msdInstance->controlCallbackFn(msdInstance->controlCallbackParam, transfer->transferBuffer,
                                        transfer->transferSofar, status); /* callback to application */
     }
@@ -356,7 +364,7 @@ static void USB_HostMsdCommandDone(usb_host_msd_instance_t *msdInstance, usb_sta
 {
     if (msdInstance->commandCallbackFn != NULL)
     {
-        /* callback to application */
+        /* callback to application, the callback function is initialized in USB_HostMsdCommand */
         msdInstance->commandCallbackFn(msdInstance->commandCallbackParam, msdInstance->msdCommand.dataBuffer,
                                        msdInstance->msdCommand.dataSofar, status);
     }
@@ -371,7 +379,7 @@ static void USB_HostMsdCswCallback(void *param, usb_host_transfer_t *transfer, u
     {
         /* kStatus_USB_Success */
         if ((transfer->transferSofar == USB_HOST_UFI_CSW_LENGTH) &&
-            (msdInstance->msdCommand.cswBlock.CSWSignature == USB_HOST_MSD_CSW_SIGNATURE))
+            (msdInstance->msdCommand.cswBlock.CSWSignature == USB_LONG_TO_LITTLE_ENDIAN(USB_HOST_MSD_CSW_SIGNATURE)))
         {
             switch (msdInstance->msdCommand.cswBlock.CSWStatus)
             {
@@ -894,6 +902,8 @@ static void USB_HostMsdSetInterfaceCallback(void *param, usb_host_transfer_t *tr
 
     if (msdInstance->controlCallbackFn != NULL)
     {
+        /* callback to application, callback function is initialized in the USB_HostMsdControl,
+        or USB_HostMsdSetInterface, but is the same function */
         msdInstance->controlCallbackFn(msdInstance->controlCallbackParam, NULL, 0,
                                        status); /* callback to application */
     }
@@ -1003,12 +1013,12 @@ usb_status_t USB_HostMsdSetInterface(usb_host_class_handle classHandle,
         /* initialize transfer */
         transfer->callbackFn = USB_HostMsdSetInterfaceCallback;
         transfer->callbackParam = msdInstance;
-        transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
-        transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
-        transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
+        transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
+        transfer->setupPacket->bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
+        transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
             ((usb_host_interface_t *)msdInstance->interfaceHandle)->interfaceDesc->bInterfaceNumber);
-        transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(alternateSetting);
-        transfer->setupPacket.wLength = 0;
+        transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(alternateSetting);
+        transfer->setupPacket->wLength = 0;
         transfer->transferBuffer = NULL;
         transfer->transferLength = 0;
         status = USB_HostSendSetup(msdInstance->hostHandle, msdInstance->controlPipe, transfer);
@@ -1110,12 +1120,12 @@ static usb_status_t USB_HostMsdControl(usb_host_msd_instance_t *msdInstance,
     transfer->callbackFn = pipeCallbackFn;
     transfer->callbackParam = msdInstance;
 
-    transfer->setupPacket.bmRequestType = requestType;
-    transfer->setupPacket.bRequest = requestValue;
-    transfer->setupPacket.wValue = 0x0000;
-    transfer->setupPacket.wIndex =
+    transfer->setupPacket->bmRequestType = requestType;
+    transfer->setupPacket->bRequest = requestValue;
+    transfer->setupPacket->wValue = 0x0000;
+    transfer->setupPacket->wIndex =
         ((usb_host_interface_t *)msdInstance->interfaceHandle)->interfaceDesc->bInterfaceNumber;
-    transfer->setupPacket.wLength = bufferLength;
+    transfer->setupPacket->wLength = bufferLength;
 
     if (USB_HostSendSetup(msdInstance->hostHandle, msdInstance->controlPipe, transfer) !=
         kStatus_USB_Success) /* call host driver api */

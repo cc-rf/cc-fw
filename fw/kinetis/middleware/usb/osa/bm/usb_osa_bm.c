@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -37,7 +41,7 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-#define USB_OSA_BM_EVENT_COUNT (2U)
+#define USB_OSA_BM_EVENT_COUNT (4U)
 #define USB_OSA_BM_SEM_COUNT (1U)
 #define USB_OSA_BM_MSGQ_COUNT (1U)
 #define USB_OSA_BM_MSG_COUNT (8U)
@@ -84,9 +88,12 @@ typedef struct _usb_osa_msgq_struct
  * Variables
  ******************************************************************************/
 
-USB_GLOBAL static usb_osa_sem_struct_t s_UsbBmSemStruct[USB_OSA_BM_SEM_COUNT];
-USB_GLOBAL static usb_osa_event_struct_t s_UsbBmEventStruct[USB_OSA_BM_EVENT_COUNT];
-USB_GLOBAL static usb_osa_msgq_struct_t s_UsbBmMsgqStruct[USB_OSA_BM_MSGQ_COUNT];
+USB_GLOBAL USB_RAM_ADDRESS_ALIGNMENT(USB_DATA_ALIGN_SIZE) static usb_osa_sem_struct_t
+    s_UsbBmSemStruct[USB_OSA_BM_SEM_COUNT];
+USB_GLOBAL USB_RAM_ADDRESS_ALIGNMENT(USB_DATA_ALIGN_SIZE) static usb_osa_event_struct_t
+    s_UsbBmEventStruct[USB_OSA_BM_EVENT_COUNT];
+USB_GLOBAL USB_RAM_ADDRESS_ALIGNMENT(USB_DATA_ALIGN_SIZE) static usb_osa_msgq_struct_t
+    s_UsbBmMsgqStruct[USB_OSA_BM_MSGQ_COUNT];
 
 /*******************************************************************************
  * Code

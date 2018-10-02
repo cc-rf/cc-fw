@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -129,7 +133,7 @@ static void USB_HostHidClearInHaltCallback(void *param, usb_host_transfer_t *tra
     hidInstance->controlTransfer = NULL;
     if (hidInstance->inCallbackFn != NULL)
     {
-        /* callback to application */
+        /* callback to application, callback function is initialized in the USB_HostHidRecv */
         hidInstance->inCallbackFn(hidInstance->inCallbackParam, hidInstance->stallDataBuffer,
                                   hidInstance->stallDataLength, kStatus_USB_TransferStall);
     }
@@ -143,7 +147,7 @@ static void USB_HostHidClearOutHaltCallback(void *param, usb_host_transfer_t *tr
     hidInstance->controlTransfer = NULL;
     if (hidInstance->outCallbackFn != NULL)
     {
-        /* callback to application */
+        /* callback to application, callback function is initialized in USB_HostHidSend */
         hidInstance->outCallbackFn(hidInstance->outCallbackParam, hidInstance->stallDataBuffer,
                                    hidInstance->stallDataLength, kStatus_USB_TransferStall);
     }
@@ -177,11 +181,11 @@ static usb_status_t USB_HostHidClearHalt(usb_host_hid_instance_t *hidInstance,
     transfer->callbackParam = hidInstance;
     transfer->transferBuffer = NULL;
     transfer->transferLength = 0;
-    transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_CLEAR_FEATURE;
-    transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT);
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(endpoint);
-    transfer->setupPacket.wLength = 0;
+    transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_CLEAR_FEATURE;
+    transfer->setupPacket->bmRequestType = USB_REQUEST_TYPE_RECIPIENT_ENDPOINT;
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(USB_REQUEST_STANDARD_FEATURE_SELECTOR_ENDPOINT_HALT);
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(endpoint);
+    transfer->setupPacket->wLength = 0;
     status = USB_HostSendSetup(hidInstance->hostHandle, hidInstance->controlPipe, transfer);
 
     if (status != kStatus_USB_Success)
@@ -212,8 +216,9 @@ static void USB_HostHidInPipeCallback(void *param, usb_host_transfer_t *transfer
 #endif
     if (hidInstance->inCallbackFn != NULL)
     {
+        /* callback to application, callback function is initialized in the USB_HostHidRecv */
         hidInstance->inCallbackFn(hidInstance->inCallbackParam, transfer->transferBuffer, transfer->transferSofar,
-                                  status); /* callback to application */
+                                  status);
     }
     USB_HostFreeTransfer(hidInstance->hostHandle, transfer);
 }
@@ -236,6 +241,7 @@ static void USB_HostHidOutPipeCallback(void *param, usb_host_transfer_t *transfe
 #endif
     if (hidInstance->outCallbackFn != NULL)
     {
+        /* callback to application, callback function is initialized in USB_HostHidSend */
         hidInstance->outCallbackFn(hidInstance->outCallbackParam, transfer->transferBuffer, transfer->transferSofar,
                                    status); /* callback to application */
     }
@@ -249,8 +255,10 @@ static void USB_HostHidControlCallback(void *param, usb_host_transfer_t *transfe
     hidInstance->controlTransfer = NULL;
     if (hidInstance->controlCallbackFn != NULL)
     {
+        /* callback to application, callback function is initialized in the USB_HostHidSetInterface
+        or USB_HostHidControl, but is the same function */
         hidInstance->controlCallbackFn(hidInstance->controlCallbackParam, transfer->transferBuffer,
-                                       transfer->transferSofar, status); /* callback to application */
+                                       transfer->transferSofar, status);
     }
     USB_HostFreeTransfer(hidInstance->hostHandle, transfer);
 }
@@ -365,8 +373,9 @@ static void USB_HostHidSetInterfaceCallback(void *param, usb_host_transfer_t *tr
 
     if (hidInstance->controlCallbackFn != NULL)
     {
-        hidInstance->controlCallbackFn(hidInstance->controlCallbackParam, NULL, 0,
-                                       status); /* callback to application */
+        /* callback to application, callback function is initialized in the USB_HostHidSetInterface
+        or USB_HostHidControl, but is the same function */
+        hidInstance->controlCallbackFn(hidInstance->controlCallbackParam, NULL, 0, status);
     }
     USB_HostFreeTransfer(hidInstance->hostHandle, transfer);
 }
@@ -466,12 +475,12 @@ usb_status_t USB_HostHidSetInterface(usb_host_class_handle classHandle,
         /* initialize transfer */
         transfer->callbackFn = USB_HostHidSetInterfaceCallback;
         transfer->callbackParam = hidInstance;
-        transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
-        transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
-        transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
+        transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
+        transfer->setupPacket->bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
+        transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
             ((usb_host_interface_t *)hidInstance->interfaceHandle)->interfaceDesc->bInterfaceNumber);
-        transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(alternateSetting);
-        transfer->setupPacket.wLength = 0;
+        transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(alternateSetting);
+        transfer->setupPacket->wLength = 0;
         transfer->transferBuffer = NULL;
         transfer->transferLength = 0;
         status = USB_HostSendSetup(hidInstance->hostHandle, hidInstance->controlPipe, transfer);
@@ -700,12 +709,12 @@ static usb_status_t USB_HostHidControl(usb_host_class_handle classHandle,
     transfer->transferLength = wlength;
     transfer->callbackFn = USB_HostHidControlCallback;
     transfer->callbackParam = hidInstance;
-    transfer->setupPacket.bmRequestType = requestType;
-    transfer->setupPacket.bRequest = request;
-    transfer->setupPacket.wValue = (wvalueL | (uint16_t)((uint16_t)wvalueH << 8));
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
+    transfer->setupPacket->bmRequestType = requestType;
+    transfer->setupPacket->bRequest = request;
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(wvalueL | (uint16_t)((uint16_t)wvalueH << 8));
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
         ((usb_host_interface_t *)hidInstance->interfaceHandle)->interfaceDesc->bInterfaceNumber);
-    transfer->setupPacket.wLength = USB_SHORT_TO_LITTLE_ENDIAN(wlength);
+    transfer->setupPacket->wLength = USB_SHORT_TO_LITTLE_ENDIAN(wlength);
 
     if (USB_HostSendSetup(hidInstance->hostHandle, hidInstance->controlPipe, transfer) !=
         kStatus_USB_Success) /* call host driver api */

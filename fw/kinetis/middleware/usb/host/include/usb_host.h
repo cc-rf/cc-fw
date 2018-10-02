@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -70,18 +74,18 @@ typedef enum _usb_host_event
     kUSB_HostEventEnumerationDone, /*!< Device's enumeration is done and the device is supported */
     kUSB_HostEventNotSupported,    /*!< Device's enumeration is done and the device is not supported */
 #if ((defined(USB_HOST_CONFIG_LOW_POWER_MODE)) && (USB_HOST_CONFIG_LOW_POWER_MODE > 0U))
-    kUSB_HostEventNotSuspended, /*!< Suspend failed */
-    kUSB_HostEventSuspended,    /*!< Suspend successful */
-    kUSB_HostEventNotResumed,   /*!< Resume failed */
-    kUSB_HostEventDetectResume, /*!< Detect resume signal */
-    kUSB_HostEventResumed,      /*!< Resume successful */
-    kUSB_HostEventL1Sleeped,    /*!< L1 Sleep successful,state transition was successful (ACK) */
-    kUSB_HostEventL1SleepNYET,  /*!< Device was unable to enter the L1 state at this time (NYET)  */
-    kUSB_HostEventL1SleepNotSupport,  /*!< Device does not support the L1 state (STALL)  */
-    kUSB_HostEventL1SleepError,  /*!< Device failed to respond or an error occurred  */
-    kUSB_HostEventL1NotResumed,   /*!< Resume failed */
-    kUSB_HostEventL1DetectResume, /*!< Detect resume signal */
-    kUSB_HostEventL1Resumed,      /*!< Resume successful */
+    kUSB_HostEventNotSuspended,      /*!< Suspend failed */
+    kUSB_HostEventSuspended,         /*!< Suspend successful */
+    kUSB_HostEventNotResumed,        /*!< Resume failed */
+    kUSB_HostEventDetectResume,      /*!< Detect resume signal */
+    kUSB_HostEventResumed,           /*!< Resume successful */
+    kUSB_HostEventL1Sleeped,         /*!< L1 Sleep successful,state transition was successful (ACK) */
+    kUSB_HostEventL1SleepNYET,       /*!< Device was unable to enter the L1 state at this time (NYET)  */
+    kUSB_HostEventL1SleepNotSupport, /*!< Device does not support the L1 state (STALL)  */
+    kUSB_HostEventL1SleepError,      /*!< Device failed to respond or an error occurred  */
+    kUSB_HostEventL1NotResumed,      /*!< Resume failed */
+    kUSB_HostEventL1DetectResume,    /*!< Detect resume signal */
+    kUSB_HostEventL1Resumed,         /*!< Resume successful */
 #endif
 } usb_host_event_t;
 
@@ -206,7 +210,7 @@ typedef struct _usb_host_transfer
     host_inner_transfer_callback_t callbackFn; /*!< Transfer callback function*/
     void *callbackParam;                       /*!< Transfer callback parameter*/
     usb_host_pipe_t *transferPipe;             /*!< Transfer pipe pointer*/
-    usb_setup_struct_t setupPacket;            /*!< Set up packet buffer*/
+    usb_setup_struct_t *setupPacket;           /*!< Set up packet buffer*/
     uint8_t direction;                         /*!< Transfer direction; it's values are USB_OUT or USB_IN*/
     uint8_t setupStatus;                       /*!< Set up the transfer status*/
     union
@@ -670,7 +674,9 @@ extern usb_status_t USB_HostResumeDeviceResquest(usb_host_handle hostHandle, usb
  *                                          Or, the deviceHandle is invalid.
  *                                          Or, the request is invalid.
  */
-extern usb_status_t USB_HostL1SleepDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle, uint8_t sleeptype);
+extern usb_status_t USB_HostL1SleepDeviceResquest(usb_host_handle hostHandle,
+                                                  usb_device_handle deviceHandle,
+                                                  uint8_t sleeptype);
 
 /*!
  * @brief Send a bus or device resume request.
@@ -687,7 +693,9 @@ extern usb_status_t USB_HostL1SleepDeviceResquest(usb_host_handle hostHandle, us
  *                                          Or, the deviceHandle is invalid.
  *                                          Or, the request is invalid.
  */
-extern usb_status_t USB_HostL1ResumeDeviceResquest(usb_host_handle hostHandle, usb_device_handle deviceHandle, uint8_t sleepType);
+extern usb_status_t USB_HostL1ResumeDeviceResquest(usb_host_handle hostHandle,
+                                                   usb_device_handle deviceHandle,
+                                                   uint8_t sleepType);
 /*!
  * @brief Update the lpm param.
  *

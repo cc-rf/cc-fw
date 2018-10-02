@@ -343,7 +343,7 @@ static void user_flash_init(void)
     return (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0 ;
 }*/
 
-_READ_WRITE_RETURN_TYPE __used _EXFUN(_write, (int __fd, const void *__buf, size_t __nbyte ))
+_READ_WRITE_RETURN_TYPE __used _write(int __fd, const void *__buf, size_t __nbyte)
 {
     if (__buf == 0)
         return -1;

@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -173,6 +177,7 @@ static void _USB_HostAudioStreamIsoInPipeCallback(void *param, usb_host_transfer
 
     if (audioPtr->inCallbackFn != NULL)
     {
+        /* callback function is initialized in USB_HostAudioStreamRecv */
         audioPtr->inCallbackFn(audioPtr->inCallbackParam, transfer->transferBuffer, transfer->transferSofar, status);
     }
     USB_HostFreeTransfer(audioPtr->hostHandle, transfer);
@@ -191,6 +196,7 @@ static void _USB_HostAudioStreamIsoOutPipeCallback(void *param, usb_host_transfe
 
     if (audioPtr->outCallbackFn != NULL)
     {
+        /* callback function is initialized in USB_HostAudioStreamSend */
         audioPtr->outCallbackFn(audioPtr->outCallbackParam, transfer->transferBuffer, transfer->transferSofar, status);
     }
     USB_HostFreeTransfer(audioPtr->hostHandle, transfer);
@@ -210,6 +216,9 @@ static void _USB_HostAudioControlCallback(void *param, usb_host_transfer_t *tran
     audioPtr->controlTransfer = NULL;
     if (audioPtr->controlCallbackFn != NULL)
     {
+        /* callback to application, callback function is initialized in the _USB_HostAudioControl,
+        USB_HostAudioStreamSetInterface
+        or USB_HostAudioControlSetInterface, but is the same function */
         audioPtr->controlCallbackFn(audioPtr->controlCallbackParam, transfer->transferBuffer, transfer->transferSofar,
                                     status);
     }
@@ -264,12 +273,12 @@ static usb_status_t _USB_HostAudioControl(usb_host_class_handle classHandle,
     transfer->transferLength = wlength;
     transfer->callbackFn = _USB_HostAudioControlCallback;
     transfer->callbackParam = audioPtr;
-    transfer->setupPacket.bmRequestType = typeRequest;
-    transfer->setupPacket.bRequest = request;
-    transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(wvalue);
-    transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(windex);
+    transfer->setupPacket->bmRequestType = typeRequest;
+    transfer->setupPacket->bRequest = request;
+    transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(wvalue);
+    transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(windex);
 
-    transfer->setupPacket.wLength = USB_SHORT_TO_LITTLE_ENDIAN(wlength);
+    transfer->setupPacket->wLength = USB_SHORT_TO_LITTLE_ENDIAN(wlength);
     audioPtr->isSetup = 1;
 
     if (USB_HostSendSetup(audioPtr->hostHandle, audioPtr->controlPipe, transfer) != kStatus_USB_Success)
@@ -409,6 +418,9 @@ static void _USB_HostAudioSetInterfaceCallback(void *param, usb_host_transfer_t 
 
     if (audioPtr->controlCallbackFn != NULL)
     {
+        /* callback to application, callback function is initialized in the _USB_HostAudioControl,
+        USB_HostAudioStreamSetInterface
+        or USB_HostAudioControlSetInterface, but is the same function */
         audioPtr->controlCallbackFn(audioPtr->controlCallbackParam, NULL, 0U, status);
     }
     USB_HostFreeTransfer(audioPtr->hostHandle, transfer);
@@ -548,12 +560,12 @@ usb_status_t USB_HostAudioStreamSetInterface(usb_host_class_handle classHandle,
         /* initialize transfer */
         transfer->callbackFn = _USB_HostAudioSetInterfaceCallback;
         transfer->callbackParam = audioPtr;
-        transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
-        transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
-        transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
+        transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
+        transfer->setupPacket->bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
+        transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
             ((usb_host_interface_t *)audioPtr->streamIntfHandle)->interfaceDesc->bInterfaceNumber);
-        transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(alternateSetting);
-        transfer->setupPacket.wLength = 0;
+        transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(alternateSetting);
+        transfer->setupPacket->wLength = 0;
         transfer->transferBuffer = NULL;
         transfer->transferLength = 0;
         status = USB_HostSendSetup(audioPtr->hostHandle, audioPtr->controlPipe, transfer);
@@ -680,12 +692,12 @@ usb_status_t USB_HostAudioControlSetInterface(usb_host_class_handle classHandle,
         /* initialize transfer */
         transfer->callbackFn = _USB_HostAudioControlCallback;
         transfer->callbackParam = audioPtr;
-        transfer->setupPacket.bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
-        transfer->setupPacket.bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
-        transfer->setupPacket.wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
+        transfer->setupPacket->bRequest = USB_REQUEST_STANDARD_SET_INTERFACE;
+        transfer->setupPacket->bmRequestType = USB_REQUEST_TYPE_RECIPIENT_INTERFACE;
+        transfer->setupPacket->wIndex = USB_SHORT_TO_LITTLE_ENDIAN(
             ((usb_host_interface_t *)audioPtr->controlIntfHandle)->interfaceDesc->bInterfaceNumber);
-        transfer->setupPacket.wValue = USB_SHORT_TO_LITTLE_ENDIAN(alternateSetting);
-        transfer->setupPacket.wLength = 0;
+        transfer->setupPacket->wValue = USB_SHORT_TO_LITTLE_ENDIAN(alternateSetting);
+        transfer->setupPacket->wLength = 0;
         transfer->transferBuffer = NULL;
         transfer->transferLength = 0;
         status = USB_HostSendSetup(audioPtr->hostHandle, audioPtr->controlPipe, transfer);

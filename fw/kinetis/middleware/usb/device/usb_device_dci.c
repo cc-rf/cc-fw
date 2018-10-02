@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
- * Copyright 2016 NXP
+ * Copyright 2016 - 2017 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -52,7 +56,9 @@
 #endif
 
 #include "usb_device_ch9.h"
-
+#if (defined(USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE) && (USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+#include "fsl_cache.h"
+#endif
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -261,6 +267,7 @@ static usb_status_t USB_DeviceTransfer(usb_device_handle handle,
     uint8_t endpoint = endpointAddress & USB_ENDPOINT_NUMBER_MASK;
     uint8_t direction = (endpointAddress & USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_MASK) >>
                         USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_SHIFT;
+    USB_OSA_SR_ALLOC();
 
     if (NULL == deviceHandle)
     {
@@ -269,20 +276,23 @@ static usb_status_t USB_DeviceTransfer(usb_device_handle handle,
 
     if (NULL != deviceHandle->controllerInterface)
     {
-        if (deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy)
+        if (deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy)
         {
             return kStatus_USB_Busy;
         }
-        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 1U;
+        USB_OSA_ENTER_CRITICAL();
+        deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 1U;
+        USB_OSA_EXIT_CRITICAL();
         if (endpointAddress & USB_DESCRIPTOR_ENDPOINT_ADDRESS_DIRECTION_MASK)
         {
 #if (defined(USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE) && (USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
             if (length)
             {
-                USB_CacheFlushLines((void *)buffer, length);
+                DCACHE_CleanByRange((uint32_t)buffer, length);
             }
 #endif
-            /* Call the controller send interface. */
+            /* Call the controller send interface, the callbackFn is initialized in
+            USB_DeviceGetControllerInterface */
             error = deviceHandle->controllerInterface->deviceSend(deviceHandle->controllerHandle, endpointAddress,
                                                                   buffer, length);
         }
@@ -291,12 +301,19 @@ static usb_status_t USB_DeviceTransfer(usb_device_handle handle,
 #if (defined(USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE) && (USB_DEVICE_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
             if (length)
             {
-                USB_CacheInvalidateLines((void *)buffer, length);
+                DCACHE_CleanInvalidateByRange((uint32_t)buffer, length);
             }
 #endif
-            /* Call the controller receive interface. */
+            /* Call the controller receive interface, the callbackFn is initialized in
+            USB_DeviceGetControllerInterface */
             error = deviceHandle->controllerInterface->deviceRecv(deviceHandle->controllerHandle, endpointAddress,
                                                                   buffer, length);
+        }
+        if (kStatus_USB_Success != error)
+        {
+            USB_OSA_ENTER_CRITICAL();
+            deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
+            USB_OSA_EXIT_CRITICAL();
         }
     }
     else
@@ -333,7 +350,8 @@ static usb_status_t USB_DeviceControl(usb_device_handle handle, usb_device_contr
 
     if (NULL != deviceHandle->controllerInterface)
     {
-        /* Call the controller control interface. */
+        /* Call the controller control interface. the controllerInterface is initialized in
+        USB_DeviceGetControllerInterface */
         error = deviceHandle->controllerInterface->deviceControl(deviceHandle->controllerHandle, type, param);
     }
     else
@@ -385,12 +403,13 @@ static usb_status_t USB_DeviceResetNotification(usb_device_struct_t *handle,
 
     for (uint32_t count = 0U; count < (USB_DEVICE_CONFIG_ENDPOINTS * 2U); count++)
     {
-        handle->endpointCallback[count].callbackFn = (usb_device_endpoint_callback_t)NULL;
-        handle->endpointCallback[count].callbackParam = NULL;
-        handle->endpointCallback[count].isBusy = 0U;
+        handle->epCallback[count].callbackFn = (usb_device_endpoint_callback_t)NULL;
+        handle->epCallback[count].callbackParam = NULL;
+        handle->epCallback[count].isBusy = 0U;
     }
 
-    /* Call device callback to notify the application that the USB bus reset signal detected. */
+    /* Call device callback to notify the application that the USB bus reset signal detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     handle->deviceCallback(handle, kUSB_DeviceEventBusReset, NULL);
 
     handle->isResetting = 0U;
@@ -411,7 +430,8 @@ static usb_status_t USB_DeviceResetNotification(usb_device_struct_t *handle,
 static usb_status_t USB_DeviceSuspendNotification(usb_device_struct_t *handle,
                                                   usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the USB bus suspend signal detected. */
+    /* Call device callback to notify the application that the USB bus suspend signal detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventSuspend, NULL);
 }
 
@@ -428,7 +448,8 @@ static usb_status_t USB_DeviceSuspendNotification(usb_device_struct_t *handle,
 static usb_status_t USB_DeviceResumeNotification(usb_device_struct_t *handle,
                                                  usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the USB bus resume signal detected. */
+    /* Call device callback to notify the application that the USB bus resume signal detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventResume, NULL);
 }
 #if (defined(USB_DEVICE_CONFIG_LPM_L1) && (USB_DEVICE_CONFIG_LPM_L1 > 0U))
@@ -445,7 +466,8 @@ static usb_status_t USB_DeviceResumeNotification(usb_device_struct_t *handle,
 static usb_status_t USB_DeviceSleepNotification(usb_device_struct_t *handle,
                                                 usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the USB bus suspend signal detected. */
+    /* Call device callback to notify the application that the USB bus suspend signal detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventSleeped, NULL);
 }
 #endif
@@ -467,14 +489,14 @@ usb_status_t USB_DeviceGetRemoteWakeUp(usb_device_struct_t *handle, uint8_t **fl
 
 #endif /* USB_DEVICE_CONFIG_LOW_POWER_MODE */
 
-#if (defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) || \
-    (defined(USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING) && USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING)
+#if (defined(USB_DEVICE_CONFIG_ERROR_HANDLING) && (USB_DEVICE_CONFIG_ERROR_HANDLING > 0U))
 usb_status_t USB_DeviceErrorNotification(usb_device_struct_t *handle, usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the USB bus error signal detected. */
+    /* Call device callback to notify the application that the USB bus error signal detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventError, NULL);
 }
-#endif
+#endif /* USB_DEVICE_CONFIG_ERROR_HANDLING */
 
 #if (defined(USB_DEVICE_CONFIG_DETACH_ENABLE) && (USB_DEVICE_CONFIG_DETACH_ENABLE > 0U))
 /*!
@@ -490,7 +512,8 @@ usb_status_t USB_DeviceErrorNotification(usb_device_struct_t *handle, usb_device
 static usb_status_t USB_DeviceDetachNotification(usb_device_struct_t *handle,
                                                  usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the device is disconnected from a host. */
+    /* Call device callback to notify the application that the device is disconnected from a host.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventDetach, NULL);
 }
 
@@ -507,7 +530,8 @@ static usb_status_t USB_DeviceDetachNotification(usb_device_struct_t *handle,
 static usb_status_t USB_DeviceAttachNotification(usb_device_struct_t *handle,
                                                  usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the device is connected to a host. */
+    /* Call device callback to notify the application that the device is connected to a host.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventAttach, NULL);
 }
 #endif
@@ -528,7 +552,8 @@ static usb_status_t USB_DeviceAttachNotification(usb_device_struct_t *handle,
 static usb_status_t USB_DeviceDcdTimeOutNotification(usb_device_struct_t *handle,
                                                      usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the device charger detect timeout happened. */
+    /* Call device callback to notify the application that the device charger detect timeout happened.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventDcdTimeOut, NULL);
 }
 
@@ -545,7 +570,8 @@ static usb_status_t USB_DeviceDcdTimeOutNotification(usb_device_struct_t *handle
 static usb_status_t USB_DeviceDcdUnknownPortTypeNotification(usb_device_struct_t *handle,
                                                              usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the device charger detect unknown port type happened. */
+    /* Call device callback to notify the application that the device charger detect unknown port type happened.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventDcdUnknownType, NULL);
 }
 
@@ -562,7 +588,8 @@ static usb_status_t USB_DeviceDcdUnknownPortTypeNotification(usb_device_struct_t
 static usb_status_t USB_DeviceDcdSDPDetectNotification(usb_device_struct_t *handle,
                                                        usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the SDP facility is detected. */
+    /* Call device callback to notify the application that the SDP facility is detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventSDPDetected, NULL);
 }
 
@@ -579,7 +606,8 @@ static usb_status_t USB_DeviceDcdSDPDetectNotification(usb_device_struct_t *hand
 static usb_status_t USB_DeviceDcdChargingPortDetectNotification(usb_device_struct_t *handle,
                                                                 usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the charing port is detected. */
+    /* Call device callback to notify the application that the charing port is detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventChargingPortDetected, NULL);
 }
 
@@ -596,7 +624,8 @@ static usb_status_t USB_DeviceDcdChargingPortDetectNotification(usb_device_struc
 static usb_status_t USB_DeviceDcdChargingHostDetectNotification(usb_device_struct_t *handle,
                                                                 usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the CDP facility is detected. */
+    /* Call device callback to notify the application that the CDP facility is detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventChargingHostDetected, NULL);
 }
 
@@ -614,7 +643,8 @@ static usb_status_t USB_DeviceDcdChargingHostDetectNotification(usb_device_struc
 static usb_status_t USB_DeviceDcdDedicatedChargerDetectNotification(usb_device_struct_t *handle,
                                                                     usb_device_callback_message_struct_t *message)
 {
-    /* Call device callback to notify the application that the DCP facility is detected. */
+    /* Call device callback to notify the application that the DCP facility is detected.
+    the deviceCallback is the second parameter of USB_DeviceInit */
     return handle->deviceCallback(handle, kUSB_DeviceEventDedicatedChargerDetected, NULL);
 }
 #endif
@@ -655,8 +685,7 @@ static usb_status_t USB_DeviceNotification(usb_device_struct_t *handle, usb_devi
 #endif
 #endif
 
-#if (defined(USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) && USB_DEVICE_CONFIG_KHCI_ERROR_HANDLING) || \
-    (defined(USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING) && USB_DEVICE_CONFIG_EHCI_ERROR_HANDLING)
+#if (defined(USB_DEVICE_CONFIG_ERROR_HANDLING) && (USB_DEVICE_CONFIG_ERROR_HANDLING > 0U))
         case kUSB_DeviceNotifyError:
             error = USB_DeviceErrorNotification(handle, message);
             break;
@@ -696,7 +725,7 @@ static usb_status_t USB_DeviceNotification(usb_device_struct_t *handle, usb_devi
         default:
             if (endpoint < USB_DEVICE_CONFIG_ENDPOINTS)
             {
-                if (handle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn)
+                if (handle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn)
                 {
                     usb_device_endpoint_callback_message_struct_t endpointCallbackMessage;
                     endpointCallbackMessage.buffer = message->buffer;
@@ -704,17 +733,17 @@ static usb_status_t USB_DeviceNotification(usb_device_struct_t *handle, usb_devi
                     endpointCallbackMessage.isSetup = message->isSetup;
                     if (message->isSetup)
                     {
-                        handle->endpointCallback[0].isBusy = 0U;
-                        handle->endpointCallback[1].isBusy = 0U;
+                        handle->epCallback[0].isBusy = 0U;
+                        handle->epCallback[1].isBusy = 0U;
                     }
                     else
                     {
-                        handle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
+                        handle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
                     }
-                    /* Call endpoint callback */
-                    error = handle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn(
+                    /* Call endpoint callback, callbackFn is in the third parameter of USB_DeviceInitEndpoint */
+                    error = handle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn(
                         handle, &endpointCallbackMessage,
-                        handle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackParam);
+                        handle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackParam);
                 }
             }
             break;
@@ -819,9 +848,9 @@ usb_status_t USB_DeviceInit(uint8_t controllerId, usb_device_callback_t deviceCa
     /* Initialize the enpoints */
     for (count = 0U; count < (USB_DEVICE_CONFIG_ENDPOINTS * 2U); count++)
     {
-        deviceHandle->endpointCallback[count].callbackFn = (usb_device_endpoint_callback_t)NULL;
-        deviceHandle->endpointCallback[count].callbackParam = NULL;
-        deviceHandle->endpointCallback[count].isBusy = 0U;
+        deviceHandle->epCallback[count].callbackFn = (usb_device_endpoint_callback_t)NULL;
+        deviceHandle->epCallback[count].callbackParam = NULL;
+        deviceHandle->epCallback[count].isBusy = 0U;
     }
 
     /* Get the controller interface according to the controller id */
@@ -857,16 +886,19 @@ usb_status_t USB_DeviceInit(uint8_t controllerId, usb_device_callback_t deviceCa
         return kStatus_USB_Error;
     }
 #endif
-    /* Initialize the controller */
+
+    *handle = deviceHandle;
+
+    /* Initialize the controller, the callbackFn is initialized in USB_DeviceGetControllerInterface */
     error = deviceHandle->controllerInterface->deviceInit(controllerId, deviceHandle, &deviceHandle->controllerHandle);
     if (kStatus_USB_Success != error)
     {
         USB_DeviceDeinit(deviceHandle);
+        *handle = NULL;
         return error;
     }
     /* Set the device to deafult state */
     deviceHandle->state = kUSB_DeviceStateDefault;
-    *handle = deviceHandle;
 
     return error;
 }
@@ -925,6 +957,7 @@ usb_status_t USB_DeviceDeinit(usb_device_handle handle)
     /* De-initialize the controller */
     if (NULL != deviceHandle->controllerInterface)
     {
+        /* the callbackFn is initialized in USB_DeviceGetControllerInterface */
         deviceHandle->controllerInterface->deviceDeinit(deviceHandle->controllerHandle);
         deviceHandle->controllerInterface = (usb_device_controller_interface_struct_t *)NULL;
     }
@@ -1031,6 +1064,7 @@ usb_status_t USB_DeviceCancel(usb_device_handle handle, uint8_t endpointAddress)
 
     if (NULL != deviceHandle->controllerInterface)
     {
+        /* the callbackFn is initialized in USB_DeviceGetControllerInterface */
         error = deviceHandle->controllerInterface->deviceCancel(deviceHandle->controllerHandle, endpointAddress);
         // phillip: clear busy flag?
         //deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 1U;
@@ -1050,19 +1084,19 @@ usb_status_t USB_DeviceCancel(usb_device_handle handle, uint8_t endpointAddress)
  *
  * @param handle The device handle got from USB_DeviceInit.
  * @param epInit Endpoint initizlization structure. Please refer to the structure usb_device_endpoint_init_struct_t.
- * @param endpointCallback Endpoint callback structure. Please refer to the structure
+ * @param epCallback Endpoint callback structure. Please refer to the structure
  * usb_device_endpoint_callback_struct_t.
  *
  * @retval kStatus_USB_Success              The endpoint is initialized successfully.
  * @retval kStatus_USB_InvalidHandle        The handle is a NULL pointer. Or the controller handle is invalid.
- * @retval kStatus_USB_InvalidParameter     The epInit or endpointCallback is NULL pointer. Or the endpoint number is
+ * @retval kStatus_USB_InvalidParameter     The epInit or epCallback is NULL pointer. Or the endpoint number is
  * more than USB_DEVICE_CONFIG_ENDPOINTS.
  * @retval kStatus_USB_Busy                 The endpoint is busy in EHCI driver.
  * @retval kStatus_USB_ControllerNotFound   Cannot find the controller.
  */
 usb_status_t USB_DeviceInitEndpoint(usb_device_handle handle,
                                     usb_device_endpoint_init_struct_t *epInit,
-                                    usb_device_endpoint_callback_struct_t *endpointCallback)
+                                    usb_device_endpoint_callback_struct_t *epCallback)
 {
     usb_device_struct_t *deviceHandle = (usb_device_struct_t *)handle;
     uint8_t endpoint;
@@ -1073,7 +1107,7 @@ usb_status_t USB_DeviceInitEndpoint(usb_device_handle handle,
         return kStatus_USB_InvalidHandle;
     }
 
-    if ((!epInit) || (!endpointCallback))
+    if ((!epInit) || (!epCallback))
     {
         return kStatus_USB_InvalidParameter;
     }
@@ -1084,11 +1118,10 @@ usb_status_t USB_DeviceInitEndpoint(usb_device_handle handle,
 
     if (endpoint < USB_DEVICE_CONFIG_ENDPOINTS)
     {
-        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn =
-            endpointCallback->callbackFn;
-        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackParam =
-            endpointCallback->callbackParam;
-        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
+        deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn = epCallback->callbackFn;
+        deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackParam =
+            epCallback->callbackParam;
+        deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
     }
     else
     {
@@ -1140,10 +1173,10 @@ usb_status_t USB_DeviceDeinitEndpoint(usb_device_handle handle, uint8_t endpoint
 
     if (endpoint < USB_DEVICE_CONFIG_ENDPOINTS)
     {
-        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn =
+        deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackFn =
             (usb_device_endpoint_callback_t)NULL;
-        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackParam = NULL;
-        deviceHandle->endpointCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
+        deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].callbackParam = NULL;
+        deviceHandle->epCallback[(uint8_t)((uint32_t)endpoint << 1U) | direction].isBusy = 0U;
     }
     else
     {
@@ -1381,6 +1414,7 @@ usb_status_t USB_DeviceDcdDeinitModule(usb_device_handle handle)
     return USB_DeviceControl(handle, kUSB_DeviceControlDcdDeinitModule, NULL);
 }
 
+// phillip: this was removed in 2.4.1 update, why? putting it back.
 #if (defined(USB_DEVICE_CONFIG_EHCI) && (USB_DEVICE_CONFIG_EHCI > 0U)) && \
     (defined(FSL_FEATURE_SOC_USBHSDCD_COUNT) && (FSL_FEATURE_SOC_USBHSDCD_COUNT > 0U))
 /*!

@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016-2017 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ *  that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -29,11 +33,15 @@
  */
 
 #include "fsl_lpuart_edma.h"
-#include "fsl_dmamux.h"
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+
+/* Component ID definition, used by tools. */
+#ifndef FSL_COMPONENT_ID
+#define FSL_COMPONENT_ID "platform.drivers.lpuart_edma"
+#endif
 
 /*<! Structure definition for lpuart_edma_private_handle_t. The structure is private. */
 typedef struct _lpuart_edma_private_handle
@@ -52,11 +60,50 @@ enum _lpuart_edma_tansfer_states
 };
 
 /*******************************************************************************
- * Definitions
+ * Variables
  ******************************************************************************/
 
+/* Array of LPUART handle. */
+#if (defined(LPUART8))
+#define LPUART_HANDLE_ARRAY_SIZE 9
+#else /* LPUART8 */
+#if (defined(LPUART7))
+#define LPUART_HANDLE_ARRAY_SIZE 8
+#else /* LPUART7 */
+#if (defined(LPUART6))
+#define LPUART_HANDLE_ARRAY_SIZE 7
+#else /* LPUART6 */
+#if (defined(LPUART5))
+#define LPUART_HANDLE_ARRAY_SIZE 6
+#else /* LPUART5 */
+#if (defined(LPUART4))
+#define LPUART_HANDLE_ARRAY_SIZE 5
+#else /* LPUART4 */
+#if (defined(LPUART3))
+#define LPUART_HANDLE_ARRAY_SIZE 4
+#else /* LPUART3 */
+#if (defined(LPUART2))
+#define LPUART_HANDLE_ARRAY_SIZE 3
+#else /* LPUART2 */
+#if (defined(LPUART1))
+#define LPUART_HANDLE_ARRAY_SIZE 2
+#else /* LPUART1 */
+#if (defined(LPUART0))
+#define LPUART_HANDLE_ARRAY_SIZE 1
+#else /* LPUART0 */
+#define LPUART_HANDLE_ARRAY_SIZE FSL_FEATURE_SOC_LPUART_COUNT
+#endif /* LPUART 0 */
+#endif /* LPUART 1 */
+#endif /* LPUART 2 */
+#endif /* LPUART 3 */
+#endif /* LPUART 4 */
+#endif /* LPUART 5 */
+#endif /* LPUART 6 */
+#endif /* LPUART 7 */
+#endif /* LPUART 8 */
+
 /*<! Private handle only used for internally. */
-static lpuart_edma_private_handle_t s_edmaPrivateHandle[FSL_FEATURE_SOC_LPUART_COUNT];
+static lpuart_edma_private_handle_t s_edmaPrivateHandle[LPUART_HANDLE_ARRAY_SIZE];
 
 /*******************************************************************************
  * Prototypes
@@ -83,14 +130,6 @@ static void LPUART_SendEDMACallback(edma_handle_t *handle, void *param, bool tra
  * @param param Callback function parameter.
  */
 static void LPUART_ReceiveEDMACallback(edma_handle_t *handle, void *param, bool transferDone, uint32_t tcds);
-
-/*!
- * @brief Get the LPUART instance from peripheral base address.
- *
- * @param base LPUART peripheral base address.
- * @return LPUART instance.
- */
-extern uint32_t LPUART_GetInstance(LPUART_Type *base);
 
 /*******************************************************************************
  * Code

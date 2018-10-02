@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015 - 2016, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -385,19 +389,19 @@ extern usb_status_t USB_DeviceCancel(usb_device_handle handle, uint8_t endpointA
  *
  * @param[in] handle The device handle received from #USB_DeviceInit.
  * @param[in] epInit Endpoint initialization structure. See the structure usb_device_endpoint_init_struct_t.
- * @param[in] endpointCallback Endpoint callback structure. See the structure
+ * @param[in] epCallback Endpoint callback structure. See the structure
  * usb_device_endpoint_callback_struct_t.
  *
  * @retval kStatus_USB_Success              The endpoint is initialized successfully.
  * @retval kStatus_USB_InvalidHandle        The handle is a NULL pointer. Or the controller handle is invalid.
- * @retval kStatus_USB_InvalidParameter     The epInit or endpointCallback is NULL pointer. Or the endpoint number is
+ * @retval kStatus_USB_InvalidParameter     The epInit or epCallback is NULL pointer. Or the endpoint number is
  * more than USB_DEVICE_CONFIG_ENDPOINTS.
  * @retval kStatus_USB_Busy                 The endpoint is busy in EHCI driver.
  * @retval kStatus_USB_ControllerNotFound   Cannot find the controller.
  */
 extern usb_status_t USB_DeviceInitEndpoint(usb_device_handle handle,
                                            usb_device_endpoint_init_struct_t *epInit,
-                                           usb_device_endpoint_callback_struct_t *endpointCallback);
+                                           usb_device_endpoint_callback_struct_t *epCallback);
 
 /*!
  * @brief Deinitializes a specified endpoint.
@@ -506,6 +510,7 @@ extern usb_status_t USB_DeviceDcdInitModule(usb_device_handle handle, void *time
  */
 extern usb_status_t USB_DeviceDcdDeinitModule(usb_device_handle handle);
 
+// phillip: reintroduce on 2.4 update
 /*!
  * @brief Get the device attach status.
  *

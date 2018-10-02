@@ -1,9 +1,12 @@
 /*
+ * The Clear BSD License
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016 NXP
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
+ * are permitted (subject to the limitations in the disclaimer below) provided
+ * that the following conditions are met:
  *
  * o Redistributions of source code must retain the above copyright notice, this list
  *   of conditions and the following disclaimer.
@@ -16,6 +19,7 @@
  *   contributors may be used to endorse or promote products derived from this
  *   software without specific prior written permission.
  *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -132,10 +136,17 @@ typedef struct _usb_host_hub_instance
     uint8_t hubLevel;                          /*!< HUB level, the root HUB's level is 1*/
 
     /* HUB application parameter */
+#if ((defined(USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE)) && (USB_HOST_CONFIG_BUFFER_PROPERTY_CACHEABLE > 0U))
+    uint8_t *hubDescriptor;    /*!< HUB descriptor buffer*/
+    uint8_t *hubBitmapBuffer;  /*!< HUB receiving bitmap data buffer*/
+    uint8_t *hubStatusBuffer;  /*!< HUB status buffer*/
+    uint8_t *portStatusBuffer; /*!< Port status buffer*/
+#else
     uint8_t hubDescriptor[7 + (USB_HOST_HUB_MAX_PORT >> 3) + 1]; /*!< HUB descriptor buffer*/
     uint8_t hubBitmapBuffer[(USB_HOST_HUB_MAX_PORT >> 3) + 1];   /*!< HUB receiving bitmap data buffer*/
     uint8_t hubStatusBuffer[4];                                  /*!< HUB status buffer*/
     uint8_t portStatusBuffer[4];                                 /*!< Port status buffer*/
+#endif
     uint8_t hubStatus;                                           /*!< HUB instance running status*/
     uint8_t portCount;                                           /*!< HUB port count*/
     uint8_t portIndex;                                           /*!< Record the index when processing ports in turn*/

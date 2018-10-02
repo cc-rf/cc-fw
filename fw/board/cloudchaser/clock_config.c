@@ -82,8 +82,6 @@ void BOARD_BootClockVLPR(void)
 
     CLOCK_SetSimConfig(&simConfig);
 
-    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
-
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
     SMC_SetPowerModeVlpr(SMC);
     while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateVlpr)
@@ -132,8 +130,6 @@ void BOARD_BootClockLPRUN(void)
 
     CLOCK_SetSimConfig(&simConfig);
 
-    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
-
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
     SMC_SetPowerModeRun(SMC);
     while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateRun)
@@ -160,8 +156,6 @@ void BOARD_BootClockRUN(void)
     CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0U); // TODO: Find out why I was using FCRDIV of 5?
 
     CLOCK_SetSimConfig(&simConfig);
-
-    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
 
     SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
     SMC_SetPowerModeRun(SMC);
@@ -194,8 +188,6 @@ void BOARD_BootClockHSRUN(void)
     CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0U);
 
     CLOCK_SetSimConfig(&simConfig);
-
-    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
 }
 
 void BOARD_BootClockOCHSRUN(void)
@@ -222,8 +214,6 @@ void BOARD_BootClockOCHSRUN(void)
     CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0U);
 
     CLOCK_SetSimConfig(&simConfig);
-
-    SystemCoreClock = CLOCK_GetCoreSysClkFreq();
 }
 
 void BOARD_InitOsc0(void)

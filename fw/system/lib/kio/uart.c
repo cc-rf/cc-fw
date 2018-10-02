@@ -144,18 +144,18 @@ void uart_free(uart_t const uart)
     return uart_mem_free(uart);
 }
 
-void uart_write(uart_t const uart, const u8 *buf, u8 len)
+void uart_write(uart_t const uart, size_t size, const u8 *data)
 {
-    assert(buf > (u8 *)1ul);
-    assert(len);
+    assert(data > (u8 *)1ul);
+    assert(size);
 
     /*u8 out_buf[len+1];
     memcpy(&out_buf[1], buf, len);
     out_buf[0] = len;*/
 
     uart_transfer_t xfer = {
-            .data = (u8 *)buf,
-            .dataSize = len
+            .data = (u8 *)data,
+            .dataSize = size
     };
 
     #if defined(UART_LOCK)
@@ -356,7 +356,7 @@ size_t uart_readline(uart_t const uart, char **buf)
             break;
         }
 
-        uart_write(uart, &ch, 1);
+        uart_putch(uart, ch);
 
         (*buf)[len++] = ch;
 
@@ -372,12 +372,12 @@ size_t uart_readline(uart_t const uart, char **buf)
 
 void uart_puts(uart_t const uart, const char *str)
 {
-    uart_write(uart, (u8 *)str, strlen(str));
+    uart_write(uart, strlen(str), (u8 *)str);
 }
 
 void uart_putch(uart_t const uart, const char ch)
 {
-    uart_write(uart, (const u8 *)&ch, 1);
+    uart_write(uart, 1u, (const u8 *)&ch);
 }
 
 size_t uart_gets(uart_t const uart, char *str, size_t len)

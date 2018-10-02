@@ -133,7 +133,7 @@ extern void rtos_sleep_post(uint32_t xExpectedIdleTime);
 #define configPOST_SLEEP_PROCESSING(x) rtos_sleep_post(x)
 #endif
 
-#define configCPU_CLOCK_HZ (SystemCoreClock)
+#define configCPU_CLOCK_HZ (CLOCK_GetCoreSysClkFreq())
 #define configTICK_RATE_HZ ((TickType_t) 10000U)
 #define configMAX_PRIORITIES (18U)
 #define configMINIMAL_STACK_SIZE ((unsigned short) 192U)
