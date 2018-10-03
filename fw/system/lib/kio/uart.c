@@ -88,43 +88,6 @@ uart_t uart_init(const uart_id_t id, const baud_t baud)
     return uart;
 }
 
-/*void __used UART0_RX_TX_IRQHandler(void)
-{
-    extern void UART0_RX_TX_DriverIRQHandler(void);
-    const static uart_t uart = &uarts[0];
-    static u8 in[UART_RX_BUFFER_SIZE];
-    static u8 in_size = 0;
-    u8 ch;
-
-    if ((kUART_RxDataRegFullFlag | kUART_RxOverrunFlag) & UART_GetStatusFlags(UART0))
-    {
-        in[in_size++] = ch = UART_ReadByte(UART0);
-
-        if (!ch) {
-            memcpy(uart->rx, in, in_size);
-            uart->rx_size = in_size;
-            in_size = 0;
-
-            if (uart->rx_pending) {
-                uart->rx_pending = false;
-                BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                xSemaphoreGiveFromISR(uart->rx_sem, &xHigherPriorityTaskWoken);
-                portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
-            } else {
-                itm_printf(0, "[uart] no rx pending!\n");
-            }
-        }
-
-        if (in_size >= UART_RX_BUFFER_SIZE) {
-            itm_puts(0, "uart/0: rx buffer overflow\n");
-            in_size = 0;
-        }
-
-    } else {
-        UART0_RX_TX_DriverIRQHandler();
-    }
-}*/
-
 
 void uart_free(uart_t const uart)
 {
@@ -143,6 +106,7 @@ void uart_free(uart_t const uart)
 
     return uart_mem_free(uart);
 }
+
 
 void uart_write(uart_t const uart, size_t size, const u8 *data)
 {
@@ -209,13 +173,12 @@ void uart_write(uart_t const uart, size_t size, const u8 *data)
     #endif
 }
 
-size_t uart_read(uart_t const uart, u8 *buf, size_t len)
-{
-    //TODO :Look into UART_TransferGetReceiveCountEDMA to choose the transfer size intelligently
 
+size_t uart_read(uart_t const uart, size_t size, u8 *data)
+{
     uart_transfer_t xfer = {
-            .data = buf,
-            .dataSize = len
+            .data = data,
+            .dataSize = size
     };
 
     #if defined(UART_LOCK)
@@ -228,7 +191,11 @@ size_t uart_read(uart_t const uart, u8 *buf, size_t len)
         uart->rx_pending = true;
     #endif
 
+    uart->recv_size = size;
+
     #ifdef UART_DMA
+        UART_EnableInterrupts(uart->base, kUART_IdleLineInterruptEnable);
+
         const status_t status = UART_ReceiveEDMA(uart->base, &uart->edma_handle, &xfer);
     #else
         const status_t status = UART_TransferReceiveNonBlocking(uart->base, &uart->handle, &xfer, NULL);
@@ -265,120 +232,21 @@ size_t uart_read(uart_t const uart, u8 *buf, size_t len)
         xSemaphoreGive(uart->rx_mtx);
     #endif
 
-    return len;
+    return uart->recv_size;
 }
 
-size_t uart_read_frame(uart_t const uart, serf_t *frame, size_t size)
-{
-    assert(frame);
-
-    u8 in[size];
-    u8 ch = 0;
-    size_t in_size = 0;
-    size_t frame_size;
-    //u32 status;
-
-    while (1) {
-        // read length first
-        /*if (UART_ReadBlocking(uart->base, &ch, 1)) {
-            status = UART_GetStatusFlags(uart->base);
-            itm_printf(0, "uart: rx-size fail, status=0x%08x\n", status);
-            UART_ClearStatusFlags(uart->base, status);
-            continue;
-        }
-
-        if (!ch) continue;
-        else in_size = ch;
-
-        if (!uart_read(uart, in, in_size)) {
-            in_size = 0;
-            continue;
-        }*/
-
-        if (!uart_read(uart, &ch, 1)) {
-            in_size = 0; // ?
-            continue;
-        }
-
-        in[in_size++] = ch;
-
-        if (!ch/*in[in_size - 1]*/) {
-
-            if (in_size > size) {
-                itm_printf(0, "[uart-rx] fail: frame too big (%u > %u)\n", in_size, size);
-                in_size = 0;
-                continue;
-            }
-
-            frame_size = serf_decode(in, &in_size, frame, in_size);
-            return frame_size;
-
-        } /*else {
-            itm_puts(0, "[uart-rx] out of sync\n");
-
-            while (ch) {
-                if (UART_ReadBlocking(uart->base, &ch, 1)) {
-                    status = UART_GetStatusFlags(uart->base);
-                    itm_printf(0, "uart: rx-dump fail, status=0x%08x\n", status);
-                    UART_ClearStatusFlags(uart->base, status);
-                    continue;
-                }
-            }
-
-            // TODO: read until zero?
-            continue;
-        }*/
-
-        if (in_size >= UINT8_MAX) {
-            itm_puts(0, "[uart-rx] fail: overflow\n");
-            in_size = 0;
-        }
-    }
-}
-
-size_t uart_readline(uart_t const uart, char **buf)
-{
-    assert(buf);
-
-    size_t len_max = 60;
-    u8 len = 0;
-    u8 ch;
-
-    *buf = pvPortMalloc(len_max);
-    assert(*buf);
-
-    while (1) {
-        uart_read(uart, &ch, 1);
-
-        if (ch == '\r' || ch == '\n') {
-            uart_puts(uart, "\r\n");
-            (*buf)[len] = 0;
-            break;
-        }
-
-        uart_putch(uart, ch);
-
-        (*buf)[len++] = ch;
-
-        if (len >= len_max) {
-            len_max *= 2;
-            *buf = realloc(*buf, len_max); // TODO: Fix this (not currently used)
-            assert(*buf);
-        }
-    };
-
-    return len;
-}
 
 void uart_puts(uart_t const uart, const char *str)
 {
     uart_write(uart, strlen(str), (u8 *)str);
 }
 
+
 void uart_putch(uart_t const uart, const char ch)
 {
     uart_write(uart, 1u, (const u8 *)&ch);
 }
+
 
 size_t uart_gets(uart_t const uart, char *str, size_t len)
 {
@@ -388,7 +256,7 @@ size_t uart_gets(uart_t const uart, char *str, size_t len)
         ++count;*/
 
     while (len--) {
-        uart_read(uart, (u8 *)str, 1);
+        uart_read(uart, 1, (u8 *)str);
         if (!*str++) break;
         count++;
     }
@@ -396,10 +264,12 @@ size_t uart_gets(uart_t const uart, char *str, size_t len)
     return count;
 }
 
+
 u8 uart_getch(uart_t const uart)
 {
     return UART_ReadByte(uart->base);
 }
+
 
 #ifdef UART_DMA
 static void uart_dma_callback(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData)
@@ -448,11 +318,12 @@ static void uart_callback(UART_Type *base, uart_handle_t *handle, status_t statu
 
             case kStatus_UART_RxHardwareOverrun:
                 itm_puts(0, "[uart] overflow\n");
-                UART_ClearStatusFlags(uart->base, kUART_RxOverrunFlag);
 
                 #if defined(UART_DMA)
+                UART_TransferGetReceiveCountEDMA(uart->base, &uart->edma_handle, (u32 *)&uart->recv_size);
                 UART_TransferAbortReceiveEDMA(uart->base, &uart->edma_handle);
                 #else
+                UART_TransferGetReceiveCount(uart->base, &uart->handle, (u32 *)&uart->recv_size);
                 UART_TransferAbortReceive(uart->base, &uart->handle);
                 #endif
 
@@ -473,6 +344,33 @@ static void uart_callback(UART_Type *base, uart_handle_t *handle, status_t statu
                     }
                 #endif
 
+                break;
+
+            case kStatus_UART_IdleLineDetected:
+                #if defined(UART_DMA)
+                UART_TransferGetReceiveCountEDMA(uart->base, &uart->edma_handle, (u32 *)&uart->recv_size);
+                UART_TransferAbortReceiveEDMA(uart->base, &uart->edma_handle);
+                #else
+                UART_TransferGetReceiveCount(uart->base, &uart->handle, (u32 *)&uart->recv_size);
+                UART_TransferAbortReceive(uart->base, &uart->handle);
+                #endif
+
+                #if defined(UART_NOTIFY)
+                    if (uart->rx_task) {
+                        TaskHandle_t task = uart->rx_task;
+                        uart->rx_task = NULL;
+                        xTaskNotifyFromISR(task, UART_NOTIFY_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+                    } else {
+                        itm_puts(0, "[uart] no rx pending! (/idleline)\n");
+                    }
+                #else
+                    if (uart->rx_pending) {
+                        uart->rx_pending = false;
+                        xSemaphoreGiveFromISR(uart->rx_sem, &xHigherPriorityTaskWoken);
+                    } else {
+                        itm_puts(0, "[uart] no rx pending! (/idleline)\n");
+                    }
+                #endif
                 break;
 
             default:

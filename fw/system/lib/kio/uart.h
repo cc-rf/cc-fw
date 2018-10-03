@@ -65,6 +65,8 @@ typedef struct uart {
 
     #endif
 
+    volatile size_t recv_size;
+
 } *uart_t;
 
 static inline uart_t uart_mem_alloc(void);

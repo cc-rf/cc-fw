@@ -146,9 +146,14 @@ void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t
 void net_trxn_rslt_free(net_trxn_rslt_t *rslt);
 
 
-static inline bool net_path_info_match(net_info_t *info_a, net_info_t *info_b)
+static inline bool net_path_info_match(const net_info_t *const info_a, const net_info_t *const info_b)
 {
     return info_a->port == info_b->port &&
            info_a->type == info_b->type &&
-            (info_a->mode & NET_MODE_FLAG_CORE) == (info_b->mode & NET_MODE_FLAG_CORE);
+           (info_a->mode & NET_MODE_FLAG_CORE) == (info_b->mode & NET_MODE_FLAG_CORE);
+}
+
+static inline bool net_path_match(const net_path_t *const path_a, const net_path_t *const path_b)
+{
+    return path_a->addr == path_b->addr && net_path_info_match(&path_a->info, &path_b->info);
 }

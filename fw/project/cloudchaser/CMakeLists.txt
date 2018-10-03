@@ -7,6 +7,7 @@ add_executable(
         lp5562.c
         cloudchaser.c
         console.c
+        rf_uart.c
         usb/composite.c
         usb/usb_device_cdc_acm.c
         usb/usb_device_ch9.c

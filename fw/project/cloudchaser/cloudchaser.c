@@ -1,6 +1,7 @@
 #include "cloudchaser.h"
 #include "led.h"
 #include "console.h"
+#include "rf_uart.h"
 
 #include <board.h>
 #include <virtual_com.h>
@@ -9,7 +10,6 @@
 #include <kio/sclk.h>
 #include <kio/itm.h>
 #include <kio/uid.h>
-#include <kio/uart.h>
 
 #include <ccrf/mac.h>
 #include <ccrf/net.h>
@@ -42,6 +42,10 @@
 #define RESET_MAGIC             0xD1E00D1E
 
 #define CODE_SEND_FLAG_WAIT     1
+
+#define CCIO_PORT               0x01E0
+#define CCIO_LED                0x0B
+#define CCIO_UART               0x0D
 
 #if CLOUDCHASER_FCC_MODE
     #define SERF_USB_PORT       1
@@ -157,19 +161,6 @@ typedef struct __packed {
 
 } code_led_t;
 
-typedef struct __packed {
-    u8 code;
-    u8 data[];
-
-} code_uart_t;
-
-typedef struct __packed {
-    u8 type; // == CODE_ID_UART
-    u8 code;
-    u8 data[];
-
-} uart_pkt_t;
-
 
 extern bool pflag_set(void);
 extern bool uflag1_set(void);
@@ -177,8 +168,6 @@ extern bool uflag2_set(void);
 
 static void net_recv(net_t net, net_path_t path, size_t size, u8 data[]);
 static void net_evnt(net_t net, net_event_t event, void *info);
-
-static void uart_relay_run(void);
 
 static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data, pkt_meta_t meta);
 static void sync_hook(chan_id_t chan);
@@ -198,7 +187,6 @@ static void handle_code_uart(size_t size, u8 *data);
 static void handle_code_rainbow(size_t size, u8 *data);
 static void handle_code_led(size_t size, u8 *data);
 
-
 static void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
 static void write_code_recv(net_path_t path, size_t size, u8 data[]);
 static void write_code_evnt(net_size_t size, u8 data[]);
@@ -207,8 +195,7 @@ static void write_code_peer(u8 port, size_t size, code_peer_t *code_peer);
 static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat);
 static void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat);
 static void write_code_mesg_sent(u8 port, net_size_t size);
-
-static void write_code_uart(code_uart_t *code_uart, size_t size);
+static void write_code_uart(size_t size, u8 *data);
 
 
 static net_t nets[CLOUDCHASER_RDIO_COUNT];
@@ -216,9 +203,13 @@ static mac_t macs[CLOUDCHASER_RDIO_COUNT];
 
 static code_status_t status;
 
-static uart_t uart = NULL;
 static size_t usb_in_size[USB_CDC_INSTANCE_COUNT] = {0};
 static u8 usb_in_data[USB_CDC_INSTANCE_COUNT][USB_IN_DATA_MAX];
+
+static const net_path_t rf_uart_path = {
+        .addr = NET_ADDR_BCST,
+        .info = {.mode = 0, .port = CCIO_PORT, .type = CCIO_UART}
+};
 
 static const led_rgb_t rainbow_colors[][2] = {
         {{  0,   0,   0,   0}, {  0,   0,   0,   0}},
@@ -341,11 +332,17 @@ void cloudchaser_main(void)
 
     #endif
 
-    if (uflag1_set()) {
-        uart_relay_run();
-    }
+    rf_uart_config_t rf_uart_config = {
+            .net = nets[0],
+            .path = rf_uart_path,
+            .recv = write_code_uart,
+            .id = RF_UART_ID,
+            .baud = RF_UART_BAUD
+    };
 
-    fabi_init();
+    rf_uart_init(&rf_uart_config);
+
+    //fabi_init();
 
     phy_t phy = mac_phy(macs[0]);
 
@@ -355,8 +352,6 @@ void cloudchaser_main(void)
     }
 }
 
-#define CCIO_PORT   0x01E0
-#define CCIO_LED    0x0B
 
 static void net_recv(net_t net, net_path_t path, size_t size, u8 data[])
 {
@@ -367,7 +362,9 @@ static void net_recv(net_t net, net_path_t path, size_t size, u8 data[])
                     fabi_msg_t *msg = (fabi_msg_t *)data;
                     return fabi_write(msg->mask, (fabi_rgb_t *)msg->data, size - sizeof(msg->mask));
                 }
-                break;
+                case CCIO_UART:
+                    rf_uart_write(size, data);
+                    break;
             }
             break;
     }
@@ -394,63 +391,10 @@ static void net_evnt(net_t net, net_event_t event, void *info)
 }
 
 
-static void uart_relay_run(void)
-{
-    serf_t *frame = alloca(UINT8_MAX);
-    size_t frame_size;
-    size_t uart_pkt_size;
-    uart_pkt_t *uart_pkt = alloca(UINT8_MAX - sizeof(uart_pkt_t));
-
-    itm_puts(0, "uart: relay enabled\r\n");
-
-    uart = uart_init(0, 96000);
-
-    while (1) {
-        frame_size = uart_read_frame(uart, frame, UINT8_MAX);
-
-        if (frame_size) {
-            if ((frame->code & SERF_CODE_PROTO_M) != SERF_CODE_PROTO_VAL) {
-                printf("uart: (frame) invalid proto bits: size=%u code=0x%02x\r\n", frame_size, frame->code);
-                continue;
-            }
-
-            frame->code &= SERF_CODE_M;
-
-            frame_size -= sizeof(serf_t);
-            uart_pkt_size = sizeof(uart_pkt_t) + frame_size; assert(uart_pkt_size < UINT8_MAX);
-            uart_pkt->type = CODE_ID_UART;
-            uart_pkt->code = frame->code;
-            memcpy(uart_pkt->data, frame->data, frame_size);
-
-            if (mac_send(macs[0], MAC_SEND_STRM, CC_MAC_FLAG, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
-                led_toggle(LED_RGB0_BLUE);
-                led_off(LED_RGB0_RED);
-            } else {
-                led_on(LED_RGB0_RED);
-            }
-        } else {
-            itm_puts(0, "uart: empty frame\n");
-        }
-    }
-}
-
-
 static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data,
                      pkt_meta_t meta)
 {
-    if (uflag1_set() && size >= sizeof(uart_pkt_t) && uart) {
-        uart_pkt_t *const uart_pkt = (uart_pkt_t *) data;
-
-        if (uart_pkt->type == CODE_ID_UART) {
-            led_toggle(LED_RGB1_GREEN);
-            code_uart_t *code_uart = (code_uart_t *) &uart_pkt->code;
-            size = size - sizeof(uart_pkt_t);
-            write_code_uart(code_uart, size);
-            return;
-        }
-    }
-
-    write_code_mac_recv(mac_addr(mac), peer, dest, size, data, meta);
+    return write_code_mac_recv(mac_addr(mac), peer, dest, size, data, meta);
 }
 
 
@@ -691,6 +635,7 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
     net_path_t path = {
             .addr = code_send->addr,
             .info = {
+                    .mode = 0,
                     .port = code_send->port,
                     .type = code_send->type
             }
@@ -864,24 +809,7 @@ static void handle_code_echo(u8 port, size_t size, u8 *data)
 
 static void handle_code_uart(size_t size, u8 *data)
 {
-    code_uart_t *code_uart = (code_uart_t *) data;
-
-    if (size >= sizeof(code_uart_t)) {
-        const size_t uart_pkt_size = sizeof(uart_pkt_t) + size - sizeof(code_uart_t);
-        uart_pkt_t *uart_pkt = alloca(uart_pkt_size);
-        uart_pkt->type = CODE_ID_UART;
-        uart_pkt->code = code_uart->code;
-        memcpy(uart_pkt->data, code_uart->data, size - sizeof(code_uart_t));
-
-        //itm_printf(0, "uart: rf relay %lu byte(s), packet size = %lu\r\n", size - sizeof(code_uart_t), uart_pkt_size);
-
-        if (mac_send(macs[0], MAC_SEND_DGRM, CC_MAC_FLAG, 0x0000, (mac_size_t) uart_pkt_size, (u8 *) uart_pkt, false)) {
-            led_toggle(LED_RGB0_BLUE);
-            led_off(LED_RGB0_RED);
-        } else {
-            led_on(LED_RGB0_RED);
-        }
-    }
+    rf_uart_write(size, data);
 }
 
 
@@ -1005,25 +933,9 @@ static void write_code_mesg_sent(u8 port, net_size_t size)
 }
 
 
-static void write_code_uart(code_uart_t *code_uart, size_t size)
+static void write_code_uart(size_t size, u8 *data)
 {
     u8 *frame;
-    size_t frame_size;
-
-    if (uart) {
-        frame_size = serf_encode(code_uart->code, code_uart->data, size, &frame);
-
-        if (frame) {
-            uart_write(uart, frame_size, frame);
-            vPortFree(frame);
-        }
-    }
-
-    if (usb_attached(SERF_USB_PORT)) {
-        frame_size = serf_encode(CODE_ID_UART, &code_uart->code, size + sizeof(code_uart->code), &frame);
-
-        if (frame) {
-            usb_write_direct(SERF_USB_PORT, frame, frame_size);
-        }
-    }
+    const size_t fsize = serf_encode(CODE_ID_UART, data, size, &frame);
+    if (frame) usb_write_direct(SERF_USB_PORT, frame, fsize);
 }
