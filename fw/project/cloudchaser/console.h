@@ -12,8 +12,9 @@
 #else
     #ifndef CONSOLE_ENABLED
         #define CONSOLE_ENABLED     0
-        #endif
-        #define CONSOLE_USB_PORT    1
+    #endif
+
+    #define CONSOLE_USB_PORT    2
 #endif
 
 

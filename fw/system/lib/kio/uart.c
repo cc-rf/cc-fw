@@ -316,65 +316,64 @@ static void uart_callback(UART_Type *base, uart_handle_t *handle, status_t statu
                 #endif
                 break;
 
-            case kStatus_UART_RxHardwareOverrun:
-                itm_puts(0, "[uart] overflow\n");
-
-                #if defined(UART_DMA)
-                UART_TransferGetReceiveCountEDMA(uart->base, &uart->edma_handle, (u32 *)&uart->recv_size);
-                UART_TransferAbortReceiveEDMA(uart->base, &uart->edma_handle);
-                #else
-                UART_TransferGetReceiveCount(uart->base, &uart->handle, (u32 *)&uart->recv_size);
-                UART_TransferAbortReceive(uart->base, &uart->handle);
-                #endif
-
-                #if defined(UART_NOTIFY)
-                    if (uart->rx_task) {
-                        TaskHandle_t task = uart->rx_task;
-                        uart->rx_task = NULL;
-                        xTaskNotifyFromISR(task, UART_NOTIFY_FAIL, eSetBits, &xHigherPriorityTaskWoken);
-                    } else {
-                        itm_puts(0, "[uart] no rx pending! (/e)\n");
-                    }
-                #else
-                    if (uart->rx_pending) {
-                        uart->rx_pending = false;
-                        xSemaphoreGiveFromISR(uart->rx_sem, &xHigherPriorityTaskWoken);
-                    } else {
-                        itm_puts(0, "[uart] no rx pending! (/e)\n");
-                    }
-                #endif
-
+            case kStatus_UART_FramingError:
+            case kStatus_UART_NoiseError:
+            case kStatus_UART_ParityError:
+                // TODO: See if UART can be reset before overrun, just resetting from here
+                //       causes a weird buffer offset issue...
+                itm_printf(0, "[uart] error=%li\n", status);
                 break;
 
-            case kStatus_UART_IdleLineDetected:
-                #if defined(UART_DMA)
-                UART_TransferGetReceiveCountEDMA(uart->base, &uart->edma_handle, (u32 *)&uart->recv_size);
-                UART_TransferAbortReceiveEDMA(uart->base, &uart->edma_handle);
-                #else
-                UART_TransferGetReceiveCount(uart->base, &uart->handle, (u32 *)&uart->recv_size);
-                UART_TransferAbortReceive(uart->base, &uart->handle);
-                #endif
+            case kStatus_UART_RxHardwareOverrun:
+                itm_puts(0, "[uart] overrun\n");
 
+            case kStatus_UART_IdleLineDetected:
                 #if defined(UART_NOTIFY)
                     if (uart->rx_task) {
+                        uart->recv_size = 0;
+
+                        #if defined(UART_DMA)
+                            if (status == kStatus_UART_IdleLineDetected) UART_TransferGetReceiveCountEDMA(uart->base, &uart->edma_handle, (u32 *)&uart->recv_size);
+                            UART_TransferAbortReceiveEDMA(uart->base, &uart->edma_handle);
+                        #else
+                            if (status == kStatus_UART_IdleLineDetected) UART_TransferGetReceiveCount(uart->base, &uart->handle, (u32 *)&uart->recv_size);
+                            UART_TransferAbortReceive(uart->base, &uart->handle);
+                        #endif
+
                         TaskHandle_t task = uart->rx_task;
                         uart->rx_task = NULL;
-                        xTaskNotifyFromISR(task, UART_NOTIFY_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+
+                        xTaskNotifyFromISR(
+                                task, status == kStatus_UART_IdleLineDetected ? UART_NOTIFY_SUCCESS : UART_NOTIFY_FAIL,
+                                eSetBits, &xHigherPriorityTaskWoken
+                        );
                     } else {
-                        itm_puts(0, "[uart] no rx pending! (/idleline)\n");
+                        itm_puts(0, "[uart] no rx pending! (/e)\n");
                     }
                 #else
                     if (uart->rx_pending) {
+                         uart->recv_size = 0;
+
+                        #if defined(UART_DMA)
+                            if (status == kStatus_UART_IdleLineDetected) UART_TransferGetReceiveCountEDMA(uart->base, &uart->edma_handle, (u32 *)&uart->recv_size);
+                            UART_TransferAbortReceiveEDMA(uart->base, &uart->edma_handle);
+                        #else
+                            if (status == kStatus_UART_IdleLineDetected) UART_TransferGetReceiveCount(uart->base, &uart->handle, (u32 *)&uart->recv_size);
+                            UART_TransferAbortReceive(uart->base, &uart->handle);
+                        #endif
+
                         uart->rx_pending = false;
+
                         xSemaphoreGiveFromISR(uart->rx_sem, &xHigherPriorityTaskWoken);
                     } else {
-                        itm_puts(0, "[uart] no rx pending! (/idleline)\n");
+                        itm_puts(0, "[uart] no rx pending! (/e)\n");
                     }
                 #endif
+
                 break;
 
             default:
-                itm_printf(0, "[uart] unhandled: status=%li\n", status);
+                itm_printf(0, "[uart] unknown status=%li\n", status);
                 break;
         }
 

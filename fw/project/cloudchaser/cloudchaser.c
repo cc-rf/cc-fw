@@ -48,9 +48,19 @@
 #define CCIO_UART               0x0D
 
 #if CLOUDCHASER_FCC_MODE
+    #if CLOUDCHASER_UART_MODE
+        #error UART mode and FCC mode cannot coexist.
+    #endif
     #define SERF_USB_PORT       1
+    #define UART_USB_PORT       2
 #else
-    #define SERF_USB_PORT       0
+    #if CLOUDCHASER_UART_MODE
+        #define SERF_USB_PORT       1
+        #define UART_USB_PORT       0
+    #else
+        #define SERF_USB_PORT       0
+        #define UART_USB_PORT       1
+    #endif
 #endif
 
 #define CC_MAC_FLAG             0
@@ -474,6 +484,10 @@ void usb_recv(u8 port, size_t size, u8 *data)
         }
 
         vPortFree(frame);
+
+    } else if (port == UART_USB_PORT) {
+        rf_uart_write(usb_in_size[port], usb_in_data[port]);
+        usb_in_size[port] = 0;
 
     } else if (port == CONSOLE_USB_PORT) {
         const static char nl[] = "\r\n\0";
@@ -938,4 +952,5 @@ static void write_code_uart(size_t size, u8 *data)
     u8 *frame;
     const size_t fsize = serf_encode(CODE_ID_UART, data, size, &frame);
     if (frame) usb_write_direct(SERF_USB_PORT, frame, fsize);
+    usb_write_raw(UART_USB_PORT, data, size);
 }
