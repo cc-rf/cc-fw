@@ -487,6 +487,7 @@ void usb_recv(u8 port, size_t size, u8 *data)
 
     } else if (port == UART_USB_PORT) {
         rf_uart_write(usb_in_size[port], usb_in_data[port]);
+        rf_uart_send((net_size_t) usb_in_size[port], usb_in_data[port]);
         usb_in_size[port] = 0;
 
     } else if (port == CONSOLE_USB_PORT) {

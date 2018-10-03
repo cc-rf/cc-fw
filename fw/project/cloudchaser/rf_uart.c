@@ -51,6 +51,12 @@ void rf_uart_write(size_t size, u8 *data)
 }
 
 
+void rf_uart_send(net_size_t size, u8 *data)
+{
+    net_send(rf_uart.net, rf_uart.path, size, data);
+}
+
+
 static void rf_uart_task(void *p __unused)
 {
     net_size_t size;
@@ -61,7 +67,7 @@ static void rf_uart_task(void *p __unused)
         //itm_printf(0, "uart-recv %lu [%s]\n", size, rf_uart.buf);
 
         if (size) {
-            net_send(rf_uart.net, rf_uart.path, size, rf_uart.buf);
+            rf_uart_send(size, rf_uart.buf);
             if (rf_uart.recv) rf_uart.recv(size, rf_uart.buf);
         }
     }

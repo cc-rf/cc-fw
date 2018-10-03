@@ -20,3 +20,4 @@ typedef struct __packed {
 
 void rf_uart_init(rf_uart_config_t *config);
 void rf_uart_write(size_t size, u8 *data);
+void rf_uart_send(net_size_t size, u8 *data);

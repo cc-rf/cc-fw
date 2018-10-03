@@ -12,7 +12,7 @@
 #include <task.h>
 
 
-//#define UART_LOCK
+//#define UART_LOCK // TODO: Need separate RX/TX locks for this
 //#define UART_DMA
 //#define UART_NOTIFY ((1u << 28) | (1u << 27))
 
