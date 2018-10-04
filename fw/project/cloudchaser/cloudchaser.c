@@ -787,7 +787,6 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
     phy_stat(mac_phy(macs[0]), &status.stat.phy);
     mac_stat(macs[0], &status.stat.mac);
     net_stat(nets[0], &status.stat.net);
-    net_stat(nets[0], &status.stat.net);
 
     write_code_status(port, &status);
 }
