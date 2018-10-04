@@ -312,7 +312,7 @@ void cloudchaser_main(void)
             serial_hi, serial_lo, net_config.phy.cell, status.macid
     );
 
-    //rainbow();
+    rainbow();
 
     led_off(LED_BLUE_0);
     led_off(LED_BLUE_1);
