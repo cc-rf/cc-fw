@@ -113,7 +113,7 @@
  * DEV_E: 0x0D->0x2D. 2GFSK->4GFSK. 100kHz is the *outer* deviation, inner is 1/3 of that. TODO: Toggle this for long-range or high-speed modes?
  * NOTE: Variable values for DEV_M/DEV_E:
  *      - 0x55/0x0D for long-range FCC mode (2GFSK dev 100kHz, compliant at 60% power),
- *      - 0x55/0x0C for 50-chan or optimal 25-chan (2GFSK dev 50kHz, was too narrow for FCC),
+ *      - 0x55/0x0C for 50-chan or MSK(?) 25-chan (2GFSK dev 50kHz, was too narrow for FCC. Also has objectively bad performance, why?),
  *      - 0x55/0x2D for 50-chan high-speed (4GFSK dev 100kHz)
  *      - 0x55/0x2E ^ but dev is 200kHz, better when rx bw is 800kHz.
  * PA_CFG1: 0x77->0x7F. Not abiding by SmartRF studio because maxing this does increase tx power.
@@ -122,7 +122,7 @@
  * FS_DIG0: 0x55->0x58. RX FS Loop BW 300kHz->400kHz, TX 300kHz->200kHz.
  * CHAN_BW: 0x03->0x02. RX filter BW 500kHz->800kHz. Important for low rssi rx.
  * DEVIATION_M/DEV_E: 0x55/0x2E->0x55/0x0D. For certified field operation with 25 channels.
- * CHAN_BW: 0x02->0x03. Dev back to 100kHz. ^ For this mode.
+ * CHAN_BW: 0x02->0x03->0x04. Accidental but helpful, ended up going to 4 (250kHz?) with good results (needs validation though).
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -148,7 +148,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_DCFILT_CFG,        0x0E},
         {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
-        {CC1200_CHAN_BW,           0x03},
+        {CC1200_CHAN_BW,           0x04},
         {CC1200_MDMCFG1,           0x42},
         {CC1200_MDMCFG0,           0x05},
         #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
