@@ -536,7 +536,7 @@ static void net_peer_bcast(net_t net)
     send->info.mode = NET_MODE_FLAG_CORE;
     send->info.port = NET_CORE_PEER_PORT;
     send->info.type = NET_CORE_PEER_TYPE;
-    net_send_base_bcst(net, count * sizeof(net_peer_info_t), send);
+    net_send_base_bcst(net, sizeof(net_mesg_t) + count * sizeof(net_peer_info_t), send);
 
     vPortFree(peers);
 }
