@@ -4,7 +4,7 @@
 
 
 #define CLOUDCHASER_FCC_MODE    0
-#define CLOUDCHASER_UART_MODE   1
+#define CLOUDCHASER_UART_MODE   0
 
 void cloudchaser_main(void);
 
