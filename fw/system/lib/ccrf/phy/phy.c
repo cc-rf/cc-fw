@@ -542,11 +542,6 @@ static void phy_task(phy_t const restrict phy)
                                 );
                             }
 
-                            if ((void*)pkt == &phy->pkt_ack) {
-                                phy->pkt_ack.hdr.flag = 0;
-                                phy->pkt_ack.hdr.size = 0;
-                            }
-
                             if ((void*)pkt == &pkt_sync) {
                                 phy->sync_time = ccrf_clock();
                                 ccrf_timer_restart(phy->hop_timer);
@@ -557,6 +552,11 @@ static void phy_task(phy_t const restrict phy)
                                 } else {
                                     ++phy->stat.tx.errors;
                                 }
+                            }
+
+                            if ((void*)pkt == &phy->pkt_ack) {
+                                phy->pkt_ack.hdr.flag = 0;
+                                phy->pkt_ack.hdr.size = 0;
                             }
 
                             if (!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)) {
@@ -789,6 +789,7 @@ static void phy_task(phy_t const restrict phy)
             }
 
             rdio_strobe_tx(phy->rdio);
+
             tx_next = 0;
 
         } else if (!pkt) {
