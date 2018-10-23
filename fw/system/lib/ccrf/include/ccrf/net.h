@@ -90,7 +90,7 @@ typedef struct __packed {
 
 } net_event_peer_t;
 
-typedef void (* net_recv_t)(net_t net, net_path_t path, size_t size, u8 data[]);
+typedef void (* net_recv_t)(net_t net, net_path_t path, net_addr_t dest, size_t size, u8 data[]);
 typedef void (* net_evnt_t)(net_t net, net_event_t event, void *info);
 
 typedef struct __packed {

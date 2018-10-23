@@ -495,7 +495,7 @@ static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t
             .info = mesg->info
     };
 
-    return net->recv(net, path, size - sizeof(net_mesg_t), mesg->data);
+    return net->recv(net, path, dest, size - sizeof(net_mesg_t), mesg->data);
 }
 
 

@@ -524,7 +524,7 @@ static void mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
 
     } else {
 
-        if (pkt->dest == 0 || pkt->dest == mac->addr) {
+        if (pkt->dest == MAC_ADDR_BCST || pkt->dest == mac->addr) {
             mac_peer_t *const peer = mac_peer_get(mac, pkt->addr);
 
             if (peer) {

@@ -121,6 +121,7 @@ typedef struct __packed {
 
 typedef struct __packed {
     net_addr_t addr;
+    net_addr_t dest;
     net_port_t port;
     net_type_t type;
     u8 data[];
@@ -176,7 +177,7 @@ extern bool pflag_set(void);
 extern bool uflag1_set(void);
 extern bool uflag2_set(void);
 
-static void net_recv(net_t net, net_path_t path, size_t size, u8 data[]);
+static void net_recv(net_t net, net_path_t path, net_addr_t dest, size_t size, u8 data[]);
 static void net_evnt(net_t net, net_event_t event, void *info);
 
 static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data, pkt_meta_t meta);
@@ -198,7 +199,7 @@ static void handle_code_rainbow(size_t size, u8 *data);
 static void handle_code_led(size_t size, u8 *data);
 
 static void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
-static void write_code_recv(net_path_t path, size_t size, u8 data[]);
+static void write_code_recv(net_path_t path, net_addr_t dest, size_t size, u8 data[]);
 static void write_code_evnt(net_size_t size, u8 data[]);
 static void write_code_status(u8 port, code_status_t *code_status);
 static void write_code_peer(u8 port, size_t size, code_peer_t *code_peer);
@@ -363,7 +364,7 @@ void cloudchaser_main(void)
 }
 
 
-static void net_recv(net_t net, net_path_t path, size_t size, u8 data[])
+static void net_recv(net_t net, net_path_t path, net_addr_t dest, size_t size, u8 data[])
 {
     switch (path.info.port) {
         case CCIO_PORT:
@@ -380,7 +381,7 @@ static void net_recv(net_t net, net_path_t path, size_t size, u8 data[])
             break;
     }
 
-    return write_code_recv(path, size, data);
+    return write_code_recv(path, dest, size, data);
 }
 
 
@@ -647,7 +648,7 @@ static void handle_code_send(u8 port, size_t size, u8 *data)
     assert(size >= sizeof(code_send_t)); assert(data);
 
     code_send_t *const code_send = (code_send_t *)data;
-    
+
     net_path_t path = {
             .addr = code_send->addr,
             .info = {
@@ -722,7 +723,7 @@ static void handle_code_trxn(u8 port, size_t size, u8 *data)
 
             write_code_trxn_stat(port, trxn->size, trxn_stat);
 
-            if (list_is_last(&trxn->__list, &rslt) != 0) {
+            if (list_is_last(&trxn->__list, &rslt)) {
                 trxn_stat->addr = NET_ADDR_NONE;
                 write_code_trxn_stat(port, 0, trxn_stat);
             }
@@ -880,12 +881,13 @@ static void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 da
 }
 
 
-static void write_code_recv(net_path_t path, size_t size, u8 data[])
+static void write_code_recv(net_path_t path, net_addr_t dest, size_t size, u8 data[])
 {
     if (usb_attached(SERF_USB_PORT)) {
         code_recv_t *code_recv = pvPortMalloc(sizeof(code_recv_t) + size);
 
         code_recv->addr = path.addr;
+        code_recv->dest = dest;
         code_recv->port = path.info.port;
         code_recv->type = path.info.type;
 
