@@ -87,7 +87,7 @@ static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size
 static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
-static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta) __ccrf_code;
+static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta) __ccrf_code;
 static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static void net_peer_bcast(net_t net);
 static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add);
@@ -117,7 +117,8 @@ net_t net_init(net_config_t *config)
             .rdid = config->phy.rdid,
             .cell = config->phy.cell,
             .addr = config->mac.addr,
-            .recv = net_mac_recv
+            .recv = (mac_recv_t) net_mac_recv,
+            .recv_param = net
     };
 
     if (!(net->mac.mac = mac_init(&mac_config))) {
@@ -441,13 +442,11 @@ static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t ac
 }
 
 
-static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta)
+static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta)
 {
-    net_t net = &nets[rdio_id(phy_rdio(mac_phy(mac)))];
-
     if (flag != NET_MAC_FLAG_NETLAYER) {
         // passthrough
-        return net->mac.recv(mac, flag, peer, dest, size, data, meta);
+        return net->mac.recv(net->mac.mac, flag, peer, dest, size, data, meta);
     }
 
     net_mesg_t *mesg = (net_mesg_t *)data;

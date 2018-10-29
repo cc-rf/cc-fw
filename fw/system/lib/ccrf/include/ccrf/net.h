@@ -103,7 +103,7 @@ typedef struct {
 
     struct {
         mac_addr_t addr;
-        mac_recv_t recv;
+        mac_recv_t recv; // param is mac instance
 
     } mac;
 

@@ -298,7 +298,7 @@ void cloudchaser_main(void)
 
             .mac = {
                     .addr = status.macid,
-                    .recv = mac_recv
+                    .recv = (mac_recv_t) mac_recv
             },
 
             .net = {

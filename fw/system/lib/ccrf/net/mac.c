@@ -25,7 +25,7 @@
 #define MAC_TXQ_SIZE            (MAC_TXQ_COUNT)
 #define MAC_RXQ_SIZE            7
 
-#define MAC_TX_TASK_STACK_SIZE  ((512) / sizeof(StackType_t))
+#define MAC_TX_TASK_STACK_SIZE  ((768) / sizeof(StackType_t))
 #define MAC_RX_TASK_STACK_SIZE  ((768) / sizeof(StackType_t))
 
 #define MAC_NOTIFY_ACK          (1u<<10)
@@ -104,10 +104,11 @@ typedef struct __packed {
 
 } mac_pend_t;
 
-struct __packed mac {
+struct mac {
     phy_t phy;
     mac_addr_t addr;
     mac_recv_t recv;
+    void *recv_param;
     pkt_meta_t recv_meta;
 
     mac_seq_t seq;
@@ -156,6 +157,7 @@ mac_t mac_init(mac_config_t *config)
 
     mac->addr = config->addr;
     mac->recv = config->recv;
+    mac->recv_param = config->recv_param;
 
     phy_config_t phy_config = {
             .rdid = config->rdid,
@@ -508,7 +510,7 @@ static void mac_task_recv(mac_t mac)
             if (recv.seq.end) {
                 ++mac->stat.rx.count;
                 mac->stat.rx.bytes += recv.peer->part->size;
-                mac->recv(mac, recv.flag, recv.peer->addr, recv.peer->part->dest, recv.peer->part->size, recv.peer->part->data, recv.meta);
+                mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.peer->part->dest, recv.peer->part->size, recv.peer->part->data, recv.meta);
                 vPortFree(recv.peer->part);
                 recv.peer->part = NULL;
             }
@@ -519,7 +521,7 @@ static void mac_task_recv(mac_t mac)
         ++mac->stat.rx.count;
         mac->stat.rx.bytes += recv.size;
 
-        mac->recv(mac, recv.flag, recv.peer->addr, recv.dest, recv.size, recv.data, recv.meta);
+        mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.dest, recv.size, recv.data, recv.meta);
     }
 }
 

@@ -20,7 +20,7 @@ typedef u16 mac_addr_t;
 typedef u16 mac_size_t;
 typedef u8 mac_flag_t;
 
-typedef void (* mac_recv_t)(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
+typedef void (* mac_recv_t)(void *param, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
 
 typedef enum __packed {
     MAC_SEND_DGRM,
@@ -35,6 +35,7 @@ typedef struct {
     phy_cell_t cell;
     mac_addr_t addr;
     mac_recv_t recv;
+    void *recv_param;
 
 } mac_config_t;
 
