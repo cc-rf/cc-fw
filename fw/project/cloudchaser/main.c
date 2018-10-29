@@ -69,10 +69,24 @@ StaticTask_t main_task_static;
 bool __pflag_set, __uflag1_set/*, __uflag2_set*/;
 
 
-__attribute__((constructor, used)) void __init(void)
+static void __init(void)
 {
+    InstallIRQHandler(0, 0);
+
+    extern u32 __fast_text_begin[];
+    extern u32 __fast_text_end[];
+    extern u32 __fast_code_begin[];
+
+    u32 *src = __fast_text_begin;
+    u32 *dst = __fast_code_begin;
+
+    while (src < __fast_text_end) {
+        *dst++ = *src++;
+    }
+
     BOARD_InitPins();
     BOARD_BootClockOCHSRUN();
+
     itm_init();
     itm_puts(0, "<boot>\r\n");
 
@@ -106,6 +120,7 @@ __attribute__((constructor, used)) void __init(void)
 
 int main(void)
 {
+    __init();
     pin_flag_init();
 
     xTaskCreateStatic(

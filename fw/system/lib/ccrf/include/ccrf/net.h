@@ -56,14 +56,14 @@ typedef struct __packed {
 
 } net_peer_info_t;
 
-typedef struct __packed {
+typedef struct {
     net_peer_info_t info;
     net_peer_list_t peer;
     net_peer_list_t item;
 
 } net_peer_t;
 
-typedef struct __packed {
+typedef struct {
     struct list_head __list;
     net_addr_t addr;
     net_size_t size;
@@ -93,21 +93,21 @@ typedef struct __packed {
 typedef void (* net_recv_t)(net_t net, net_path_t path, net_addr_t dest, size_t size, u8 data[]);
 typedef void (* net_evnt_t)(net_t net, net_event_t event, void *info);
 
-typedef struct __packed {
+typedef struct {
 
-    struct __packed {
+    struct {
         rdio_id_t rdid;
         phy_cell_t cell;
 
     } phy;
 
-    struct __packed {
+    struct {
         mac_addr_t addr;
         mac_recv_t recv;
 
     } mac;
 
-    struct __packed {
+    struct {
         net_recv_t recv;
         net_evnt_t evnt;
 
@@ -115,14 +115,14 @@ typedef struct __packed {
 
 } net_config_t;
 
-typedef struct __packed {
+typedef struct {
     u32 count;
     u32 bytes;
     u32 errors;
 
 } net_stat_item_t;
 
-typedef struct __packed {
+typedef struct {
     net_stat_item_t rx;
     net_stat_item_t tx;
 
@@ -135,15 +135,15 @@ net_time_t net_time(net_t net);
 mac_t net_mac(net_t net);
 net_addr_t net_addr(net_t net);
 void net_stat(net_t net, net_stat_t *stat);
-void net_peers(net_t net, net_peer_list_t **peer);
-net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list);
-void net_sync(net_t net);
+void net_peers(net_t net, net_peer_list_t **peer) __ccrf_code;
+net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list) __ccrf_code;
+void net_sync(net_t net) __ccrf_code;
 
-net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[]);
-net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, u8 data[]);
-net_size_t net_resp(net_t net, net_path_t path, net_size_t size, u8 data[]);
-void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry, net_trxn_rslt_t *rslt);
-void net_trxn_rslt_free(net_trxn_rslt_t *rslt);
+net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
+net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
+net_size_t net_resp(net_t net, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
+void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry, net_trxn_rslt_t *rslt) __ccrf_code;
+void net_trxn_rslt_free(net_trxn_rslt_t *rslt) __ccrf_code;
 
 
 static inline bool net_path_info_match(const net_info_t *const info_a, const net_info_t *const info_b)

@@ -1,8 +1,9 @@
 #pragma once
 
+#include <ccrf/ccrf.h>
 #include "rdio/cc1200.h"
+#include "sys/spi.h"
 
-#include <usr/type.h>
 
 #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
 #define CC_XOSC_FREQ            38400000u       /* External oscillator frequency in Hz. */
@@ -38,8 +39,9 @@ typedef enum __packed {
 typedef u8 rdio_id_t;
 typedef void (* rdio_isr_t)(void *param);
 
-typedef struct __packed rdio {
+typedef struct rdio {
     rdio_id_t id;
+    ccrf_spi_t spi;
     //volatile u8 flag[2];
 
 } *rdio_t;
@@ -52,7 +54,7 @@ typedef struct __packed {
 
 } rdio_reg_config_t;
 
-typedef struct __packed {
+typedef struct {
     rdio_id_t id;
     rdio_isr_t isr;
     void *isr_param;
@@ -66,23 +68,23 @@ typedef u8 rdio_ccac_t;
 
 rdio_t rdio_init(const rdio_config_t *config);
 
-rdio_state_t rdio_state_read(rdio_t rdio);
+rdio_state_t rdio_state_read(rdio_t rdio) __ccrf_code;
 //static inline volatile rdio_state_t rdio_state(rdio_t rdio) { return (rdio_state_t) ((rdio->flag[1] << 1) | rdio->flag[0]); }
 
-rdio_status_t rdio_mode_idle(rdio_t rdio);
-rdio_status_t rdio_mode_rx(rdio_t rdio);
-rdio_status_t rdio_mode_tx(rdio_t rdio);
-rdio_status_t rdio_cca_begin(rdio_t rdio, rdio_ccac_t *ccac);
-rdio_status_t rdio_cca_end(rdio_t rdio, rdio_ccac_t ccac);
-rdio_status_t rdio_rssi_read(rdio_t rdio, s16 *rssi);
-rdio_status_t rdio_cw_set(rdio_t rdio, bool cw);
+rdio_status_t rdio_mode_idle(rdio_t rdio) __ccrf_code;
+rdio_status_t rdio_mode_rx(rdio_t rdio) __ccrf_code;
+rdio_status_t rdio_mode_tx(rdio_t rdio) __ccrf_code;
+rdio_status_t rdio_cca_begin(rdio_t rdio, rdio_ccac_t *ccac) __ccrf_code;
+rdio_status_t rdio_cca_end(rdio_t rdio, rdio_ccac_t ccac) __ccrf_code;
+rdio_status_t rdio_rssi_read(rdio_t rdio, s16 *rssi) __ccrf_code;
+rdio_status_t rdio_cw_set(rdio_t rdio, bool cw) __ccrf_code;
 
 bool rdio_reg_config(rdio_t rdio, const rdio_reg_config_t config[], size_t size);
 
-rdio_status_t rdio_reg_read(rdio_t rdio, u16 addr, u8 *data, u8 size);
-rdio_status_t rdio_reg_write(rdio_t rdio, u16 addr, u8 *data, u8 size);
+rdio_status_t rdio_reg_read(rdio_t rdio, u16 addr, u8 *data, u8 size) __ccrf_code;
+rdio_status_t rdio_reg_write(rdio_t rdio, u16 addr, u8 *data, u8 size) __ccrf_code;
 
-rdio_status_t rdio_strobe(rdio_t rdio, u8 strobe);
+rdio_status_t rdio_strobe(rdio_t rdio, u8 strobe) __ccrf_code;
 static inline rdio_status_t rdio_strobe_noop(rdio_t rdio) { return rdio_strobe(rdio, CC1200_SNOP); }
 static inline rdio_status_t rdio_strobe_idle(rdio_t rdio) { return rdio_strobe(rdio, CC1200_SIDLE); }
 static inline rdio_status_t rdio_strobe_rxfl(rdio_t rdio) { return rdio_strobe(rdio, CC1200_SFRX); }

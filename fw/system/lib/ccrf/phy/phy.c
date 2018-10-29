@@ -94,7 +94,7 @@ typedef struct __packed {
 
 } phy_send_queue_t;
 
-struct __packed phy {
+struct phy {
     rdio_t rdio;
     bool boss;
     u8 cell;
@@ -102,7 +102,7 @@ struct __packed phy {
     phy_recv_t recv;
     void *recv_param;
 
-    struct __packed {
+    struct {
         chan_group_t group;
         chan_info_t channel[PHY_CHAN_COUNT];
         chan_id_t hop_table[PHY_CHAN_COUNT];
@@ -110,7 +110,7 @@ struct __packed phy {
 
     } chan;
 
-    struct __packed {
+    struct {
         bool boss;
         bool nosync;
         chan_id_t chan;
@@ -133,25 +133,25 @@ struct __packed phy {
     phy_send_queue_t txq_buf[PHY_TXQ_LEN];
 
     phy_stat_t stat;
+
+    u32 tx_times[PHY_RF_FRAME_SIZE_MAX+1];
 };
 
 
-static void phy_task(phy_t const restrict phy);
+static void phy_task(phy_t phy) __ccrf_code;
 
-static void phy_recv(phy_t phy);
-static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi);
+static void phy_recv(phy_t phy) __ccrf_code;
+static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi) __ccrf_code;
 
-static inline void phy_chan_next(phy_t phy);
-static inline void phy_chan_set(phy_t phy, chan_id_t chan);
-static inline chan_id_t phy_chan_set_base(phy_t phy, chan_id_t chan);
+static inline void phy_chan_next(phy_t phy) __ccrf_code;
+static inline void phy_chan_set(phy_t phy, chan_id_t chan) __ccrf_code;
+static inline chan_id_t phy_chan_set_base(phy_t phy, chan_id_t chan) __ccrf_code;
 
-static void phy_rdio_isr(phy_t phy);
-static void hop_timer_handler(ccrf_timer_t timer, phy_t phy);
+static void phy_rdio_isr(phy_t phy) __ccrf_code;
+static void hop_timer_handler(ccrf_timer_t timer, phy_t phy) __ccrf_code;
 
 
-u32 tx_times[PHY_RF_FRAME_SIZE_MAX+1] = {0};
-
-static struct phy phys[CCRF_CONFIG_RDIO_COUNT];
+static struct phy phys[CCRF_CONFIG_RDIO_COUNT] __ccrf_data;
 
 
 phy_t phy_init(phy_config_t *config)
@@ -193,7 +193,8 @@ phy_t phy_init(phy_config_t *config)
                     .base = FREQ_BASE,
                     .bw = FREQ_BW
             },
-            .size = PHY_CHAN_COUNT
+            .size = PHY_CHAN_COUNT,
+            .chan = phy->chan.channel
     };
 
     phy->chan.cur = CHAN_ID_INVALID;
@@ -207,10 +208,8 @@ phy_t phy_init(phy_config_t *config)
         goto _fail;
     }
 
-    if (!tx_times[PHY_RF_FRAME_SIZE_MAX]) {
-        for (u8 i = 0; i <= PHY_RF_FRAME_SIZE_MAX; ++i) {
-            tx_times[i] = rdio_util_get_tx_time(phy->rdio, i);
-        }
+    for (u8 i = 0; i <= PHY_RF_FRAME_SIZE_MAX; ++i) {
+        phy->tx_times[i] = rdio_util_get_tx_time(phy->rdio, i);
     }
 
     phy->txq = xQueueCreateStatic(
@@ -266,7 +265,10 @@ chan_id_t phy_chan_real(phy_t phy, u32 *freq)
 
 chan_id_t phy_chan(phy_t phy)
 {
-    return phy->stay ? (chan_id_t)PHY_CHAN_COUNT - (phy->stay % PHY_CHAN_COUNT) : phy->chan.cur;
+    return phy->stay
+        ? (chan_id_t)(PHY_CHAN_COUNT - (phy->stay % PHY_CHAN_COUNT))
+        : (chan_id_t)phy->chan.cur
+    ;
 }
 
 
@@ -379,12 +381,6 @@ bool phy_diag_hgm(phy_t phy, bool hgm)
 }
 
 
-u32 phy_delay(u8 size)
-{
-    return tx_times[size + 1];
-}
-
-
 bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
 {
     if (size > PHY_FRAME_SIZE_MAX) {
@@ -444,9 +440,9 @@ bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size)
 }
 
 
-static void phy_task(phy_t const restrict phy)
+static void phy_task(phy_t phy)
 {
-    phy_send_queue_t sq = {0};
+    phy_send_queue_t sq = {.task = NULL, .pkt = {.hdr = {0}}};
     rf_pkt_t *pkt = NULL;
     u8 ms = 0;
 
@@ -525,7 +521,7 @@ static void phy_task(phy_t const restrict phy)
                     _cca_fail:
                         // Fall through and let the packet be re-queued.
                         // If pkt is pkt_ack or pkt_sync (and we got here via goto), it disappears.
-                        //   But that's unlikely because those are sent from idle.
+                        //   But that's unlikely because those are sent from idle (no cca).
 
                     case CC1200_MARC_STATUS1_TX_FIFO_UNDERFLOW:
                     case CC1200_MARC_STATUS1_TX_FIFO_OVERFLOW:
@@ -749,7 +745,10 @@ static void phy_task(phy_t const restrict phy)
                 remaining = ccrf_timer_remaining(phy->hop_timer);
                 chan_elapsed = CHAN_TIME - remaining;
 
-                u32 lead_time = (phy->stay ? 0 : 200) + ((!phy->boss && !phy->chan.cur && !phy->stay) ? 500 + tx_times[pkt_sync.hdr.size] : 0);
+                u32 lead_time = (phy->stay ? 0 : 200) + (
+                        (!phy->boss && !phy->chan.cur && !phy->stay)
+                        ? 500 + phy->tx_times[pkt_sync.hdr.size] : 0
+                );
 
                 if (chan_elapsed < lead_time) {
                     tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(lead_time);
@@ -757,7 +756,7 @@ static void phy_task(phy_t const restrict phy)
                     goto _restart_rx;
                 }
 
-                if (remaining < (750 + tx_times[pkt->size])) {
+                if (remaining < (750 + phy->tx_times[pkt->size])) {
                     tx_next = 0;
                     pkt = NULL;
                     goto _restart_rx;

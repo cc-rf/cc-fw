@@ -1,7 +1,6 @@
 #include "rdio/rdio.h"
 #include "rdio/config.h"
 #include "sys/amp.h"
-#include "sys/spi.h"
 #include "sys/clock.h"
 #include "sys/isr.h"
 #include "sys/local.h"
@@ -25,10 +24,10 @@
 
 /*static void rdio_isr_status_1(rdio_t rdio);
 static void rdio_isr_status_0(rdio_t rdio);*/
-static void rdio_isr_status_lna(rdio_t rdio);
-static void rdio_isr_status_pa(rdio_t rdio);
+static void rdio_isr_status_lna(rdio_t rdio) __ccrf_code;
+static void rdio_isr_status_pa(rdio_t rdio) __ccrf_code;
 
-static struct rdio rdios[CCRF_CONFIG_RDIO_COUNT];
+static struct rdio rdios[CCRF_CONFIG_RDIO_COUNT] __ccrf_data;
 
 
 rdio_t rdio_init(const rdio_config_t *config)
@@ -40,7 +39,7 @@ rdio_t rdio_init(const rdio_config_t *config)
     rdio->id = config->id;
 
     if (!ccrf_clock_init()) goto _fail;
-    if (!ccrf_spi_init(rdio)) goto _fail;
+    if (!(rdio->spi = ccrf_spi_init(rdio->id))) goto _fail;
 
     rdio_strobe(rdio, CC1200_SRES);
 
@@ -368,19 +367,19 @@ bool rdio_reg_config(rdio_t rdio, const rdio_reg_config_t config[], size_t size)
 
 rdio_status_t rdio_reg_read(rdio_t rdio, u16 addr, u8 *data, u8 size)
 {
-    return ccrf_spi_io(rdio, CC1200_ACCESS_READ | CC1200_ACCESS_BURST, addr, NULL, data, size);
+    return ccrf_spi_io(rdio->spi, CC1200_ACCESS_READ | CC1200_ACCESS_BURST, addr, NULL, data, size);
 }
 
 
 rdio_status_t rdio_reg_write(rdio_t rdio, u16 addr, u8 *data, u8 size)
 {
-    return ccrf_spi_io(rdio, CC1200_ACCESS_WRITE | CC1200_ACCESS_BURST, addr, data, NULL, size);
+    return ccrf_spi_io(rdio->spi, CC1200_ACCESS_WRITE | CC1200_ACCESS_BURST, addr, data, NULL, size);
 }
 
 
 rdio_status_t rdio_strobe(rdio_t rdio, u8 strobe)
 {
-    return ccrf_spi_io(rdio, 0, strobe, NULL, NULL, 0);
+    return ccrf_spi_io(rdio->spi, 0, strobe, NULL, NULL, 0);
 }
 
 

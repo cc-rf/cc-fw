@@ -5,9 +5,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define __fast_data __section(".fast_data")
+#define __fast_code __section(".fast_text")
 
 // http://stackoverflow.com/questions/4415524/common-array-length-macro-for-c
-#define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
+#define COUNT_OF(x) ((sizeof(x)/sizeof(x[0])) / ((size_t)(!(sizeof(x) % sizeof(x[0])))))
 
 
 typedef int8_t      s8;

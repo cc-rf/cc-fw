@@ -134,18 +134,18 @@ struct __packed mac {
 };
 
 
-static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr);
+static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr) __ccrf_code;
 
-static mac_size_t mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, u8 data[]);
-static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt);
+static mac_size_t mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, u8 data[]) __ccrf_code;
+static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt) __ccrf_code;
 
-static void mac_task_send(mac_t mac);
-static void mac_task_recv(mac_t mac);
+static void mac_task_send(mac_t mac) __ccrf_code;
+static void mac_task_recv(mac_t mac) __ccrf_code;
 
-static void mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta);
+static void mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta) __ccrf_code;
 
 
-static struct mac macs[CCRF_CONFIG_RDIO_COUNT];
+static struct mac macs[CCRF_CONFIG_RDIO_COUNT] __ccrf_data;
 
 
 mac_t mac_init(mac_config_t *config)

@@ -3,90 +3,63 @@
 
 /* http://www.freertos.org/Debugging-Hard-Faults-On-Cortex-M-Microcontrollers.html */
 
-/* The prototype shows it is a naked function - in effect this is just an
-assembly function. */
-//static void HardFault_Handler( void ) __attribute__( ( naked ) );
+#define SYSHND_CTRL  (*(volatile unsigned int*)  (0xE000ED24u))  // System Handler Control and State Register
+#define NVIC_MFSR    (*(volatile unsigned char*) (0xE000ED28u))  // Memory Management Fault Status Register
+#define NVIC_BFSR    (*(volatile unsigned char*) (0xE000ED29u))  // Bus Fault Status Register
+#define NVIC_UFSR    (*(volatile unsigned short*)(0xE000ED2Au))  // Usage Fault Status Register
+#define NVIC_HFSR    (*(volatile unsigned short*)(0xE000ED2Cu))  // Hard Fault Status Register
+#define NVIC_DFSR    (*(volatile unsigned short*)(0xE000ED30u))  // Debug Fault Status Register
+#define NVIC_BFAR    (*(volatile unsigned int*)  (0xE000ED38u))  // Bus Fault Manage Address Register
+#define NVIC_AFSR    (*(volatile unsigned short*)(0xE000ED3Cu))  // Auxiliary Fault Status Register
 
-/* The fault handler implementation calls a function called
-prvGetRegistersFromStack(). */
-__attribute__((naked, interrupt)) void HardFault_Handler(void)
+__attribute__((naked, interrupt, used)) void HardFault_Handler(void)
 {
     __asm volatile
     (
-    " tst lr, #4                                                \n"
-            " ite eq                                                    \n"
-            " mrseq r0, msp                                             \n"
-            " mrsne r0, psp                                             \n"
-            //" ldr r1, [r0, #24]                                         \n"
-            //" ldr r2, handler2_address_const                            \n"
-            //" bx r2                                                     \n"
-            //" handler2_address_const: .word hard_fault    \n"
-            //" mov r1, lr                                                \n"
-            " ldr r2, =hard_fault                                       \n"
-            " bx r2                                                     \n"
-
+        " tst lr, #4                                                \n"
+        " ite eq                                                    \n"
+        " mrseq r0, msp                                             \n"
+        " mrsne r0, psp                                             \n"
+        " ldr r2, =hard_fault                                       \n"
+        " bx r2                                                     \n"
     );
 }
 
-/* (OLD!!) __attribute__((naked))*/ void UsageFault_Handler(void)
+__attribute__((naked, interrupt, used)) void UsageFault_Handler(void)
 {
     __asm volatile
     (
-    " tst lr, #4                                                \n"
-            " ite eq                                                    \n"
-            " mrseq r0, msp                                             \n"
-            " mrsne r0, psp                                             \n"
-            //" ldr r1, [r0, #24]                                         \n"
-            //" ldr r2, handler3_address_const                            \n"
-            //" bx r2                                                     \n"
-            //" handler3_address_const: .word usage_fault    \n"
-            //" mov r1, lr                                                \n"
-            " ldr r2, =usage_fault                                      \n"
-            " bx r2                                                     \n"
+        " tst lr, #4                                                \n"
+        " ite eq                                                    \n"
+        " mrseq r0, msp                                             \n"
+        " mrsne r0, psp                                             \n"
+        " ldr r2, =usage_fault                                      \n"
+        " bx r2                                                     \n"
     );
 }
 
-/* TODO: Maybe don't use volatile since copies will not need to be such? */
-typedef volatile struct {
-    volatile uint32_t r0;
-    volatile uint32_t r1;
-    volatile uint32_t r2;
-    volatile uint32_t r3;
-    volatile uint32_t r12;
-    volatile uint32_t lr;
-    volatile uint32_t pc;
 
+typedef struct {
+    volatile uint32_t r0;            // Register R0
+    volatile uint32_t r1;            // Register R1
+    volatile uint32_t r2;            // Register R2
+    volatile uint32_t r3;            // Register R3
+    volatile uint32_t r12;           // Register R12
+    volatile uint32_t lr;            // Link register
+    volatile uint32_t pc;            // Program counter
     union {
-        volatile uint32_t PSR;
+        volatile uint32_t byte;
         struct {
-            uint32_t IPSR : 8;
-            uint32_t EPSR : 19;
-            uint32_t APSR : 5;
-        };
-    } psr;
+            uint32_t IPSR : 8;           // Interrupt Program Status register (IPSR)
+            uint32_t EPSR : 19;          // Execution Program Status register (EPSR)
+            uint32_t APSR : 5;           // Application Program Status register (APSR)
+        } bits;
+    } psr;                               // Program status register.
 
 } fault_reg_t;
 
-/* From Segger Application Note on Hard Faults */
-static struct {
 
-    struct {
-        volatile unsigned int r0;            // Register R0
-        volatile unsigned int r1;            // Register R1
-        volatile unsigned int r2;            // Register R2
-        volatile unsigned int r3;            // Register R3
-        volatile unsigned int r12;           // Register R12
-        volatile unsigned int lr;            // Link register
-        volatile unsigned int pc;            // Program counter
-        union {
-            volatile unsigned int byte;
-            struct {
-                unsigned int IPSR : 8;           // Interrupt Program Status register (IPSR)
-                unsigned int EPSR : 19;          // Execution Program Status register (EPSR)
-                unsigned int APSR : 5;           // Application Program Status register (APSR)
-            } bits;
-        } psr;                               // Program status register.
-    } SavedRegs;
+typedef struct {
 
     union {
         volatile unsigned int byte;
@@ -175,131 +148,32 @@ static struct {
 
     volatile unsigned int afsr;            // Auxiliary Fault Status Register (0xE000ED3C), Vendor controlled (optional)
 
-} HardFaultRegs __used;
+} fault_info_t;
 
 
-
-
-static unsigned long long hard_fault_count;
-static unsigned long long hard_fault_bkpt_count;
+static fault_info_t fault_info;
 static bool hard_fault_continue = false;
-static unsigned long long usage_fault_count;
 
-static fault_reg_t hard_fault_last_reg;
-
-void __used hard_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
+void __used hard_fault(fault_reg_t *fr)
 {
-    static int hard_fault_count_init;
+    fault_info.syshndctrl.byte = SYSHND_CTRL;  // System Handler Control and State Register
+    fault_info.mfsr.byte       = NVIC_MFSR;    // Memory Fault Status Register
+    fault_info.bfsr.byte       = NVIC_BFSR;    // Bus Fault Status Register
+    fault_info.bfar            = NVIC_BFAR;    // Bus Fault Manage Address Register
+    fault_info.ufsr.byte       = NVIC_UFSR;    // Usage Fault Status Register
+    fault_info.hfsr.byte       = NVIC_HFSR;    // Hard Fault Status Register
+    fault_info.dfsr.byte       = NVIC_DFSR;    // Debug Fault Status Register
+    fault_info.afsr            = NVIC_AFSR;    // Auxiliary Fault Status Register
 
     itm_puts(0, "\r\n\v\r\n ======== HARD FAULT ======== \r\n\r\n");
-    //printf("\r\n\v\r\n ======== HARD FAULT ======== \r\n pc: %p\r\n\r\n", fr->pc);
-    while (!hard_fault_continue) asm("nop");
+
+    while (!hard_fault_continue) __NOP();
     NVIC_SystemReset();
-
-    if (hard_fault_count_init != 0xABCD) {
-        hard_fault_count_init = 0xABCD;
-        hard_fault_count = 1;
-        hard_fault_bkpt_count = 0;
-        hard_fault_continue = false;
-    }
-    else
-        ++hard_fault_count;
-
-    hard_fault_last_reg = *fr;
-
-    if (SCB->HFSR & SCB_HFSR_DEBUGEVT_Msk) {
-        ++hard_fault_bkpt_count;
-
-        if (*(uint16_t *)fr->pc != 0xBEAB)
-            while (!hard_fault_continue) asm("nop");
-
-        // This is what was in the segger code...
-        //SCB->HFSR |=  SCB_HFSR_DEBUGEVT_Msk;     // Reset Hard Fault status
-        SCB->HFSR &= ~SCB_HFSR_DEBUGEVT_Msk;
-
-        fr->pc += 2;
-        return;                       // Return to interrupted application
-    }
-
-    /*if (*((uint16_t *)fr->pc) == 0xBEAB)
-    {
-        while (1) {
-            __NOP();
-        }
-    }*/
-
-    while (!hard_fault_continue) asm("nop");
-
-    /*if (((SCB->DFSR & SCB_DFSR_BKPT_Msk) != 0)
-        && ((SCB->HFSR & SCB_HFSR_DEBUGEVT_Msk) != 0))
-    {
-        if (*((uint16_t *)fr->pc) == 0xBEAB)
-        {
-            // Clear the exception cause in exception status.
-            SCB->HFSR = SCB_HFSR_DEBUGEVT_Msk;
-
-            // Continue after the BKPT
-            fr->r0 = (uint32_t)-1;
-            fr->pc += 2;
-
-            ++hard_fault_semi_count;
-
-            __BKPT(0);
-
-            while (1) {
-                __NOP();
-            }
-
-            return;
-        }
-
-        while (1) {
-            __NOP();
-        }
-    }
-
-    while (1) {
-        __NOP();
-    }*/
 }
 
-void __used usage_fault( fault_reg_t *fr/*, uint32_t lr __attribute__((unused))*/ )
+void __used usage_fault( fault_reg_t *fr __unused )
 {
-    static int usage_fault_count_init;
-
-    if (usage_fault_count_init != 0xBEEF) {
-        usage_fault_count_init = 0xBEEF;
-        usage_fault_count = 1;
-    }
-    else
-        ++usage_fault_count;
-
-    if (SCB->CFSR & (1UL<<16)) {
-        while (1) {
-            __NOP();
-        }
-    }
-
-    while (1) {
-        __NOP();
-    }
-
-    /*if (SCB->CFSR & (1UL<<16)) {
-        fr->r0 = (uint32_t)-1;
-        fr->pc += 2;
-
-        ++usage_fault_semi_count;
-
-        //__BKPT(0);
-
-        //while (1) {
-        //    __NOP();
-        //}
-    }*/
-
-    /*while (1) {
-        __NOP();
-    }*/
+    while (!hard_fault_continue) __NOP();
 }
 
 

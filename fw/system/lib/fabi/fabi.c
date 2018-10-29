@@ -40,8 +40,8 @@ static edma_tcd_t tcd[3] __aligned(32);
 static edma_handle_t edma_handle[3];
 static edma_transfer_config_t tr[3] = {{0}};
 
-static u8 band_in[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section("m_band") __aligned(32);
-static fabi_out_t band_out[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section("m_band") __aligned(32);
+static u8 band_in[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section(".band");
+static fabi_out_t band_out[FABI_LED_MAX * sizeof(fabi_rgb_t) * 8] __section(".band");
 
 static void fabi_task(void *param);
 TaskHandle_t fabi_task_handle;

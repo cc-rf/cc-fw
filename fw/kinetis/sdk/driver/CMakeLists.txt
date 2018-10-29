@@ -157,6 +157,11 @@ target_include_directories(
         PUBLIC include
 )
 
+target_compile_definitions(
+        ${NAME}
+        PUBLIC ENABLE_RAM_VECTOR_TABLE
+)
+
 target_link_libraries(
         ${NAME}
         PUBLIC kinetis_sdk_cpu_driver

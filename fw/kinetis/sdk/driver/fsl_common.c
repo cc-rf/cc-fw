@@ -60,7 +60,7 @@ uint32_t InstallIRQHandler(IRQn_Type irq, uint32_t irqHandler)
     uint32_t __RAM_VECTOR_TABLE_SIZE = (uint32_t)(__RAM_VECTOR_TABLE_SIZE_BYTES);
 #endif /* defined(__CC_ARM) */
     uint32_t n;
-    uint32_t ret;
+    uint32_t ret = 0;
     uint32_t irqMaskValue;
 
     irqMaskValue = DisableGlobalIRQ();
@@ -75,9 +75,12 @@ uint32_t InstallIRQHandler(IRQn_Type irq, uint32_t irqHandler)
         SCB->VTOR = (uint32_t)__VECTOR_RAM;
     }
 
-    ret = __VECTOR_RAM[irq + 16];
-    /* make sure the __VECTOR_RAM is noncachable */
-    __VECTOR_RAM[irq + 16] = irqHandler;
+    if (irqHandler) {
+        /* phillip: allow just copying the table */
+        ret = __VECTOR_RAM[irq + 16];
+        /* make sure the __VECTOR_RAM is noncachable */
+        __VECTOR_RAM[irq + 16] = irqHandler;
+    }
 
     EnableGlobalIRQ(irqMaskValue);
 

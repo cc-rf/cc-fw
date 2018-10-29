@@ -16,7 +16,7 @@
 // TODO: Check out xTimer FreeRTOS port stuff for reference
 
 typedef struct pit {
-    const pit_chnl_t chnl;
+    pit_chnl_t chnl;
     pit_handler_t handler;
     void *param;
     bool used;
@@ -30,16 +30,17 @@ static inline void pit_clear(pit_t pit);
 static s32 pit_used = 0;
 static u32 bus_freq;
 
-static struct pit pits[PIT_COUNT] = {
-        { .chnl = PIT_CHNL(0) },
-        { .chnl = PIT_CHNL(1) },
-        { .chnl = PIT_CHNL(2) },
-        { .chnl = PIT_CHNL(3) },
-};
+static struct pit pits[PIT_COUNT] __fast_data;
 
 void pit_init(void)
 {
     bus_freq = CLOCK_GetBusClkFreq();
+
+    memset(pits, 0, sizeof(struct pit) * PIT_COUNT);
+
+    for (u8 i = 0; i < PIT_COUNT; ++i) {
+        pits[i].chnl = PIT_CHNL(i);
+    }
 }
 
 static inline void pit_auto_init(void)
@@ -229,7 +230,7 @@ pit_nsec_t pit_ltt_current(void)
 
 // TODO: Debug check of hander only?
 #define PITN_IRQHandler(N) \
-    __attribute__((interrupt)) void PIT##N##_IRQHandler(void) \
+    __attribute__((interrupt,used)) void PIT##N##_IRQHandler(void) \
     { \
         PIT_ClearStatusFlags(PIT, (pit_chnl_t)N, kPIT_TimerFlag); \
         const static pit_t const pit = &pits[PIT_CHNL_IDX(N)]; \
@@ -243,8 +244,8 @@ pit_nsec_t pit_ltt_current(void)
     PITN_IRQHandler(1)
 #endif
 #if PIT_CHNL_USED(2)
-PITN_IRQHandler(2)
+    PITN_IRQHandler(2)
 #endif
 #if PIT_CHNL_USED(3)
-PITN_IRQHandler(3)
+    PITN_IRQHandler(3)
 #endif

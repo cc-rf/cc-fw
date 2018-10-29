@@ -30,7 +30,7 @@ typedef enum __packed {
 
 } mac_send_t;
 
-typedef struct __packed {
+typedef struct {
     rdio_id_t rdid;
     phy_cell_t cell;
     mac_addr_t addr;
@@ -56,6 +56,6 @@ mac_t mac_init(mac_config_t *config);
 phy_t mac_phy(mac_t mac);
 mac_addr_t mac_addr(mac_t mac);
 void mac_stat(mac_t mac, mac_stat_t *stat);
-pkt_meta_t mac_meta(mac_t mac);
+pkt_meta_t mac_meta(mac_t mac) __ccrf_code;
 
-mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mac_size_t size, u8 data[], bool wait);
+mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mac_size_t size, u8 data[], bool wait) __ccrf_code;

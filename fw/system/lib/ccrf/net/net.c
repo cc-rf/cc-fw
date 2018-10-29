@@ -39,7 +39,7 @@ typedef struct __packed {
 
 } net_mesg_t;
 
-typedef struct __packed txni {
+typedef struct txni {
     net_path_t path;
     struct list_head *trxn;
     TaskHandle_t task;
@@ -48,7 +48,7 @@ typedef struct __packed txni {
 } net_txni_t;
 
 
-struct __packed net {
+struct net {
     net_recv_t recv;
     net_evnt_t evnt;
 
@@ -79,16 +79,16 @@ struct __packed net {
 };
 
 
-static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, u8 data[]);
-static void net_mesg_free(net_mesg_t **mesg);
-static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, u8 data[]);
-static net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, u8 data[]);
-static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg);
-static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg);
-static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg);
+static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
+static void net_mesg_free(net_mesg_t **mesg) __ccrf_code;
+static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, u8 data[]) __ccrf_code;
+static net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
+static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg) __ccrf_code;
+static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg) __ccrf_code;
+static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
-static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
-static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg);
+static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta) __ccrf_code;
+static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static void net_peer_bcast(net_t net);
 static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add);
 static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta);
@@ -97,7 +97,7 @@ static void net_peer_expire(net_t net, net_time_t time);
 static void net_timer(TimerHandle_t timer);
 
 
-static struct net nets[CCRF_CONFIG_RDIO_COUNT];
+static struct net nets[CCRF_CONFIG_RDIO_COUNT] __ccrf_data;
 
 
 net_t net_init(net_config_t *config)
@@ -594,7 +594,6 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
 
         list_for_each_entry(peeri, &peer->peer, item) {
             if ((peeri->info.addr == peers[pi].addr) && (peeri->info.peer == peers[pi].peer)) {
-                peeri->info.last = now - peers[pi].last/*expected relative*/;
                 found = true;
                 break;
             }
@@ -609,6 +608,8 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
 
             list_add(&peeri->item, &peer->peer);
         }
+
+        peeri->info.last = now - peers[pi].last/*expected relative*/;
     }
 }
 

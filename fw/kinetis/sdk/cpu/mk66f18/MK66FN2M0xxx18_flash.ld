@@ -52,17 +52,20 @@ ENTRY(Reset_Handler)
 HEAP_SIZE  = DEFINED(__heap_size__)  ? __heap_size__  : 0x00002000; /* 8 Kb */
 STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x00000800; /* 2 Kb */
 
-M_VECTOR_RAM_SIZE = DEFINED(__ram_vector_table__) ? 0x0400 : 0x0;
+M_VECTOR_RAM_SIZE = 0x0400;
 
 /* Specify the memory areas */
 MEMORY
 {
   m_interrupts          (RX)  : ORIGIN = 0x00000000, LENGTH = 0x00000400
   m_flash_config        (RX)  : ORIGIN = 0x00000400, LENGTH = 0x00000010
-  m_text                (RX)  : ORIGIN = 0x00000410, LENGTH = 0x001FEBF0 /* 0x001FFBF0 */
+  m_fast_text           (RX)  : ORIGIN = 0x00000410, LENGTH = 0x0000BC00
+  m_text                (RX)  : ORIGIN = 0x0000C010, LENGTH = 0x001F2FF0
   m_user                (RW)  : ORIGIN = 0x001FF000, LENGTH = 0x00001000
-  m_data                (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00020000
-  m_data_2              (RW)  : ORIGIN = 0x20010000, LENGTH = 0x00020000
+  m_interrupts_ram      (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00000400
+  m_fast_data           (RW)  : ORIGIN = 0x1FFF0400, LENGTH = 0x00004000
+  m_fast_code           (RX)  : ORIGIN = 0x1FFF4400, LENGTH = 0x0000BC00
+  m_data                (RW)  : ORIGIN = 0x20000000, LENGTH = 0x00030000
 }
 
 /* Define output sections */
@@ -173,20 +176,6 @@ SECTIONS
   __etext = .;    /* define a global symbol at end of code */
   __DATA_ROM = .; /* Symbol is used by startup for data initialization */
 
-  .interrupts_ram :
-  {
-    . = ALIGN(4);
-    __VECTOR_RAM__ = .;
-    __interrupts_ram_start__ = .; /* Create a global symbol at data start */
-    *(.m_interrupts_ram)     /* This is a user defined section */
-    . += M_VECTOR_RAM_SIZE;
-    . = ALIGN(4);
-    __interrupts_ram_end__ = .; /* Define a global symbol at data end */
-  } > m_data
-
-  __VECTOR_RAM = DEFINED(__ram_vector_table__) ? __VECTOR_RAM__ : ORIGIN(m_interrupts);
-  __RAM_VECTOR_TABLE_SIZE_BYTES = DEFINED(__ram_vector_table__) ? (__interrupts_ram_end__ - __interrupts_ram_start__) : 0x0;
-
   .data : AT(__DATA_ROM)
   {
     . = ALIGN(4);
@@ -202,6 +191,49 @@ SECTIONS
   __DATA_END = __DATA_ROM + (__data_end__ - __data_start__);
   text_end = ORIGIN(m_text) + LENGTH(m_text);
   ASSERT(__DATA_END <= text_end, "region m_text overflowed with text and data")
+
+  __fast_text_begin = ORIGIN(m_fast_text);
+
+  .fast_text : AT(__fast_text_begin)
+  {
+    . = ALIGN(4);
+    __fast_code_begin = .;
+    *(.fast_text)
+    *(.fast_text*)
+    /* this is big: *\kinetis_freertos.a:* */
+    . = ALIGN(4);
+    __fast_code_end = .;
+  } > m_fast_code
+
+  __fast_text_size = SIZEOF(.fast_text);
+  __fast_text_end = __fast_text_begin + __fast_text_size;
+
+  .user : AT(ORIGIN(m_user))
+  {
+    . = ALIGN(4);
+    *(.user)
+    . = ALIGN(4);
+  } > m_user
+
+  .interrupts_ram :
+  {
+    . = ALIGN(4);
+    __VECTOR_RAM__ = .;
+    __interrupts_ram_start__ = .; /* Create a global symbol at data start */
+    . += M_VECTOR_RAM_SIZE;
+    . = ALIGN(4);
+    __interrupts_ram_end__ = .; /* Define a global symbol at data end */
+  } > m_interrupts_ram
+
+  __VECTOR_RAM = __VECTOR_RAM__;
+  __RAM_VECTOR_TABLE_SIZE_BYTES = __interrupts_ram_end__ - __interrupts_ram_start__;
+
+    .fast_data :
+    {
+      . = ALIGN(4);
+      *(.fast_data)
+      . = ALIGN(4);
+    } > m_fast_data
 
   /* Uninitialized data section */
   .bss :
@@ -230,27 +262,29 @@ SECTIONS
     . += HEAP_SIZE;
     __HeapLimit = .;
     __heap_limit = .; /* Add for _sbrk */
-  } > m_data_2
+    *(.heap)
+    __heap_limit_rtos = .;
+  } > m_data
 
   .band :
   {
     . = ALIGN(8);
-    *(m_band)
-  } > m_data_2
+    *(.band)
+  } > m_data
 
   .stack :
   {
     . = ALIGN(8);
     . += STACK_SIZE;
-  } > m_data_2
+  } > m_data
 
   /* Initializes stack on the end of block */
-  __StackTop   = ORIGIN(m_data_2) + LENGTH(m_data_2);
+  __StackTop   = ORIGIN(m_data) + LENGTH(m_data);
   __StackLimit = __StackTop - STACK_SIZE;
   PROVIDE(__stack = __StackTop);
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
 
-  ASSERT(__StackLimit >= __HeapLimit, "region m_data_2 overflowed with stack and heap")
+  ASSERT(__StackLimit >= __HeapLimit, "region m_data overflowed with stack and heap")
 }
 

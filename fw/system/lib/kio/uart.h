@@ -93,7 +93,9 @@ static inline void uart_mem_free(uart_t const uart);
 
 static inline uart_t uart_mem_alloc(void)
 {
-    return calloc(1, sizeof(struct uart));
+    uart_t uart = pvPortMalloc(sizeof(struct uart));
+    memset(uart, 0, sizeof(struct uart));
+    return uart;
 }
 
 static inline void uart_mem_free(uart_t const uart)

@@ -44,8 +44,6 @@
 /* Version: GCC for ARM Embedded Processors                                  */
 /*****************************************************************************/
 
-/*Phillip: interrupts_ram when using _flash.ld, otherwise isr_vector */
-
     .syntax unified
     .arch armv7-m
 

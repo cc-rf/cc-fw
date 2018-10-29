@@ -40,7 +40,7 @@ typedef struct __packed {
 
     chan_id_t size;
     chan_info_t *cur;
-    chan_info_t chan[];
+    chan_info_t *chan;
 
 } chan_group_t;
 

@@ -74,6 +74,8 @@ typedef struct __packed {
     u64 serial;
     u32 uptime;
     u16 macid;
+    u8 cell;
+    u8 rdid;
 
     struct __packed {
         phy_stat_t phy;
@@ -283,6 +285,7 @@ void cloudchaser_main(void)
     status.version = 1;
     status.serial = uid();
     status.macid = uid_short();
+    status.rdid = 0;
 
     net_config_t net_config = {
             .phy = {
@@ -304,6 +307,8 @@ void cloudchaser_main(void)
     if (uflag1_set())       net_config.phy.cell = 0xA1;
     else if (uflag2_set())  net_config.phy.cell = 0xA2;
     else                    net_config.phy.cell = 0xA0;
+
+    status.cell = net_config.phy.cell;
 
     const u32 serial_hi = (u32)(status.serial >> 32);
     const u32 serial_lo = (u32)status.serial;
@@ -364,7 +369,7 @@ void cloudchaser_main(void)
 }
 
 
-static void net_recv(net_t net, net_path_t path, net_addr_t dest, size_t size, u8 data[])
+static void net_recv(net_t net __unused, net_path_t path, net_addr_t dest, size_t size, u8 data[])
 {
     switch (path.info.port) {
         case CCIO_PORT:
@@ -385,7 +390,7 @@ static void net_recv(net_t net, net_path_t path, net_addr_t dest, size_t size, u
 }
 
 
-static void net_evnt(net_t net, net_event_t event, void *info)
+static void net_evnt(net_t net __unused, net_event_t event, void *info)
 {
     switch (event) {
         case NET_EVENT_PEER: {
@@ -403,7 +408,7 @@ static void net_evnt(net_t net, net_event_t event, void *info)
 }
 
 
-static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data,
+static void mac_recv(mac_t mac, mac_flag_t flag __unused, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data,
                      pkt_meta_t meta)
 {
     return write_code_mac_recv(mac_addr(mac), peer, dest, size, data, meta);
@@ -478,7 +483,6 @@ void usb_recv(u8 port, size_t size, u8 *data)
 
     if (port == SERF_USB_PORT) {
         serf_t *frame = pvPortMalloc(sizeof(serf_t) + usb_in_size[port] + 1);
-        assert(frame);
         size_t frame_size = serf_decode(usb_in_data[port], &usb_in_size[port], frame, usb_in_size[port] + 1);
 
         if (frame_size) {
@@ -643,7 +647,7 @@ static void handle_code_mac_send(u8 port, size_t size, u8 *data)
 }
 
 
-static void handle_code_send(u8 port, size_t size, u8 *data)
+static void handle_code_send(u8 port __unused, size_t size, u8 *data)
 {
     assert(size >= sizeof(code_send_t)); assert(data);
 
@@ -744,7 +748,7 @@ static void handle_code_trxn(u8 port, size_t size, u8 *data)
 }
 
 
-static void handle_code_resp(u8 port, size_t size, u8 *data)
+static void handle_code_resp(u8 port __unused, size_t size, u8 *data)
 {
     assert(size >= sizeof(code_send_t)); assert(data);
 
@@ -762,7 +766,7 @@ static void handle_code_resp(u8 port, size_t size, u8 *data)
 }
 
 
-static void handle_code_reset(u8 port, size_t size, u8 *data)
+static void handle_code_reset(u8 port __unused, size_t size, u8 *data)
 {
     assert(size == sizeof(code_reset_t)); assert(data);
 
@@ -814,7 +818,7 @@ static void handle_code_peer(u8 port, size_t size, u8 *data)
 }
 
 
-static void handle_code_echo(u8 port, size_t size, u8 *data)
+static void handle_code_echo(u8 port __unused, size_t size, u8 *data)
 {
     if (data[size - 1] != '\n')
         printf("(remote) %s\r\n", data);
@@ -829,7 +833,7 @@ static void handle_code_uart(size_t size, u8 *data)
 }
 
 
-static void handle_code_rainbow(size_t size, u8 *data)
+static void handle_code_rainbow(size_t size __unused, u8 *data __unused)
 {
     rainbow();
 }
@@ -850,7 +854,9 @@ static void handle_code_led(size_t size, u8 *data)
                 }
         };
 
-        net_send(nets[0], path, size - sizeof(code_led_t) + sizeof(fabi_msg_t), (u8 *)&code_led->msg);
+        net_size_t net_size = (net_size_t)(size - sizeof(code_led_t) + sizeof(fabi_msg_t));
+
+        net_send(nets[0], path, net_size, (u8 *)&code_led->msg);
     }
 }
 
