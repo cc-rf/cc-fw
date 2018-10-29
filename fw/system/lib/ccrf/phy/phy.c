@@ -36,7 +36,7 @@
 
 #define PHY_TXQ_LEN             3
 
-#define PHY_TASK_STACK_SIZE     (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
+#define PHY_TASK_STACK_SIZE     ((1200) / sizeof(StackType_t))
 
 #define NOTIFY_MASK_ISR         (1u<<1u)
 #define NOTIFY_MASK_TX          (1u<<2u)
@@ -138,17 +138,17 @@ struct phy {
 };
 
 
-static void phy_task(phy_t phy) __ccrf_code;
+static void phy_task(phy_t phy) __ccrf_code __nonnull_all;
 
-static void phy_recv(phy_t phy) __ccrf_code;
-static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi) __ccrf_code;
+static void phy_recv(phy_t phy) __ccrf_code __nonnull_all;
+static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi) __ccrf_code __nonnull_all;
 
-static inline void phy_chan_next(phy_t phy) __ccrf_code;
-static inline void phy_chan_set(phy_t phy, chan_id_t chan) __ccrf_code;
-static inline chan_id_t phy_chan_set_base(phy_t phy, chan_id_t chan) __ccrf_code;
+static inline void phy_chan_next(phy_t phy) __ccrf_code __nonnull_all;
+static inline void phy_chan_set(phy_t phy, chan_id_t chan) __ccrf_code __nonnull_all;
+static inline chan_id_t phy_chan_set_base(phy_t phy, chan_id_t chan) __ccrf_code __nonnull_all;
 
-static void phy_rdio_isr(phy_t phy) __ccrf_code;
-static void hop_timer_handler(ccrf_timer_t timer, phy_t phy) __ccrf_code;
+static void phy_rdio_isr(phy_t phy) __ccrf_code __nonnull_all;
+static void hop_timer_handler(ccrf_timer_t timer, phy_t phy) __ccrf_code __nonnull_all;
 
 
 static struct phy phys[CCRF_CONFIG_RDIO_COUNT] __ccrf_data;
@@ -235,6 +235,12 @@ phy_t phy_init(phy_config_t *config)
 void phy_stat(phy_t phy, phy_stat_t *stat)
 {
     *stat = phy->stat;
+}
+
+
+u32 phy_task_stack_usage(phy_t phy)
+{
+    return (PHY_TASK_STACK_SIZE - uxTaskGetStackHighWaterMark(phy->task)) * sizeof(StackType_t);
 }
 
 
@@ -828,8 +834,11 @@ static void phy_task(phy_t phy)
 static void phy_recv(phy_t phy)
 {
     const static u8 PKT_OVERHEAD = 3; // length, 2x status
+    static u8 sbuf[PHY_RF_FRAME_SIZE_MAX] __ccrf_data;
 
     u8 len = rdio_reg_get(phy->rdio, CC1200_NUM_RXBYTES, NULL);
+
+    u8 *buf = sbuf;
 
     if (len < PKT_OVERHEAD) {
         phy->stat.rx.errors++;
@@ -838,7 +847,6 @@ static void phy_recv(phy_t phy)
     }
 
     rf_pkt_t *spkt;
-    u8 *buf = alloca(len);
 
     rdio_fifo_read(phy->rdio, buf, len);
 
@@ -948,7 +956,7 @@ static void phy_rdio_isr(phy_t phy)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    if (phy && phy->task) {
+    if (phy->task) {
         xTaskNotifyFromISR(phy->task, NOTIFY_MASK_ISR, eSetBits, &xHigherPriorityTaskWoken);
     }
 
@@ -960,7 +968,7 @@ static void hop_timer_handler(ccrf_timer_t timer __unused, phy_t phy)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    if (phy && phy->task) {
+    if (phy->task) {
         xTaskNotifyFromISR(phy->task, NOTIFY_MASK_HOP, eSetBits, &xHigherPriorityTaskWoken);
     }
 

@@ -164,16 +164,17 @@ extern void rtos_sleep_post(uint32_t xExpectedIdleTime);
 
 /* Set the following definitions to 1 to include the API function, or zero
 to exclude the API function. */
-#define INCLUDE_vTaskPrioritySet 1U
-#define INCLUDE_uxTaskPriorityGet 1U
+#define INCLUDE_vTaskPrioritySet 0U
+#define INCLUDE_uxTaskPriorityGet 0U
 #define INCLUDE_vTaskDelete 1U
 #define INCLUDE_vTaskCleanUpResources 1U
 #define INCLUDE_vTaskSuspend 1U
 #define INCLUDE_vTaskDelayUntil 1U
 #define INCLUDE_vTaskDelay 1U
-#define INCLUDE_xSemaphoreGetMutexHolder 1U
-#define INCLUDE_xEventGroupSetBitFromISR 1U
+#define INCLUDE_xSemaphoreGetMutexHolder 0U
+#define INCLUDE_xEventGroupSetBitFromISR 0U
 #define INCLUDE_xTimerPendFunctionCall 0U
+#define INCLUDE_uxTaskGetStackHighWaterMark 1U
 
 /* This demo makes use of one or more example stats formatting functions.  These
 format the raw data provided by the uxTaskGetSystemState() function in to human

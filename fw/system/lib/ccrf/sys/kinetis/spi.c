@@ -1,5 +1,6 @@
 #include "kinetis.h"
 #include "sys/spi.h"
+#include "sys/trace.h"
 
 #include <fsl_dspi_edma.h>
 #include <fsl_dma_manager.h>
@@ -188,12 +189,18 @@ ccrf_spi_t ccrf_spi_init(u8 rdio_id)
 
 u8 ccrf_spi_io(ccrf_spi_t spi, u8 flag, u16 addr, u8 *tx, u8 *rx, size_t size)
 {
+    static u8 xbuf[CCRF_SPI_MAX_SIZE] __ccrf_data;
+
     const u8 ahi = (u8) ((addr >> 8) & 0xFF);
     const u8 alo = (u8) (addr & 0xFF);
 
     const u8 hlen = ahi ? (u8)2 : (u8)1;
     const u32 xlen = size + hlen;
-    u8 xbuf[xlen];
+
+    if (xlen > CCRF_SPI_MAX_SIZE) {
+        ccrf_trace_error("spi: data too large (%d > %d)", xlen, CCRF_SPI_MAX_SIZE);
+        return 0;
+    }
 
     if (hlen == 1) {
         xbuf[0] = flag | alo;

@@ -76,6 +76,11 @@ typedef struct __packed {
     u16 macid;
     u8 cell;
     u8 rdid;
+    u32 phy_task_stack_usage;
+    u32 mac_task_stack_usage_tx;
+    u32 mac_task_stack_usage_rx;
+    u32 heap_free;
+    u32 heap_usage;
 
     struct __packed {
         phy_stat_t phy;
@@ -83,8 +88,6 @@ typedef struct __packed {
         net_stat_t net;
 
     } stat;
-
-    // TODO: Maybe add heap stats
 
 } code_status_t;
 
@@ -183,7 +186,7 @@ static void net_recv(net_t net, net_path_t path, net_addr_t dest, size_t size, u
 static void net_evnt(net_t net, net_event_t event, void *info);
 
 static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data, pkt_meta_t meta);
-static void sync_hook(chan_id_t chan);
+static void sync_hook(chan_id_t chan) __fast_code;
 
 static void frame_recv(u8 port, serf_t *frame, size_t size);
 
@@ -792,6 +795,13 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
     phy_stat(mac_phy(macs[0]), &status.stat.phy);
     mac_stat(macs[0], &status.stat.mac);
     net_stat(nets[0], &status.stat.net);
+
+    status.phy_task_stack_usage = phy_task_stack_usage(mac_phy(macs[0]));
+    status.mac_task_stack_usage_tx = mac_task_tx_stack_usage(macs[0]);
+    status.mac_task_stack_usage_rx = mac_task_rx_stack_usage(macs[0]);
+
+    status.heap_free = xPortGetFreeHeapSize();
+    status.heap_usage = configTOTAL_HEAP_SIZE - xPortGetMinimumEverFreeHeapSize();
 
     write_code_status(port, &status);
 }

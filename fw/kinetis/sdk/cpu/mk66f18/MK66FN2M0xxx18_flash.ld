@@ -194,7 +194,7 @@ SECTIONS
 
   __fast_text_begin = ORIGIN(m_fast_text);
 
-  .fast_text : AT(__fast_text_begin)
+  .fast_text (NOLOAD) : AT(__fast_text_begin)
   {
     . = ALIGN(4);
     __fast_code_begin = .;
@@ -208,14 +208,14 @@ SECTIONS
   __fast_text_size = SIZEOF(.fast_text);
   __fast_text_end = __fast_text_begin + __fast_text_size;
 
-  .user : AT(ORIGIN(m_user))
+  .user (NOLOAD) : AT(ORIGIN(m_user))
   {
     . = ALIGN(4);
     *(.user)
     . = ALIGN(4);
   } > m_user
 
-  .interrupts_ram :
+  .interrupts_ram (NOLOAD) :
   {
     . = ALIGN(4);
     __VECTOR_RAM__ = .;
@@ -228,7 +228,7 @@ SECTIONS
   __VECTOR_RAM = __VECTOR_RAM__;
   __RAM_VECTOR_TABLE_SIZE_BYTES = __interrupts_ram_end__ - __interrupts_ram_start__;
 
-    .fast_data :
+    .fast_data (NOLOAD) : AT(ORIGIN(m_fast_data))
     {
       . = ALIGN(4);
       *(.fast_data)
@@ -236,7 +236,7 @@ SECTIONS
     } > m_fast_data
 
   /* Uninitialized data section */
-  .bss :
+  .bss (NOLOAD) :
   {
     /* This is used by the startup in order to initialize the .bss section */
     . = ALIGN(4);
@@ -253,7 +253,7 @@ SECTIONS
     __END_BSS = .;
   } > m_data
 
-  .heap :
+  .heap (NOLOAD) :
   {
     . = ALIGN(8);
     __end__ = .;
@@ -266,13 +266,13 @@ SECTIONS
     __heap_limit_rtos = .;
   } > m_data
 
-  .band :
+  .band (NOLOAD) :
   {
     . = ALIGN(8);
     *(.band)
   } > m_data
 
-  .stack :
+  .stack (NOLOAD) :
   {
     . = ALIGN(8);
     . += STACK_SIZE;

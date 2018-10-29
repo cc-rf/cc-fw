@@ -4,7 +4,7 @@ set(FW_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 
 include(armgcc)
 
-set(CFLAGS_STD "-std=gnu11 -Wall -D_GNU_SOURCE")
+set(CFLAGS_STD "-std=gnu11 -Wall -D_GNU_SOURCE -fstack-usage -Wstack-usage=512")
 set(CFLAGS_STD_DEBUG "-O0 -g3 -D_DEBUG=1 -DDEBUG")
 set(CFLAGS_STD_RELEASE "-Os -g0 -D_DEBUG=0 -flto")
 
@@ -67,11 +67,27 @@ add_executable(${TARGET} ALIAS ${FW_PROJECT_TARGET})
 
 add_custom_target(
         fw_hex
-        COMMAND ${CMAKE_OBJCOPY} -O ihex "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.hex"
+        COMMAND ${CMAKE_OBJCOPY} -O ihex -S "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.hex"
+        COMMAND size -A -d "${PROJECT_NAME}.hex"
         BYPRODUCTS "${PROJECT_NAME}.hex"
         WORKING_DIRECTORY "${BUILD_ROOT}"
 )
 
+add_custom_target(
+        fw_bin
+        COMMAND ${CMAKE_OBJCOPY} -O binary -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.bin"
+        COMMAND size -A -d "${PROJECT_NAME}.bin"
+        BYPRODUCTS "${PROJECT_NAME}.bin"
+        WORKING_DIRECTORY "${BUILD_ROOT}"
+)
+
+add_custom_target(
+        fw_srec
+        COMMAND ${CMAKE_OBJCOPY} -O srec -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.srec"
+        COMMAND size -A -d "${PROJECT_NAME}.srec"
+        BYPRODUCTS "${PROJECT_NAME}.srec"
+        WORKING_DIRECTORY "${BUILD_ROOT}"
+)
 
 # https://github.com/energia/Energia/wiki/FLASH-and-estimated-RAM-Usage
 # text + data = flash
@@ -79,6 +95,7 @@ add_custom_target(
 add_custom_target(
         fw_siz
         COMMAND ${CMAKE_OBJSIZE} --format=berkeley --totals "$<TARGET_FILE:${TARGET}>"
+        COMMAND size -A -d "$<TARGET_FILE:${TARGET}>"
         WORKING_DIRECTORY "${BUILD_ROOT}"
 )
 

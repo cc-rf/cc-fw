@@ -33,21 +33,22 @@ typedef struct __packed {
 
 } phy_stat_t;
 
-void phy_stat(phy_t phy, phy_stat_t *stat);
-void phy_sync(phy_t phy, bool *resy);
+void phy_stat(phy_t phy, phy_stat_t *stat) __nonnull_all;
+u32 phy_task_stack_usage(phy_t phy) __nonnull_all;
+void phy_sync(phy_t phy, bool *resy) __nonnull((1));
 
-chan_id_t phy_chan_real(phy_t phy, u32 *freq);
-chan_id_t phy_chan(phy_t phy);
-u32 phy_freq(phy_t phy, chan_id_t chan);
-void phy_hops(phy_t phy, chan_id_t chan[]);
+chan_id_t phy_chan_real(phy_t phy, u32 *freq) __nonnull((1));
+chan_id_t phy_chan(phy_t phy) __nonnull_all;
+u32 phy_freq(phy_t phy, chan_id_t chan) __nonnull_all;
+void phy_hops(phy_t phy, chan_id_t chan[]) __nonnull_all;
 
-bool phy_boss(phy_t phy);
-phy_cell_t phy_cell(phy_t phy);
-bool phy_hgm(phy_t phy);
-u8 phy_pwr(phy_t phy);
+bool phy_boss(phy_t phy) __nonnull_all;
+phy_cell_t phy_cell(phy_t phy) __nonnull_all;
+bool phy_hgm(phy_t phy) __nonnull_all;
+u8 phy_pwr(phy_t phy) __nonnull_all;
 
-bool phy_diag_boss(phy_t phy, bool boss, bool nosync);
-bool phy_diag_chan(phy_t phy, chan_id_t chan, u32 *freq);
-bool phy_diag_cw(phy_t phy, bool cw);
-bool phy_diag_pwr(phy_t phy, u8 pwr);
-bool phy_diag_hgm(phy_t phy, bool hgm);
+bool phy_diag_boss(phy_t phy, bool boss, bool nosync) __nonnull_all;
+bool phy_diag_chan(phy_t phy, chan_id_t chan, u32 *freq) __nonnull((1));
+bool phy_diag_cw(phy_t phy, bool cw) __nonnull_all;
+bool phy_diag_pwr(phy_t phy, u8 pwr) __nonnull_all;
+bool phy_diag_hgm(phy_t phy, bool hgm) __nonnull_all;

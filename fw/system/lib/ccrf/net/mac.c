@@ -25,8 +25,8 @@
 #define MAC_TXQ_SIZE            (MAC_TXQ_COUNT)
 #define MAC_RXQ_SIZE            7
 
-#define MAC_TX_TASK_STACK_SIZE  (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
-#define MAC_RX_TASK_STACK_SIZE  (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
+#define MAC_TX_TASK_STACK_SIZE  ((512) / sizeof(StackType_t))
+#define MAC_RX_TASK_STACK_SIZE  ((768) / sizeof(StackType_t))
 
 #define MAC_NOTIFY_ACK          (1u<<10)
 
@@ -209,6 +209,18 @@ mac_addr_t mac_addr(mac_t mac)
 void mac_stat(mac_t mac, mac_stat_t *stat)
 {
     *stat = mac->stat;
+}
+
+
+u32 mac_task_tx_stack_usage(mac_t mac)
+{
+    return (MAC_TX_TASK_STACK_SIZE - uxTaskGetStackHighWaterMark(mac->task)) * sizeof(StackType_t);
+}
+
+
+u32 mac_task_rx_stack_usage(mac_t mac)
+{
+    return (MAC_RX_TASK_STACK_SIZE - uxTaskGetStackHighWaterMark(mac->rx_task)) * sizeof(StackType_t);
 }
 
 

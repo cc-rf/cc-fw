@@ -443,7 +443,7 @@ static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t ac
 
 static void net_mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta)
 {
-    net_t net = &nets[rdio_id(phy_rdio(mac_phy(mac)))]; assert(net);
+    net_t net = &nets[rdio_id(phy_rdio(mac_phy(mac)))];
 
     if (flag != NET_MAC_FLAG_NETLAYER) {
         // passthrough
