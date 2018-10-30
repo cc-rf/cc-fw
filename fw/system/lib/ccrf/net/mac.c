@@ -19,7 +19,7 @@
 #define MAC_PEER_MAX            64
 
 #define MAC_PEND_TIME           10
-#define MAC_PEND_RETRY          5
+#define MAC_PEND_RETRY          10
 
 #define MAC_TXQ_COUNT           7 // This should eventually reflect the number of threads waiting on messages
 #define MAC_TXQ_SIZE            (MAC_TXQ_COUNT)
