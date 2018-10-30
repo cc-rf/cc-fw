@@ -90,8 +90,8 @@ static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t ac
 static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta) __ccrf_code;
 static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static void net_peer_bcast(net_t net);
-static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add);
-static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta);
+static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add) __ccrf_code;
+static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta) __ccrf_code;
 static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, net_peer_info_t *peers);
 static void net_peer_expire(net_t net, net_time_t time);
 static void net_timer(TimerHandle_t timer);
@@ -150,7 +150,7 @@ net_t net_init(net_config_t *config)
 }
 
 
-net_time_t net_time(net_t net)
+net_time_t net_time(void)
 {
     return CCRF_CLOCK_SEC(ccrf_clock());
 }
@@ -199,7 +199,7 @@ net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t
 
     if (extra) peers = (net_peer_info_t *) &((u8 *)peers)[extra];
 
-    net_time_t now = net_time(net);
+    net_time_t now = net_time();
 
     list_for_each_entry(peer, &net->peer, item) {
         peers[next] = peer->info;
@@ -371,7 +371,7 @@ static void stat_tx_add(net_t net, net_size_t size, mac_size_t rslt)
     if (rslt) {
         net->stat.tx.count++;
         net->stat.tx.bytes += size;
-        net->last.send = net_time(net);
+        net->last.send = net_time();
     } else {
         net->stat.tx.errors++;
     }
@@ -478,7 +478,7 @@ static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t
 
     net->stat.rx.count++;
     net->stat.rx.bytes += size - sizeof(net_mesg_t);
-    net->last.recv = net_time(net);
+    net->last.recv = net_time();
 
     net_txni_t *txni;
 
@@ -519,7 +519,7 @@ static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_
 
 static void net_peer_bcast(net_t net)
 {
-    net_time_t now = net_time(net);
+    net_time_t now = net_time();
 
     if ((now - net->peer_bcast_last) <= 5) return;
     if ((now - net->last.recv) < 5) return;
@@ -559,7 +559,7 @@ static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add)
 
     peer->info.addr = net_addr(net);
     peer->info.peer = addr;
-    peer->info.last = net_time(net);
+    peer->info.last = net_time();
 
     INIT_LIST_HEAD(&peer->peer);
 
@@ -574,7 +574,7 @@ static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add)
 static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta)
 {
     net_peer_t *peer = net_peer_get(net, addr, true);
-    peer->info.last = net_time(net);
+    peer->info.last = net_time();
     peer->info.meta = meta;
 }
 
@@ -582,7 +582,7 @@ static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta)
 static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, net_peer_info_t *peers)
 {
     net_peer_t *peer = net_peer_get(net, addr, true);
-    net_time_t now = net_time(net);
+    net_time_t now = net_time();
     net_peer_t *peeri;
     bool found;
 
@@ -643,7 +643,7 @@ static void net_peer_expire(net_t net, net_time_t time)
 static void net_timer(TimerHandle_t timer)
 {
     net_t net = pvTimerGetTimerID(timer);
-    net_time_t now = net_time(net);
+    net_time_t now = net_time();
     net_peer_expire(net, now);
     net_peer_bcast(net);
 }
