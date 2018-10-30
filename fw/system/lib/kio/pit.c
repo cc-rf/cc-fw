@@ -29,17 +29,22 @@ static inline void pit_clear(pit_t pit);
 
 static s32 pit_used = 0;
 static u32 bus_freq;
+static bool pit_initialized = false;
 
 static struct pit pits[PIT_COUNT] __fast_data;
 
 void pit_init(void)
 {
-    bus_freq = CLOCK_GetBusClkFreq();
+    if (!pit_initialized) {
+        pit_initialized = true;
 
-    memset(pits, 0, sizeof(struct pit) * PIT_COUNT);
+        bus_freq = CLOCK_GetBusClkFreq();
 
-    for (u8 i = 0; i < PIT_COUNT; ++i) {
-        pits[i].chnl = PIT_CHNL(i);
+        memset(pits, 0, sizeof(struct pit) * PIT_COUNT);
+
+        for (u8 i = 0; i < PIT_COUNT; ++i) {
+            pits[i].chnl = PIT_CHNL(i);
+        }
     }
 }
 
