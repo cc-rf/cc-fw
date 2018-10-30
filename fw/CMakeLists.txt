@@ -6,7 +6,7 @@ include(armgcc)
 
 set(CFLAGS_STD "-std=gnu11 -Wall -D_GNU_SOURCE -fstack-usage -Wstack-usage=512")
 set(CFLAGS_STD_DEBUG "-O0 -g3 -D_DEBUG=1 -DDEBUG")
-set(CFLAGS_STD_RELEASE "-Os -g0 -D_DEBUG=0 -flto")
+set(CFLAGS_STD_RELEASE "-O3 -g0 -D_DEBUG=0")
 
 set(CFLAGS_KINETIS "-fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections" )
 set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16" )
