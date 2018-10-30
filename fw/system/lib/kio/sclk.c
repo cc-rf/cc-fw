@@ -8,15 +8,19 @@
 
 static void sclk_pit_cycle(pit_t pit, void *param);
 
+static bool sclk_initialized = false;
+static pit_t sclk_pit[2] __fast_data;
 
-static pit_t sclk_pit[2] = {NULL};
-
-static volatile pit_nsec_t sclk_high_value = 0;
+static volatile pit_nsec_t sclk_high_value __fast_data;
 
 
 void sclk_init(void)
 {
-    if (!sclk_pit[0]) {
+    if (!sclk_initialized) {
+        sclk_initialized = true;
+
+        sclk_high_value = 0;
+
         pit_init();
 
         sclk_pit[0] = pit_alloc(&(pit_cfg_t){

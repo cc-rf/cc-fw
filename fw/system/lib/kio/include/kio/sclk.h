@@ -8,4 +8,4 @@
 typedef u64 sclk_t;
 
 void sclk_init(void);
-sclk_t sclk_time(void);
+sclk_t sclk_time(void) __fast_code;
