@@ -35,12 +35,11 @@ size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame)
 }
 
 
-size_t serf_decode(u8 *data, size_t *size, serf_t *frame, size_t limit)
+size_t serf_decode(u8 *data, size_t *size, serf_t *frame)
 {
     assert(size);
     assert(data);
     assert(frame);
-    assert(limit >= *size);
 
     size_t frame_size;
 

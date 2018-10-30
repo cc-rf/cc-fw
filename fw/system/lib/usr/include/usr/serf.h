@@ -32,7 +32,6 @@ size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame);
  * @param data Input buffer.
  * @param size Input buffer size, updated to indicate leftover amount on successful decode.
  * @param frame Output buffer for decoded frame.
- * @param limit Maximum input/output buffer size.
  * @return Size of decoded frame, if any.
  */
-size_t serf_decode(u8 *data, size_t *size, serf_t *frame, size_t limit);
+size_t serf_decode(u8 *data, size_t *size, serf_t *frame);

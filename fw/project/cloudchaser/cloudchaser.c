@@ -178,6 +178,14 @@ typedef struct __packed {
 } code_led_t;
 
 
+typedef struct {
+    size_t used;
+    size_t size;
+    u8 *data;
+
+} usb_read_t;
+
+
 extern bool pflag_set(void);
 extern bool uflag1_set(void);
 extern bool uflag2_set(void);
@@ -219,8 +227,7 @@ static mac_t macs[CLOUDCHASER_RDIO_COUNT];
 
 static code_status_t status;
 
-static size_t usb_in_size[USB_CDC_INSTANCE_COUNT] = {0};
-static u8 usb_in_data[USB_CDC_INSTANCE_COUNT][USB_IN_DATA_MAX];
+static usb_read_t usb_read[USB_CDC_INSTANCE_COUNT] = {{0}};
 
 static const net_path_t rf_uart_path = {
         .addr = NET_ADDR_BCST,
@@ -473,20 +480,24 @@ void usb_recv(u8 port, size_t size, u8 *data)
 {
     //itm_printf(0, "usb[%i] rx: size=%lu\r\n", port, size);
 
-    if (!size || !data) return;
+    usb_read_t *read = &usb_read[port];
 
-    if ((size + usb_in_size[port]) > USB_IN_DATA_MAX) {
-        // TODO: Also guarantee that size parameter does not exceed limit
-        itm_printf(0, "usb: input overflow, trashing %u bytes\n", usb_in_size[port]);
-        usb_in_size[port] = 0;
+    if ((read->used + size) > read->size) {
+        read->size = (read->used + size) * 3 / 2;
+        u8 *new = pvPortMalloc(read->size);
+        if (read->used) memcpy(new, read->data, read->used);
+        memcpy(&new[read->used], data, size);
+        read->used += size;
+        if (read->data) vPortFree(read->data);
+        read->data = new;
+    } else {
+        memcpy(&read->data[read->used], data, size);
+        read->used += size;
     }
 
-    memcpy(&usb_in_data[port][usb_in_size[port]], data, size);
-    usb_in_size[port] += size;
-
     if (port == SERF_USB_PORT) {
-        serf_t *frame = pvPortMalloc(sizeof(serf_t) + usb_in_size[port] + 1);
-        size_t frame_size = serf_decode(usb_in_data[port], &usb_in_size[port], frame, usb_in_size[port] + 1);
+        serf_t *frame = pvPortMalloc(sizeof(serf_t) + read->used + 1);
+        size_t frame_size = serf_decode(read->data, &read->used, frame);
 
         if (frame_size) {
             frame_recv(port, frame, frame_size);
@@ -495,31 +506,31 @@ void usb_recv(u8 port, size_t size, u8 *data)
         vPortFree(frame);
 
     } else if (port == UART_USB_PORT) {
-        rf_uart_write(usb_in_size[port], usb_in_data[port]);
-        rf_uart_send((net_size_t) usb_in_size[port], usb_in_data[port]);
-        usb_in_size[port] = 0;
+        rf_uart_write(read->used, read->data);
+        rf_uart_send((net_size_t) read->used, read->data);
+        read->used = 0;
 
     } else if (port == CONSOLE_USB_PORT) {
         const static char nl[] = "\r\n\0";
         static volatile u8 esc = 0;
         static volatile u8 escb = 0;
-        size_t scan_size = usb_in_size[port] - size;
+        size_t scan_size = read->used - size;
 
-        for (size_t i = scan_size; i < usb_in_size[port]; ++i) {
-            if (usb_in_data[port][i] == '\x1B' || usb_in_data[port][i] == '\x08' || usb_in_data[port][i] == '\x7E') {
-                if (usb_in_data[port][i] == '\x1B') esc = 1;
-                --usb_in_size[port];
-                if (i >= usb_in_size[port]) continue;
-                memcpy(&usb_in_data[port][i], &usb_in_data[port][i+1], usb_in_size[port] - i);
+        for (size_t i = scan_size; i < read->used; ++i) {
+            if (read->data[i] == '\x1B' || read->data[i] == '\x08' || read->data[i] == '\x7E') {
+                if (read->data[i] == '\x1B') esc = 1;
+                --read->used;
+                if (i >= read->used) continue;
+                memcpy(&read->data[i], &read->data[i+1], read->used - i);
                 --i;
                 continue;
             }
 
-            if (esc && (usb_in_data[port][i] == '[')) {
+            if (esc && (read->data[i] == '[')) {
                 ++escb;
-                --usb_in_size[port];
-                if (i >= usb_in_size[port]) continue;
-                memcpy(&usb_in_data[port][i], &usb_in_data[port][i+1], usb_in_size[port] - i);
+                --read->used;
+                if (i >= read->used) continue;
+                memcpy(&read->data[i], &read->data[i+1], read->used - i);
                 --i;
                 continue;
             } else {
@@ -528,23 +539,23 @@ void usb_recv(u8 port, size_t size, u8 *data)
 
             if (escb && esc) {
                 if (!--escb) esc = 0;
-                --usb_in_size[port];
-                if (i >= usb_in_size[port]) continue;
-                memcpy(&usb_in_data[port][i], &usb_in_data[port][i+1], usb_in_size[port] - i);
+                --read->used;
+                if (i >= read->used) continue;
+                memcpy(&read->data[i], &read->data[i+1], read->used - i);
                 --i;
                 continue;
             }
 
-            if (usb_in_data[port][i] == '\r' || usb_in_data[port][i] == '\n') {
+            if (read->data[i] == '\r' || read->data[i] == '\n') {
                 usb_write_raw(port, (u8 *) nl, 2);
-                usb_in_data[port][i] = '\0';
-                console_input((char *) usb_in_data[port]);
-                usb_in_size[port] -= i + 1;
+                read->data[i] = '\0';
+                console_input((char *) read->data);
+                read->used -= i + 1;
 
-                if (usb_in_size[port])
-                    memcpy(usb_in_data[port], &usb_in_data[port][i+1], usb_in_size[port]);
+                if (read->used)
+                    memcpy(read->data, &read->data[i+1], read->used);
             } else {
-                usb_write_raw(port, &usb_in_data[port][i], 1);
+                usb_write_raw(port, &read->data[i], 1);
             }
         }
     }
@@ -820,7 +831,7 @@ static void handle_code_peer(u8 port, size_t size, u8 *data)
     code_peer_t *code_peer = (code_peer_t *)peers;
 
     code_peer->addr = net_addr(net);
-    code_peer->time = net_time(net);
+    code_peer->time = net_time();
 
     write_code_peer(port, count * sizeof(net_peer_info_t), code_peer);
 
