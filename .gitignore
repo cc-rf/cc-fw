@@ -3,8 +3,9 @@ build/
 out/
 pub/
 tmp/
-*.log
+archive/
 out/
+*.log
 *.pyc
 
 # https://github.com/github/gitignore/blob/master/Global/Windows.gitignore

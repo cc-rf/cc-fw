@@ -53,9 +53,10 @@ if(DEFINED CONFIG_FW_BOARD)
 endif()
 
 add_subdirectory(board)
+add_subdirectory(freertos)
 add_subdirectory(kinetis)
+add_subdirectory(lib)
 add_subdirectory(project)
-add_subdirectory(system)
 
 set_target_properties(
         ${FW_PROJECT_TARGET} PROPERTIES
