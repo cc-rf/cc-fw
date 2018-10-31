@@ -6,7 +6,6 @@
 
 static void handle_code_mac_send(u8 port, size_t size, u8 *data);
 static void handle_code_send(u8 port, size_t size, u8 *data);
-static void handle_code_mesg(u8 port, size_t size, u8 *data);
 static void handle_code_trxn(u8 port, size_t size, u8 *data);
 static void handle_code_resp(u8 port, size_t size, u8 *data);
 static void handle_code_reset(u8 port, size_t size, u8 *data);
@@ -40,9 +39,6 @@ void ccio_recv(u8 port, serf_t *frame, size_t size)
 
         case CODE_ID_SEND:
             return handle_code_send(port, size, frame->data);
-
-        case CODE_ID_MESG:
-            return handle_code_mesg(port, size, frame->data);
 
         case CODE_ID_TRXN:
             return handle_code_trxn(port, size, frame->data);
@@ -132,27 +128,12 @@ static void handle_code_send(u8 port __unused, size_t size, u8 *data)
             }
     };
 
-    net_send(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
-}
-
-
-static void handle_code_mesg(u8 port, size_t size, u8 *data)
-{
-    assert(size >= sizeof(code_send_t)); assert(data);
-
-    code_send_t *const code_send = (code_send_t *)data;
-
-    net_path_t path = {
-            .addr = code_send->addr,
-            .info = {
-                    .port = code_send->port,
-                    .type = code_send->type
-            }
-    };
-
-    net_size_t sent = net_mesg(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
-
-    write_code_mesg_sent(port, sent);
+    if (code_send->mesg) {
+        net_size_t sent = net_mesg(nets[0], path, (net_size_t) size - sizeof(code_send_t), code_send->data);
+        write_code_mesg_sent(port, sent);
+    } else {
+        net_send(nets[0], path, (net_size_t) size - sizeof(code_send_t), code_send->data);
+    }
 }
 
 

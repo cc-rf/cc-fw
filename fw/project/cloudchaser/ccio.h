@@ -32,7 +32,6 @@
 #define CODE_ID_MAC_SEND        2
 #define CODE_ID_MAC_RECV        3
 #define CODE_ID_SEND            4
-#define CODE_ID_MESG            5
 #define CODE_ID_MESG_SENT       5
 #define CODE_ID_RECV            6
 #define CODE_ID_TRXN            7
@@ -102,6 +101,7 @@ typedef struct __packed {
     net_addr_t addr;
     net_port_t port;
     net_type_t type;
+    u8 mesg;
     u8 data[];
 
 } code_send_t;
