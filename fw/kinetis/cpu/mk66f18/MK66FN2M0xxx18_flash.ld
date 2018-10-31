@@ -253,6 +253,12 @@ SECTIONS
     __END_BSS = .;
   } > m_data
 
+  .band (NOLOAD) :
+  {
+    . = ALIGN(8);
+    *(.band)
+  } > m_data
+
   .heap (NOLOAD) :
   {
     . = ALIGN(8);
@@ -264,12 +270,6 @@ SECTIONS
     __heap_limit = .; /* Add for _sbrk */
     *(.heap)
     __heap_limit_rtos = .;
-  } > m_data
-
-  .band (NOLOAD) :
-  {
-    . = ALIGN(8);
-    *(.band)
   } > m_data
 
   .stack (NOLOAD) :
