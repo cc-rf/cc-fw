@@ -235,7 +235,8 @@ pit_nsec_t pit_ltt_current(void)
 
 // TODO: Debug check of hander only?
 #define PITN_IRQHandler(N) \
-    __attribute__((interrupt,used)) void PIT##N##_IRQHandler(void) \
+    __attribute__((interrupt,used)) void PIT##N##_IRQHandler(void) __fast_code; \
+    void PIT##N##_IRQHandler(void) \
     { \
         PIT_ClearStatusFlags(PIT, (pit_chnl_t)N, kPIT_TimerFlag); \
         const static pit_t const pit = &pits[PIT_CHNL_IDX(N)]; \
