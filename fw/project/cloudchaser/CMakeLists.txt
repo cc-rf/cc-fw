@@ -8,6 +8,7 @@ add_executable(
         cloudchaser.c
         console.c
         rf_uart.c
+        ccio.c
         usb/composite.c
         usb/usb_device_cdc_acm.c
         usb/usb_device_ch9.c

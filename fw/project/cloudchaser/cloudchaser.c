@@ -2,6 +2,7 @@
 #include "led.h"
 #include "console.h"
 #include "rf_uart.h"
+#include "ccio.h"
 
 #include <board.h>
 #include <virtual_com.h>
@@ -15,167 +16,6 @@
 #include <ccrf/net.h>
 
 #include <fabi.h>
-
-
-#define CLOUDCHASER_RDIO_COUNT  1
-
-
-#define USB_IN_DATA_MAX     (8192 + 64)
-
-#define CODE_ID_ECHO            0
-#define CODE_ID_STATUS          1
-#define CODE_ID_MAC_SEND        2
-#define CODE_ID_MAC_RECV        3
-#define CODE_ID_SEND            4
-#define CODE_ID_MESG            5
-#define CODE_ID_MESG_SENT       5
-#define CODE_ID_RECV            6
-#define CODE_ID_TRXN            7
-#define CODE_ID_RESP            8
-#define CODE_ID_EVNT            9
-#define CODE_ID_PEER            10
-#define CODE_ID_RESET           17
-#define CODE_ID_UART            26
-#define CODE_ID_LED             27
-#define CODE_ID_RAINBOW         29
-
-#define RESET_MAGIC             0xD1E00D1E
-
-#define CODE_SEND_FLAG_WAIT     1
-
-#define CCIO_PORT               0x01E0
-#define CCIO_LED                0x0B
-#define CCIO_UART               0x0D
-
-#if CLOUDCHASER_FCC_MODE
-    #if CLOUDCHASER_UART_MODE
-        #error UART mode and FCC mode cannot coexist.
-    #endif
-    #define SERF_USB_PORT       1
-    #define UART_USB_PORT       2
-#else
-    #if CLOUDCHASER_UART_MODE
-        #define SERF_USB_PORT       1
-        #define UART_USB_PORT       0
-    #else
-        #define SERF_USB_PORT       0
-        #define UART_USB_PORT       1
-    #endif
-#endif
-
-#define CC_MAC_FLAG             0
-
-#define RF_UART_ID              0
-#define RF_UART_BAUD            115200
-
-
-typedef struct __packed {
-    u32 version;
-    u64 serial;
-    u32 uptime;
-    u16 macid;
-    u8 cell;
-    u8 rdid;
-    u32 phy_task_stack_usage;
-    u32 mac_task_stack_usage_tx;
-    u32 mac_task_stack_usage_rx;
-    u32 heap_free;
-    u32 heap_usage;
-
-    struct __packed {
-        phy_stat_t phy;
-        mac_stat_t mac;
-        net_stat_t net;
-
-    } stat;
-
-} code_status_t;
-
-typedef struct __packed {
-    u32 magic;
-
-} code_reset_t;
-
-typedef struct __packed {
-    u16 addr;
-    u16 peer;
-    u16 dest;
-    u16 size;
-    pkt_meta_t meta;
-    u8 data[];
-
-} code_mac_recv_t;
-
-typedef struct __packed {
-    u8 type;
-    u8 flag;
-    u16 addr;
-    u16 dest;
-    u16 size;
-    u8 data[];
-
-} code_mac_send_t;
-
-typedef struct __packed {
-    net_addr_t addr;
-    net_port_t port;
-    net_type_t type;
-    u8 data[];
-
-} code_send_t;
-
-typedef struct __packed {
-    net_addr_t addr;
-    net_addr_t dest;
-    net_port_t port;
-    net_type_t type;
-    u8 data[];
-
-} code_recv_t;
-
-typedef struct __packed {
-    net_addr_t addr;
-    net_port_t port;
-    net_type_t type;
-    net_time_t wait;
-    u8 data[];
-
-} code_trxn_t;
-
-typedef struct __packed {
-    u16 addr;
-    u32 stat;
-
-} code_mac_send_stat_t;
-
-typedef struct __packed {
-    net_addr_t addr;
-    net_port_t port;
-    net_type_t type;
-    u8 data[];
-
-} code_trxn_stat_t;
-
-typedef struct __packed {
-    net_event_t event;
-    net_addr_t addr;
-    net_event_peer_action_t action;
-
-} code_evnt_peer_t;
-
-typedef struct __packed {
-    net_addr_t addr;
-    net_time_t time;
-    net_peer_info_t peer[];
-
-} code_peer_t;
-
-typedef struct __packed {
-    net_addr_t addr;
-    fabi_msg_t msg;
-    fabi_rgb_t data[];
-
-} code_led_t;
 
 
 typedef struct {
@@ -196,36 +36,11 @@ static void net_evnt(net_t net, net_event_t event, void *info);
 static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data, pkt_meta_t meta);
 static void sync_hook(chan_id_t chan) __fast_code;
 
-static void frame_recv(u8 port, serf_t *frame, size_t size);
 
-static void handle_code_mac_send(u8 port, size_t size, u8 *data);
-static void handle_code_send(u8 port, size_t size, u8 *data);
-static void handle_code_mesg(u8 port, size_t size, u8 *data);
-static void handle_code_trxn(u8 port, size_t size, u8 *data);
-static void handle_code_resp(u8 port, size_t size, u8 *data);
-static void handle_code_reset(u8 port, size_t size, u8 *data);
-static void handle_code_status(u8 port, size_t size, u8 *data);
-static void handle_code_peer(u8 port, size_t size, u8 *data);
-static void handle_code_echo(u8 port, size_t size, u8 *data);
-static void handle_code_uart(size_t size, u8 *data);
-static void handle_code_rainbow(size_t size, u8 *data);
-static void handle_code_led(size_t size, u8 *data);
+net_t nets[CLOUDCHASER_RDIO_COUNT];
+mac_t macs[CLOUDCHASER_RDIO_COUNT];
 
-static void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta);
-static void write_code_recv(net_path_t path, net_addr_t dest, size_t size, u8 data[]);
-static void write_code_evnt(net_size_t size, u8 data[]);
-static void write_code_status(u8 port, code_status_t *code_status);
-static void write_code_peer(u8 port, size_t size, code_peer_t *code_peer);
-static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat);
-static void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat);
-static void write_code_mesg_sent(u8 port, net_size_t size);
-static void write_code_uart(size_t size, u8 *data);
-
-
-static net_t nets[CLOUDCHASER_RDIO_COUNT];
-static mac_t macs[CLOUDCHASER_RDIO_COUNT];
-
-static code_status_t status;
+code_status_t status;
 
 static usb_read_t usb_read[USB_CDC_INSTANCE_COUNT] = {{0}};
 
@@ -277,6 +92,7 @@ static const led_rgb_t rainbow_colors[][2] = {
 };
 
 static volatile bool sync_blink = true;
+
 
 void rainbow(void)
 {
@@ -356,17 +172,19 @@ void cloudchaser_main(void)
 
         console_init(macs[0]);
 
+    #else
+
+        rf_uart_config_t rf_uart_config = {
+                .net = nets[0],
+                .path = rf_uart_path,
+                .recv = write_code_uart,
+                .id = RF_UART_ID,
+                .baud = RF_UART_BAUD
+        };
+
+        rf_uart_init(&rf_uart_config);
+
     #endif
-
-    rf_uart_config_t rf_uart_config = {
-            .net = nets[0],
-            .path = rf_uart_path,
-            .recv = write_code_uart,
-            .id = RF_UART_ID,
-            .baud = RF_UART_BAUD
-    };
-
-    rf_uart_init(&rf_uart_config);
 
     //fabi_init();
 
@@ -495,510 +313,90 @@ void usb_recv(u8 port, size_t size, u8 *data)
         read->used += size;
     }
 
-    if (port == SERF_USB_PORT) {
-        serf_t *frame = pvPortMalloc(sizeof(serf_t) + read->used + 1);
-        size_t frame_size = serf_decode(read->data, &read->used, frame);
-
-        if (frame_size) {
-            frame_recv(port, frame, frame_size);
-        }
-
-        vPortFree(frame);
-
-    } else if (port == UART_USB_PORT) {
-        rf_uart_write(read->used, read->data);
-        rf_uart_send((net_size_t) read->used, read->data);
-        read->used = 0;
-
-    } else if (port == CONSOLE_USB_PORT) {
-        const static char nl[] = "\r\n\0";
-        static volatile u8 esc = 0;
-        static volatile u8 escb = 0;
-        size_t scan_size = read->used - size;
-
-        for (size_t i = scan_size; i < read->used; ++i) {
-            if (read->data[i] == '\x1B' || read->data[i] == '\x08' || read->data[i] == '\x7E') {
-                if (read->data[i] == '\x1B') esc = 1;
-                --read->used;
-                if (i >= read->used) continue;
-                memcpy(&read->data[i], &read->data[i+1], read->used - i);
-                --i;
-                continue;
-            }
-
-            if (esc && (read->data[i] == '[')) {
-                ++escb;
-                --read->used;
-                if (i >= read->used) continue;
-                memcpy(&read->data[i], &read->data[i+1], read->used - i);
-                --i;
-                continue;
-            } else {
-                if (esc && !escb) esc = 0;
-            }
-
-            if (escb && esc) {
-                if (!--escb) esc = 0;
-                --read->used;
-                if (i >= read->used) continue;
-                memcpy(&read->data[i], &read->data[i+1], read->used - i);
-                --i;
-                continue;
-            }
-
-            if (read->data[i] == '\r' || read->data[i] == '\n') {
-                usb_write_raw(port, (u8 *) nl, 2);
-                read->data[i] = '\0';
-                console_input((char *) read->data);
-                read->used -= i + 1;
-
-                if (read->used)
-                    memcpy(read->data, &read->data[i+1], read->used);
-            } else {
-                usb_write_raw(port, &read->data[i], 1);
-            }
-        }
-    }
-}
-
-
-static void frame_recv(u8 port, serf_t *frame, size_t size)
-{
-    if ((frame->code & SERF_CODE_PROTO_M) != SERF_CODE_PROTO_VAL) {
-        printf("(frame) invalid proto bits: size=%u code=0x%02x\r\n", size, frame->code);
-        return;
-    }
-
-    size -= sizeof(serf_t);
-    frame->code &= SERF_CODE_M;
-
-    switch (frame->code) {
-        case CODE_ID_ECHO:
-            return handle_code_echo(port, size, frame->data);
-
-        case CODE_ID_STATUS:
-            return handle_code_status(port, size, frame->data);
-
-        case CODE_ID_MAC_SEND:
-            return handle_code_mac_send(port, size, frame->data);
-
-        case CODE_ID_SEND:
-            return handle_code_send(port, size, frame->data);
-
-        case CODE_ID_MESG:
-            return handle_code_mesg(port, size, frame->data);
-
-        case CODE_ID_TRXN:
-            return handle_code_trxn(port, size, frame->data);
-
-        case CODE_ID_RESP:
-            return handle_code_resp(port, size, frame->data);
-
-        case CODE_ID_PEER:
-            return handle_code_peer(port, size, frame->data);
-
-        case CODE_ID_RESET:
-            return handle_code_reset(port, size, frame->data);
-
-        case CODE_ID_UART:
-            return handle_code_uart(size, frame->data);
-
-        case CODE_ID_RAINBOW:
-            return handle_code_rainbow(size, frame->data);
-
-        case CODE_ID_LED:
-            return handle_code_led(size, frame->data);
-
+    switch (port) {
         default:
-            printf("(frame) unknown code: size=%u code=0x%02x\r\n", size, frame->code);
-            break;
-    }
-}
+            read->used = 0;
 
+        case SERF_USB_PORT: {
+            serf_t *frame = pvPortMalloc(sizeof(serf_t) + read->used + 1);
+            size_t frame_size = serf_decode(read->data, &read->used, frame);
 
-static void handle_code_mac_send(u8 port, size_t size, u8 *data)
-{
-    assert(size >= sizeof(code_mac_send_t)); assert(data);
+            if (frame_size) ccio_recv(port, frame, frame_size);
 
-    code_mac_send_t *const code_send = (code_mac_send_t *)data;
-
-    if (code_send->size != (size - sizeof(code_mac_send_t))) {
-        printf("(send) error: size mismatch: %u != %u\r\n", code_send->size, size - sizeof(code_mac_send_t));
-        return;
-    }
-
-    for (u8 i = 0; i < CLOUDCHASER_RDIO_COUNT; ++i) {
-        if (!code_send->addr || code_send->addr == mac_addr(macs[i])) {
-            const bool wait = (code_send->flag & CODE_SEND_FLAG_WAIT) != 0;
-
-            const mac_size_t result = mac_send(
-                    macs[i],
-                    (mac_send_t) code_send->type,
-                    CC_MAC_FLAG,
-                    code_send->dest,
-                    code_send->size,
-                    code_send->data,
-                    wait
-            );
-
-            if (result) {
-                //LED_C_TOGGLE();
-                //LED_D_TOGGLE();
-            }
-
-            if (wait) {
-                code_mac_send_stat_t code_send_stat = {
-                        .addr =  mac_addr(macs[i]),
-                        .stat = (u32) result
-                };
-
-                write_code_mac_send_stat(port, &code_send_stat);
-            }
-
+            vPortFree(frame);
             break;
         }
-    }
-}
 
+        case UART_USB_PORT:
+            rf_uart_write(read->used, read->data);
+            rf_uart_send((net_size_t) read->used, read->data);
+            read->used = 0;
+            break;
 
-static void handle_code_send(u8 port __unused, size_t size, u8 *data)
-{
-    assert(size >= sizeof(code_send_t)); assert(data);
+        case CONSOLE_USB_PORT: {
+            const static char nl[] = "\r\n\0";
+            static volatile u8 esc = 0;
+            static volatile u8 escb = 0;
+            size_t scan_size = read->used - size;
 
-    code_send_t *const code_send = (code_send_t *)data;
-
-    net_path_t path = {
-            .addr = code_send->addr,
-            .info = {
-                    .mode = 0,
-                    .port = code_send->port,
-                    .type = code_send->type
-            }
-    };
-
-    net_send(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
-}
-
-
-static void handle_code_mesg(u8 port, size_t size, u8 *data)
-{
-    assert(size >= sizeof(code_send_t)); assert(data);
-
-    code_send_t *const code_send = (code_send_t *)data;
-
-    net_path_t path = {
-            .addr = code_send->addr,
-            .info = {
-                    .port = code_send->port,
-                    .type = code_send->type
-            }
-    };
-
-    net_size_t sent = net_mesg(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
-
-    write_code_mesg_sent(port, sent);
-}
-
-
-static void handle_code_trxn(u8 port, size_t size, u8 *data)
-{
-    assert(size >= sizeof(code_trxn_t)); assert(data);
-
-    code_trxn_t *const code_trxn = (code_trxn_t *)data;
-
-    if (!code_trxn->wait || code_trxn->wait > INT32_MAX) {
-        printf("(trxn) error: bad wait time %lu\r\n", code_trxn->wait);
-        return;
-    }
-
-    net_path_t path = {
-            .addr = code_trxn->addr,
-            .info = {
-                    .port = code_trxn->port,
-                    .type = code_trxn->type
-            }
-    };
-
-    net_trxn_rslt_t rslt;
-
-    net_trxn(
-            nets[0], path, (net_size_t)size - sizeof(code_trxn_t),
-            code_trxn->data, code_trxn->wait, &rslt
-    );
-
-    if (!list_empty(&rslt)) {
-        net_trxn_t *trxn;
-        code_trxn_stat_t *trxn_stat;
-
-        list_for_each_entry(trxn, &rslt, __list) {
-            trxn_stat = pvPortMalloc(trxn->size + sizeof(code_trxn_stat_t));
-
-            trxn_stat->addr = trxn->addr;
-            trxn_stat->port = path.info.port;
-            trxn_stat->type = path.info.type;
-
-            if (trxn->size) memcpy(trxn_stat->data, trxn->data, trxn->size);
-
-            write_code_trxn_stat(port, trxn->size, trxn_stat);
-
-            if (list_is_last(&trxn->__list, &rslt)) {
-                trxn_stat->addr = NET_ADDR_NONE;
-                write_code_trxn_stat(port, 0, trxn_stat);
-            }
-
-            vPortFree(trxn_stat);
-        }
-    } else {
-        code_trxn_stat_t trxn_stat = {
-                .addr = NET_ADDR_NONE,
-                .port = path.info.port,
-                .type = path.info.type
-        };
-
-        write_code_trxn_stat(port, 0, &trxn_stat);
-    }
-
-    net_trxn_rslt_free(&rslt);
-}
-
-
-static void handle_code_resp(u8 port __unused, size_t size, u8 *data)
-{
-    assert(size >= sizeof(code_send_t)); assert(data);
-
-    code_send_t *const code_send = (code_send_t *)data;
-
-    net_path_t path = {
-            .addr = code_send->addr,
-            .info = {
-                    .port = code_send->port,
-                    .type = code_send->type
-            }
-    };
-
-    net_resp(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
-}
-
-
-static void handle_code_reset(u8 port __unused, size_t size, u8 *data)
-{
-    assert(size == sizeof(code_reset_t)); assert(data);
-
-    code_reset_t *const code_reset = (code_reset_t *)data;
-
-    if (code_reset->magic == RESET_MAGIC) {
-        printf("<reset>\r\n");
-        vTaskDelay(pdMS_TO_TICKS(500));
-        NVIC_SystemReset();
-    } else {
-        printf("reset: malformed magic code\r\n");
-    }
-}
-
-
-static void handle_code_status(u8 port, size_t size, u8 *data)
-{
-    (void)size;
-    (void)data;
-
-    status.uptime = SCLK_MSEC(sclk_time());
-
-    phy_stat(mac_phy(macs[0]), &status.stat.phy);
-    mac_stat(macs[0], &status.stat.mac);
-    net_stat(nets[0], &status.stat.net);
-
-    status.phy_task_stack_usage = phy_task_stack_usage(mac_phy(macs[0]));
-    status.mac_task_stack_usage_tx = mac_task_tx_stack_usage(macs[0]);
-    status.mac_task_stack_usage_rx = mac_task_rx_stack_usage(macs[0]);
-
-    status.heap_free = xPortGetFreeHeapSize();
-    status.heap_usage = configTOTAL_HEAP_SIZE - xPortGetMinimumEverFreeHeapSize();
-
-    write_code_status(port, &status);
-}
-
-
-static void handle_code_peer(u8 port, size_t size, u8 *data)
-{
-    (void)size;
-    (void)data;
-
-    net_t net = nets[0];
-
-    net_peer_info_t *peers;
-    net_size_t count = net_peers_flat(net, sizeof(code_peer_t), true, &peers);
-
-    code_peer_t *code_peer = (code_peer_t *)peers;
-
-    code_peer->addr = net_addr(net);
-    code_peer->time = net_time();
-
-    write_code_peer(port, count * sizeof(net_peer_info_t), code_peer);
-
-    vPortFree(code_peer);
-}
-
-
-static void handle_code_echo(u8 port __unused, size_t size, u8 *data)
-{
-    if (data[size - 1] != '\n')
-        printf("(remote) %s\r\n", data);
-    else
-        printf("(remote) %s", data);
-}
-
-
-static void handle_code_uart(size_t size, u8 *data)
-{
-    rf_uart_write(size, data);
-}
-
-
-static void handle_code_rainbow(size_t size __unused, u8 *data __unused)
-{
-    rainbow();
-}
-
-
-static void handle_code_led(size_t size, u8 *data)
-{
-    code_led_t *code_led = (code_led_t *)data;
-
-    if (code_led->addr == NET_ADDR_MASK || code_led->addr == net_addr(nets[0])) {
-        return fabi_write(code_led->msg.mask, code_led->data, size - sizeof(code_led_t));
-    } else {
-        net_path_t path = {
-                .addr = code_led->addr,
-                .info = {
-                        .port = CCIO_PORT,
-                        .type = CCIO_LED
+            for (size_t i = scan_size; i < read->used; ++i) {
+                if (read->data[i] == '\x1B' || read->data[i] == '\x08' || read->data[i] == '\x7E') {
+                    if (read->data[i] == '\x1B') esc = 1;
+                    --read->used;
+                    if (i >= read->used) continue;
+                    memcpy(&read->data[i], &read->data[i+1], read->used - i);
+                    --i;
+                    continue;
                 }
-        };
 
-        net_size_t net_size = (net_size_t)(size - sizeof(code_led_t) + sizeof(fabi_msg_t));
+                if (esc && (read->data[i] == '[')) {
+                    ++escb;
+                    --read->used;
+                    if (i >= read->used) continue;
+                    memcpy(&read->data[i], &read->data[i+1], read->used - i);
+                    --i;
+                    continue;
+                } else {
+                    if (esc && !escb) esc = 0;
+                }
 
-        net_send(nets[0], path, net_size, (u8 *)&code_led->msg);
-    }
-}
+                if (escb && esc) {
+                    if (!--escb) esc = 0;
+                    --read->used;
+                    if (i >= read->used) continue;
+                    memcpy(&read->data[i], &read->data[i+1], read->used - i);
+                    --i;
+                    continue;
+                }
 
+                if (read->data[i] == '\r' || read->data[i] == '\n') {
+                    usb_write_raw(port, (u8 *) nl, 2);
+                    read->data[i] = '\0';
+                    console_input((char *) read->data);
+                    read->used -= i + 1;
 
-static void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
-{
-    if (usb_attached(SERF_USB_PORT)) {
-        code_mac_recv_t *code_recv = pvPortMalloc(sizeof(code_mac_recv_t) + size);
+                    if (read->used)
+                        memcpy(read->data, &read->data[i+1], read->used);
+                } else {
+                    usb_write_raw(port, &read->data[i], 1);
+                }
+            }
 
-        code_recv->addr = addr;
-        code_recv->peer = peer;
-        code_recv->dest = dest;
-        code_recv->size = (u16) size;
-        code_recv->meta = meta;
-
-        if (size) memcpy(code_recv->data, data, size);
-        size += sizeof(code_mac_recv_t);
-
-        u8 *frame;
-        size = serf_encode(CODE_ID_MAC_RECV, (u8 *) code_recv, size, &frame);
-
-        vPortFree(code_recv);
-
-        if (frame) {
-            usb_write_direct(SERF_USB_PORT, frame, size);
+            break;
         }
     }
-}
 
-
-static void write_code_recv(net_path_t path, net_addr_t dest, size_t size, u8 data[])
-{
-    if (usb_attached(SERF_USB_PORT)) {
-        code_recv_t *code_recv = pvPortMalloc(sizeof(code_recv_t) + size);
-
-        code_recv->addr = path.addr;
-        code_recv->dest = dest;
-        code_recv->port = path.info.port;
-        code_recv->type = path.info.type;
-
-        if (size) memcpy(code_recv->data, data, size);
-        size += sizeof(code_recv_t);
-
-        u8 *frame;
-        size = serf_encode(CODE_ID_RECV, (u8 *) code_recv, size, &frame);
-
-        vPortFree(code_recv);
-
-        if (frame) {
-            usb_write_direct(SERF_USB_PORT, frame, size);
+    if ((read->size - read->used) > 4096) {
+        if (read->used) {
+            u8 *new = pvPortMalloc(read->used);
+            memcpy(new, read->data, read->used);
+            vPortFree(read->data);
+            read->size = read->used;
+            read->data = new;
+        } else {
+            read->size = 0;
+            vPortFree(read->data);
+            read->data = NULL;
         }
     }
-}
-
-
-static void write_code_evnt(net_size_t size, u8 data[])
-{
-    if (usb_attached(SERF_USB_PORT)) {
-        u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_EVNT, data, size, &frame);
-        if (frame) usb_write_direct(SERF_USB_PORT, frame, fsize);
-    }
-}
-
-
-static void write_code_status(u8 port, code_status_t *code_status)
-{
-    if (usb_attached(port)) {
-        u8 *frame;
-        const size_t size = serf_encode(CODE_ID_STATUS, (u8 *) code_status, sizeof(code_status_t), &frame);
-        if (frame) usb_write_direct(port, frame, size);
-    }
-}
-
-
-static void write_code_peer(u8 port, size_t size, code_peer_t *code_peer)
-{
-    u8 *frame;
-    const size_t fsize = serf_encode(CODE_ID_PEER, (u8 *)code_peer, size + sizeof(code_peer_t), &frame);
-    if (frame) usb_write_direct(port, frame, fsize);
-}
-
-
-static void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat)
-{
-    if (usb_attached(port)) {
-        u8 *frame;
-        const size_t size = serf_encode(CODE_ID_MAC_SEND, (u8 *) code_send_stat, sizeof(code_mac_send_stat_t), &frame);
-        if (frame) usb_write_direct(port, frame, size);
-    }
-}
-
-
-static void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat)
-{
-    if (usb_attached(port)) {
-        u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_TRXN, (u8 *) code_trxn_stat, size + sizeof(code_trxn_stat_t), &frame);
-        if (frame) usb_write_direct(port, frame, fsize);
-    }
-}
-
-
-static void write_code_mesg_sent(u8 port, net_size_t size)
-{
-    if (usb_attached(port)) {
-        u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_MESG_SENT, (u8 *) &size, sizeof(net_size_t), &frame);
-        if (frame) usb_write_direct(port, frame, fsize);
-    }
-}
-
-
-static void write_code_uart(size_t size, u8 *data)
-{
-    if (usb_attached(SERF_USB_PORT)) {
-        u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_UART, data, size, &frame);
-        if (frame) usb_write_direct(SERF_USB_PORT, frame, fsize);
-    }
-
-    if (usb_attached(UART_USB_PORT))
-        usb_write_raw(UART_USB_PORT, data, size);
 }
