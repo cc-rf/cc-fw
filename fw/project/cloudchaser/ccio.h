@@ -32,7 +32,7 @@
 #define CODE_ID_MAC_SEND        2
 #define CODE_ID_MAC_RECV        3
 #define CODE_ID_SEND            4
-#define CODE_ID_MESG_SENT       5
+#define CODE_ID_SEND_DONE       5
 #define CODE_ID_RECV            6
 #define CODE_ID_TRXN            7
 #define CODE_ID_RESP            8
@@ -172,5 +172,5 @@ void write_code_status(u8 port, code_status_t *code_status) __nonnull_all;
 void write_code_peer(u8 port, size_t size, code_peer_t *code_peer) __nonnull_all;
 void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat) __nonnull_all;
 void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat) __nonnull_all;
-void write_code_mesg_sent(u8 port, net_size_t size) __nonnull_all;
+void write_code_send_done(u8 port, net_size_t size) __nonnull_all;
 void write_code_uart(size_t size, u8 *data) __nonnull_all;

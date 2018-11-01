@@ -128,12 +128,14 @@ static void handle_code_send(u8 port __unused, size_t size, u8 *data)
             }
     };
 
-    if (code_send->mesg) {
-        net_size_t sent = net_mesg(nets[0], path, (net_size_t) size - sizeof(code_send_t), code_send->data);
-        write_code_mesg_sent(port, sent);
-    } else {
-        net_send(nets[0], path, (net_size_t) size - sizeof(code_send_t), code_send->data);
-    }
+    net_size_t sent;
+
+    if (code_send->mesg)
+         sent = net_mesg(nets[0], path, (net_size_t) size - sizeof(code_send_t), code_send->data);
+    else
+        sent = net_send(nets[0], path, (net_size_t) size - sizeof(code_send_t), code_send->data);
+
+    write_code_send_done(port, sent);
 }
 
 
@@ -213,7 +215,10 @@ static void handle_code_resp(u8 port __unused, size_t size, u8 *data)
             }
     };
 
-    net_resp(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
+    if (code_send->mesg)
+        net_resp(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
+    else
+        net_send(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
 }
 
 
@@ -418,11 +423,11 @@ void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_
 }
 
 
-void write_code_mesg_sent(u8 port, net_size_t size)
+void write_code_send_done(u8 port, net_size_t size)
 {
     if (usb_attached(port)) {
         u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_MESG_SENT, (u8 *) &size, sizeof(net_size_t), &frame);
+        const size_t fsize = serf_encode(CODE_ID_SEND_DONE, (u8 *) &size, sizeof(net_size_t), &frame);
         if (frame) usb_write_direct(port, frame, fsize);
     }
 }
