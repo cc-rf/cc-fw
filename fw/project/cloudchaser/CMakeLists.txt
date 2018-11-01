@@ -3,8 +3,6 @@ set(NAME fw_project_cloudchaser)
 add_executable(
         ${NAME}
         main.c
-        led.c
-        lp5562.c
         cloudchaser.c
         console.c
         rf_uart.c

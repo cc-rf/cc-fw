@@ -5,6 +5,8 @@ add_library(
         board.c
         clock_config.c
         pin_mux.c
+        led.c
+        lp5562.c
 )
 
 target_include_directories(
@@ -14,8 +16,8 @@ target_include_directories(
 
 target_link_libraries(
         ${NAME}
-        PUBLIC kinetis_sdk
-        PUBLIC kinetis_sdk_driver
+        PUBLIC usr
+        PUBLIC kio
 )
 
 target_compile_definitions(

@@ -1,7 +1,8 @@
 #pragma once
 
-#include "clock_config.h"
-#include "fsl_gpio.h"
+
+#define BOARD_XTAL0_CLK_HZ      24000000U
+#define BOARD_XTAL32K_CLK_HZ    32768U
 
 #if BOARD_CLOUDCHASER != 1
 #error BOARD_CLOUDCHASER not set
@@ -17,6 +18,10 @@
 #endif
 
 /* USB PHY condfiguration */
-#define BOARD_USB_PHY_D_CAL (0x0CU)
+#define BOARD_USB_PHY_D_CAL     (0x0CU)
 #define BOARD_USB_PHY_TXCAL45DP (0x06U)
 #define BOARD_USB_PHY_TXCAL45DM (0x06U)
+
+
+void board_boot(void);
+void board_rtos_init(void);

@@ -11,4 +11,5 @@ set(
 set(
         CCRF_PLATFORM_LIBS
         kio
+        fw_board
 )

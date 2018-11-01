@@ -1,5 +1,4 @@
 #include "fsl_device_registers.h"
-#include "clock_config.h"
 #include "board.h"
 
 #include <stdio.h>
@@ -38,9 +37,6 @@
     defined(FSL_FEATURE_USB_KHCI_USB_RAM) && (FSL_FEATURE_USB_KHCI_USB_RAM > 0U)
 #include "fsl_smc.h"
 #endif
-
-#include "pin_mux.h"
-
 
 
 #define USB_VCOM_TASK_STACK_SIZE            (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))

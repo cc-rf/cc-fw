@@ -1,5 +1,7 @@
 #include "led.h"
 #include "lp5562.h"
+#include <fsl_gpio.h>
+
 
 #if BOARD_REVISION == 2
 

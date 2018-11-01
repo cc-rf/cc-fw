@@ -38,7 +38,6 @@
 #include "usb_device_descriptor.h"
 
 #include "fsl_device_registers.h"
-#include "clock_config.h"
 #include "board.h"
 
 #include <stdio.h>
@@ -51,8 +50,6 @@
 #if defined(USB_DEVICE_CONFIG_EHCI) && (USB_DEVICE_CONFIG_EHCI > 0)
 #include "usb_phy.h"
 #endif
-
-#include "pin_mux.h"
 
 
 /* Composite device structure. */

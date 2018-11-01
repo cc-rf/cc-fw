@@ -1,47 +1,62 @@
-/*
- * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * o Redistributions of source code must retain the above copyright notice, this list
- *   of conditions and the following disclaimer.
- *
- * o Redistributions in binary form must reproduce the above copyright notice, this
- *   list of conditions and the following disclaimer in the documentation and/or
- *   other materials provided with the distribution.
- *
- * o Neither the name of Freescale Semiconductor, Inc. nor the names of its
- *   contributors may be used to endorse or promote products derived from this
- *   software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-#include <stdint.h>
-#include "fsl_common.h"
-#include "fsl_port.h"
+#include <board.h>
+#include <usr/type.h>
+#include <kio/itm.h>
+#include <led.h>
+#include <fsl_common.h>
 #include "clock_config.h"
-#include "board.h"
+#include "pin_mux.h"
 
-/*******************************************************************************
- * Variables
- ******************************************************************************/
 
-/*******************************************************************************
- * Code
- ******************************************************************************/
-/* Initialize debug console. */
-void BOARD_InitDebugConsole(void)
+void board_boot(void)
 {
+    InstallIRQHandler(0, 0);
+
+    extern u32 __fast_text_begin[];
+    extern u32 __fast_text_end[];
+    extern u32 __fast_code_begin[];
+
+    u32 *src = __fast_text_begin;
+    u32 *dst = __fast_code_begin;
+
+    while (src < __fast_text_end) {
+        *dst++ = *src++;
+    }
+
+    BOARD_InitPins();
+    BOARD_BootClockOCHSRUN();
+
+    itm_init();
+    itm_puts(0, "<boot>\r\n");
+
+    /*itm_printf(0, "\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",
+               CLOCK_GetFreq(kCLOCK_CoreSysClk),
+               CLOCK_GetFreq(kCLOCK_BusClk),
+               CLOCK_GetFreq(kCLOCK_FlexBusClk),
+               CLOCK_GetFreq(kCLOCK_FlashClk),
+               CLOCK_GetFreq(kCLOCK_PllFllSelClk),
+               CLOCK_GetFreq(kCLOCK_Osc0ErClk),
+               CLOCK_GetFreq(kCLOCK_Osc0ErClkUndiv),
+               CLOCK_GetFreq(kCLOCK_McgFixedFreqClk),
+               CLOCK_GetFreq(kCLOCK_McgInternalRefClk),
+               CLOCK_GetFreq(kCLOCK_McgFllClk),
+               CLOCK_GetFreq(kCLOCK_McgPll0Clk),
+               CLOCK_GetFreq(kCLOCK_McgIrc48MClk),
+               CLOCK_GetFreq(kCLOCK_LpoClk)
+    );*/
+
+    #if configUSE_TICKLESS_IDLE && configUSE_LPTMR
+    lptmr_config_t config;
+    LPTMR_GetDefaultConfig(&config);
+    config.prescalerClockSource = kLPTMR_PrescalerClock_1; // Clock 1 == LPO?
+    config.bypassPrescaler = true;
+
+    LPTMR_Init(TICKLESS_LPTMR_BASE_PTR, &config);
+    LPTMR_EnableInterrupts(TICKLESS_LPTMR_BASE_PTR, kLPTMR_TimerInterruptEnable);
+    #endif
+}
+
+
+void board_rtos_init(void)
+{
+    led_init();
 }

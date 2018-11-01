@@ -1,5 +1,6 @@
 #pragma once
 
+#include <board.h>
 
 #if BOARD_CLOUDCHASER
 
