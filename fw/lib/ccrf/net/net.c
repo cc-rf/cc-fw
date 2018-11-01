@@ -251,8 +251,7 @@ net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[])
 net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, u8 data[])
 {
     if (!path.addr) {
-        net_trace_warn("unable to send mesg: dest not set");
-        return 0;
+        return net_send(net, path, size, data);
     }
 
     return net_send_base(net, false, path, size, data);

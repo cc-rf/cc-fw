@@ -151,8 +151,8 @@ typedef struct {
 } fault_info_t;
 
 
-static fault_info_t fault_info;
-static bool hard_fault_continue = false;
+static fault_info_t fault_info __used;
+static bool hard_fault_continue __used = false;
 
 void __used hard_fault(fault_reg_t *fr)
 {
