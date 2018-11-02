@@ -208,7 +208,7 @@ net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t
         if (all)
             list_for_each_entry(peeri, &peer->peer, item) {
                 peers[next] = peeri->info;
-                peers[next++].last = peeri->info.last;
+                peers[next++].last = now - peeri->info.last;
             }
     }
 
@@ -608,6 +608,7 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
         }
 
         peeri->info.last = now - peers[pi].last/*expected relative*/;
+        peeri->info.meta = peers[pi].meta;
     }
 }
 
