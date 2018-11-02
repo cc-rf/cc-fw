@@ -23,6 +23,7 @@ target_include_directories(
 
 target_link_libraries(
         ${NAME}
+        PUBLIC usr
         PUBLIC kinetis_sdk_driver
         PUBLIC kinetis_freertos_config
 )
