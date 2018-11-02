@@ -1,4 +1,4 @@
-#include <board.h>
+#include <board/board.h>
 
 #include <kio/itm.h>
 #include <kio/uid.h>
@@ -296,7 +296,7 @@ static void user_flash_init(void)
 
     //while (1) asm("nop");
 
-    BOARD_BootClockOCHSRUN();
+    boot_clock_run_hs_oc();
     itm_init();
 }
 */

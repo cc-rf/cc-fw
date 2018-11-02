@@ -1,11 +1,11 @@
-#include <board.h>
+#include <board/board.h>
 #include <fsl_device_registers.h>
 #include <fsl_gpio.h>
 #include <fsl_port.h>
-#include "pin_mux.h"
+#include "pins.h"
 
 
-void BOARD_InitPins(void)
+void boot_pins_init(void)
 {
     /* Ports */
     CLOCK_EnableClock(kCLOCK_PortA);                // UART0, JTAG

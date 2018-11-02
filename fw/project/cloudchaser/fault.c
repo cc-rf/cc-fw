@@ -1,4 +1,4 @@
-#include <board.h>
+#include <board/board.h>
 #include <stdio.h>
 
 /* http://www.freertos.org/Debugging-Hard-Faults-On-Cortex-M-Microcontrollers.html */

@@ -4,7 +4,7 @@
 #include "rf_uart.h"
 #include "ccio.h"
 
-#include <board.h>
+#include <board/board.h>
 #include <virtual_com.h>
 
 #include <usr/serf.h>

@@ -1,7 +1,7 @@
-#include <board.h>
+#include <board/board.h>
 #include <fsl_common.h>
 #include <fsl_smc.h>
-#include "clock_config.h"
+#include "clock.h"
 
 
 static void BOARD_InitOsc0(void);
@@ -36,7 +36,7 @@ static void BOARD_InitOsc0(void);
  */
 
 
-void BOARD_BootClockVLPR(void)
+void boot_clock_vlpr(void)
 {
     const sim_clock_config_t simConfig = {
             .pllFllSel = 3U, .pllFllDiv = 0U, .pllFllFrac = 0U, .er32kSrc = 2U, .clkdiv1 = 0x00040000U,
@@ -55,7 +55,7 @@ void BOARD_BootClockVLPR(void)
     }
 }
 
-void BOARD_BootClockLPRUN(void)
+void boot_clock_lprun(void)
 {
     // 96MHz
     /*const mcg_pll_config_t pll0Config = {
@@ -103,7 +103,7 @@ void BOARD_BootClockLPRUN(void)
     }
 }
 
-void BOARD_BootClockRUN(void)
+void boot_clock_run(void)
 {
     const mcg_pll_config_t pll0Config = {
             .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x04U,
@@ -130,7 +130,7 @@ void BOARD_BootClockRUN(void)
     }
 }
 
-void BOARD_BootClockHSRUN(void)
+void boot_clock_run_hs(void)
 {
     const mcg_pll_config_t pll0Config = {
             .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x0EU,
@@ -156,7 +156,7 @@ void BOARD_BootClockHSRUN(void)
     CLOCK_SetSimConfig(&simConfig);
 }
 
-void BOARD_BootClockOCHSRUN(void)
+void boot_clock_run_hs_oc(void)
 {
     const mcg_pll_config_t pll0Config = {
             .enableMode = 0U, .prdiv = 0x01U, .vdiv = 0x14U,

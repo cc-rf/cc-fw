@@ -1,10 +1,10 @@
-#include <board.h>
+#include <board/board.h>
 #include <usr/type.h>
 #include <kio/itm.h>
-#include <led.h>
+#include <board/led.h>
 #include <fsl_common.h>
-#include "clock_config.h"
-#include "pin_mux.h"
+#include "clock.h"
+#include "pins.h"
 
 
 void board_boot(void)
@@ -22,8 +22,8 @@ void board_boot(void)
         *dst++ = *src++;
     }
 
-    BOARD_InitPins();
-    BOARD_BootClockOCHSRUN();
+    boot_pins_init();
+    boot_clock_run_hs_oc();
 
     itm_init();
     itm_puts(0, "<boot>\r\n");

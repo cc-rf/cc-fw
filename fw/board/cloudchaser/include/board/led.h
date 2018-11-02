@@ -1,7 +1,7 @@
 #pragma once
 
 #include <usr/type.h>
-#include <board.h>
+#include <board/board.h>
 
 #include <limits.h>
 #include <FreeRTOS.h>
