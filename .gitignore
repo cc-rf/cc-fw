@@ -48,8 +48,7 @@ local.properties
 #*.iml
 *.ipr
 *.iws
-#.idea/
-!.idea/
+.idea/
 .idea/workspace.xml
 
 # https://github.com/github/gitignore/blob/master/Android.gitignore
