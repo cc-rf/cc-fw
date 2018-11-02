@@ -1,95 +1,70 @@
-/* http://www.jacquesf.com/2011/03/consistent-overhead-byte-stuffing/
- * Copyright 2011, Jacques Fortier. All rights reserved.
- *
- * Redistribution and use in source and binary forms are permitted, with or without modification.
- */
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
+#include <usr/type.h>
 
-static inline size_t cobs_encode_size_max(size_t length)
+
+static inline size_t cobs_encode_size_max(size_t sz)
 {
-    return length + length / 254 + 1;
+    return sz + sz / 254 + 1;
 }
 
-/* Stuffs "length" bytes of data at the location pointed to by
- * "input", writing the output to the location pointed to by
- * "output". Returns the number of bytes written to "output".
- *
- * Remove the "restrict" qualifiers if compiling with a
- * pre-C99 C dialect.
- */
-static inline size_t cobs_encode(const uint8_t * restrict input, size_t length, uint8_t * restrict output)
-{
-    size_t read_index = 0;
-    size_t write_index = 1;
-    size_t code_index = 0;
-    uint8_t code = 1;
 
-    while(read_index < length)
-    {
-        if(input[read_index] == 0)
-        {
-            output[code_index] = code;
-            code = 1;
-            code_index = write_index++;
-            read_index++;
-        }
-        else
-        {
-            output[write_index++] = input[read_index++];
-            code++;
-            if(code == 0xFF)
-            {
-                output[code_index] = code;
-                code = 1;
-                code_index = write_index++;
+static inline size_t cobs_encode(size_t sz, const u8 * restrict in, u8 * restrict out)
+{
+    size_t ri = 0;
+    size_t wi = 1;
+    size_t ci = 0;
+    u8 c = 1;
+
+    while (ri < sz) {
+
+        if (!in[ri]) {
+
+            out[ci] = c;
+            c = 1;
+            ci = wi++;
+            ri++;
+
+        } else {
+
+            out[wi++] = in[ri++];
+
+            if (++c == 0xFF) {
+
+                out[ci] = c;
+                c = 1;
+                ci = wi++;
             }
         }
     }
 
-    output[code_index] = code;
+    out[ci] = c;
 
-    return write_index;
+    return wi;
 }
 
-/* Unstuffs "length" bytes of data at the location pointed to by
- * "input", writing the output * to the location pointed to by
- * "output". Returns the number of bytes written to "output" if
- * "input" was successfully unstuffed, and 0 if there was an
- * error unstuffing "input".
- *
- * Remove the "restrict" qualifiers if compiling with a
- * pre-C99 C dialect.
- */
-static inline size_t cobs_decode(const uint8_t * restrict input, size_t length, uint8_t * restrict output)
+static inline size_t cobs_decode(size_t sz, const u8 * restrict in, u8 * restrict out)
 {
-    size_t read_index = 0;
-    size_t write_index = 0;
-    uint8_t code;
-    uint8_t i;
+    size_t ri = 0;
+    size_t wi = 0;
+    u8 c;
+    u8 i;
 
-    while(read_index < length)
-    {
-        code = input[read_index];
+    while (ri < sz) {
 
-        if(read_index + code > length && code != 1)
-        {
+        c = in[ri];
+
+        if (ri + c > sz && c != 1)
             return 0;
-        }
 
-        read_index++;
+        ++ri;
 
-        for(i = 1; i < code; i++)
-        {
-            output[write_index++] = input[read_index++];
-        }
-        if(code != 0xFF && read_index != length)
-        {
-            output[write_index++] = '\0';
-        }
+        for (i = 1; i < c; i++)
+            out[wi++] = in[ri++];
+
+        if (c != 0xFF && ri != sz)
+            out[wi++] = 0u;
     }
 
-    return write_index;
+    return wi;
 }

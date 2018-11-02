@@ -21,7 +21,7 @@ size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame)
     raw_frame->code = code;
     memcpy(raw_frame->data, data, size);
 
-    frame_size = cobs_encode((u8 *)raw_frame, frame_size, *frame);
+    frame_size = cobs_encode(frame_size, (u8 *)raw_frame, *frame);
     vPortFree(raw_frame);
 
     if (!frame_size) {
@@ -53,7 +53,7 @@ size_t serf_decode(u8 *data, size_t *size, serf_t *frame)
     // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
     // max decode length: size
 
-    size_t decoded_size = cobs_decode(data, frame_size, (u8 *) frame);
+    size_t decoded_size = cobs_decode(frame_size, data, (u8 *) frame);
     ((u8 *)frame)[decoded_size] = 0;
 
     if ((*size -= frame_size + 1))
