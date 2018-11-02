@@ -3,17 +3,16 @@
 #include <usr/type.h>
 
 
-static inline size_t cobs_encode_size_max(size_t sz)
+static inline size_t cobs_encode_size_max(size_t sz) __fast_code
 {
     return sz + sz / 254 + 1;
 }
 
 
+static inline size_t cobs_encode(size_t sz, const u8 * restrict in, u8 * restrict out) __fast_code;
 static inline size_t cobs_encode(size_t sz, const u8 * restrict in, u8 * restrict out)
 {
-    size_t ri = 0;
-    size_t wi = 1;
-    size_t ci = 0;
+    size_t ri = 0, wi = 1, ci = 0;
     u8 c = 1;
 
     while (ri < sz) {
@@ -43,12 +42,11 @@ static inline size_t cobs_encode(size_t sz, const u8 * restrict in, u8 * restric
     return wi;
 }
 
+static inline size_t cobs_decode(size_t sz, const u8 * restrict in, u8 * restrict out) __fast_code;
 static inline size_t cobs_decode(size_t sz, const u8 * restrict in, u8 * restrict out)
 {
-    size_t ri = 0;
-    size_t wi = 0;
-    u8 c;
-    u8 i;
+    size_t ri = 0, wi = 0;
+    u8 c, i;
 
     while (ri < sz) {
 
