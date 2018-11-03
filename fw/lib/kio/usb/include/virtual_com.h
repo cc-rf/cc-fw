@@ -47,10 +47,10 @@ typedef void (* vcom_rx_t)(u8 port, size_t size, u8 *data);
 
 bool vcom_init(vcom_rx_t rx_cb);
 
-void usb_write(u8 port, u8 *buf, size_t len);
-void usb_write_raw(u8 port, u8 *buf, size_t len);
-void usb_write_direct(u8 port, u8 *buf, size_t len);
-bool usb_attached(u8 port);
+void usb_write(u8 port, u8 *buf, size_t len) __fast_code;
+void usb_write_raw(u8 port, u8 *buf, size_t len) __fast_code;
+void usb_write_direct(u8 port, u8 *buf, size_t len) __fast_code;
+bool usb_attached(u8 port) __fast_code;
 
 /*******************************************************************************
 * Definitions

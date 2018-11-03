@@ -78,12 +78,12 @@ static struct usb_vcom {
 
     usb_cdc_acm_info_t acm;
 
-} usb_vcom[USB_CDC_INSTANCE_COUNT]; // __attribute__((section(".heap")));
+} usb_vcom[USB_CDC_INSTANCE_COUNT] __fast_data;
 
 static vcom_rx_t vcom_rx;
 
-usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, void *param);
-usb_status_t USB_DeviceCallback(usb_device_handle handle, uint32_t event, void *param);
+usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, void *param) __fast_code;
+usb_status_t USB_DeviceCallback(usb_device_handle handle, uint32_t event, void *param) __fast_code;
 
 /*******************************************************************************
 * Variables
@@ -359,6 +359,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
 }
 
 
+static void usb_vcom_rx_task(void *param) __fast_code;
 static void usb_vcom_rx_task(void *param)
 {
     const struct usb_vcom *const vcom = (struct usb_vcom *)param;
@@ -384,6 +385,7 @@ static void usb_vcom_rx_task(void *param)
 }
 
 
+static void usb_vcom_task(void *param) __fast_code;
 static void usb_vcom_task(void *param)
 {
     struct usb_vcom *const vcom = (struct usb_vcom *)param;

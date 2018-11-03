@@ -75,7 +75,7 @@ static struct {
     StackType_t device_task_stack[USB_DEVICE_TASK_STACK_SIZE];
 #endif
 
-} usb_composite;
+} usb_composite __fast_data;
 
 
 /*******************************************************************************
@@ -366,7 +366,8 @@ void USB_DeviceApplicationInit(void)
  * @return None.
  */
 #if USB_DEVICE_CONFIG_USE_TASK
-void USB_DeviceTask(void *handle)
+static void USB_DeviceTask(void *handle) __fast_code;
+static void USB_DeviceTask(void *handle)
 {
     while (1U)
     {
