@@ -2,13 +2,13 @@ set(NAME kinetis_freertos)
 
 add_library(
         ${NAME} STATIC EXCLUDE_FROM_ALL
-        croutine.c
-        event_groups.c
+        # croutine.c
+        # event_groups.c
         list.c
         queue.c
         tasks.c
         timers.c
-        stream_buffer.c
+        # stream_buffer.c
         portable/GCC/ARM_CM4F/fsl_tickless_systick.c
         portable/GCC/ARM_CM4F/port.c
         portable/MemMang/heap_4.c

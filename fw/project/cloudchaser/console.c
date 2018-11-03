@@ -269,7 +269,6 @@ void console_input(char *data)
     }
 
     if (!strcmp(cmd, "rainbow")) {
-        extern void rainbow(void);
         rainbow();
         goto parse_done;
     }

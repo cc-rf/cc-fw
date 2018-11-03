@@ -9,7 +9,7 @@ static inline size_t cobs_encode_size_max(size_t sz)
 }
 
 
-static inline size_t cobs_encode(size_t sz, const u8 * restrict in, u8 * restrict out) __fast_code;
+static inline size_t cobs_encode(size_t sz, const u8 * restrict in, u8 * restrict out) __fast_code __nonnull_all;
 static inline size_t cobs_encode(size_t sz, const u8 * restrict in, u8 * restrict out)
 {
     size_t ri = 0, wi = 1, ci = 0;
@@ -42,7 +42,7 @@ static inline size_t cobs_encode(size_t sz, const u8 * restrict in, u8 * restric
     return wi;
 }
 
-static inline size_t cobs_decode(size_t sz, const u8 * restrict in, u8 * restrict out) __fast_code;
+static inline size_t cobs_decode(size_t sz, const u8 * restrict in, u8 * restrict out) __fast_code __nonnull_all;
 static inline size_t cobs_decode(size_t sz, const u8 * restrict in, u8 * restrict out)
 {
     size_t ri = 0, wi = 0;

@@ -49,8 +49,8 @@ ENTRY(Reset_Handler)
 
 /* Phillip: Increasing defaults (chip has 256K SRAM, 2M Flash). Old values are both 0x0400 (1024).
 */
-HEAP_SIZE  = DEFINED(__heap_size__)  ? __heap_size__  : 0x00002000; /* 8 Kb */
-STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x00000800; /* 2 Kb */
+HEAP_SIZE  = DEFINED(__heap_size__)  ? __heap_size__  : 0x00001000; /* 4 Kb */
+STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x00000500; /* 1280b */
 
 M_VECTOR_RAM_SIZE = 0x0400;
 
@@ -91,8 +91,8 @@ SECTIONS
   .text :
   {
     . = ALIGN(4);
-    *(.text)                 /* .text sections (code) */
-    *(.text*)                /* .text* sections (code) */
+    *(EXCLUDE_FILE(*freertos.a) .text)                 /* .text sections (code) */
+    *(EXCLUDE_FILE(*freertos.a) .text*)                /* .text* sections (code) */
     *(.rodata)               /* .rodata sections (constants, strings, etc.) */
     *(.rodata*)              /* .rodata* sections (constants, strings, etc.) */
     *(.glue_7)               /* glue arm to thumb code */
@@ -194,19 +194,20 @@ SECTIONS
 
   __fast_text_begin = ORIGIN(m_fast_text);
 
-  .fast_text (NOLOAD) : AT(__fast_text_begin)
+  .fast_code (NOLOAD) : AT(__fast_text_begin)
   {
     . = ALIGN(4);
     __fast_code_begin = .;
     *(.fast_text)
     *(.fast_text*)
-    /* this is big: *\kinetis_freertos.a:* */
+    *freertos.a:*(.text)
+    *freertos.a:*(.text.*)
     . = ALIGN(4);
     __fast_code_end = .;
   } > m_fast_code
 
-  __fast_text_size = SIZEOF(.fast_text);
-  __fast_text_end = __fast_text_begin + __fast_text_size;
+  __fast_code_size = SIZEOF(.fast_code);
+  __fast_text_end = __fast_text_begin + __fast_code_size;
 
   .user (NOLOAD) : AT(ORIGIN(m_user))
   {
@@ -228,12 +229,23 @@ SECTIONS
   __VECTOR_RAM = __VECTOR_RAM__;
   __RAM_VECTOR_TABLE_SIZE_BYTES = __interrupts_ram_end__ - __interrupts_ram_start__;
 
+    /*
+    __fast_data_rom_begin = ORIGIN(m_fast_data_rom);
+    .fast_data (NOLOAD) : AT(__fast_data_rom_begin)
+    */
     .fast_data (NOLOAD) : AT(ORIGIN(m_fast_data))
     {
       . = ALIGN(4);
+      __fast_data_begin = .;
       *(.fast_data)
+      *(.fast_data*)
       . = ALIGN(4);
+      __fast_data_end = .;
+
     } > m_fast_data
+
+    __fast_data_size = SIZEOF(.fast_data);
+    /* __fast_data_rom_end = __fast_data_rom_begin + __fast_data_size; */
 
   /* Uninitialized data section */
   .bss (NOLOAD) :

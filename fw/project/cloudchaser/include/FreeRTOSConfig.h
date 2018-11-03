@@ -58,7 +58,7 @@
 #define TICKLESS_LPTMR_IRQn LPTMR0_IRQn
 #endif
 
-#if configUSE_TICKLESS_IDLE
+#if configUSE_TICKLESS_IDLE && 0
 extern void rtos_sleep_pre(uint32_t xExpectedIdleTime) __fast_code;
 extern void rtos_sleep_post(uint32_t xExpectedIdleTime) __fast_code;
 #define configPRE_SLEEP_PROCESSING(x) rtos_sleep_pre(x)
@@ -69,7 +69,7 @@ extern void rtos_sleep_post(uint32_t xExpectedIdleTime) __fast_code;
 #define configTICK_RATE_HZ ((TickType_t) 10000U)
 #define configMAX_PRIORITIES (18U)
 #define configMINIMAL_STACK_SIZE ((unsigned short) 192U)
-#define configTOTAL_HEAP_SIZE ((size_t)(128U * 1024U))
+#define configTOTAL_HEAP_SIZE ((size_t)(138U * 1024U))
 
 #define configMAX_TASK_NAME_LEN (10U)
 #define configUSE_TRACE_FACILITY 1U

@@ -245,7 +245,7 @@ static void mac_recv(mac_t mac, mac_flag_t flag __unused, mac_addr_t peer, mac_a
 
 static void sync_hook(chan_id_t chan)
 {
-    static net_stat_t stat_prev = {0};
+    static net_stat_t stat_prev = {{0}};
     static net_stat_t stat;
 
     if (sync_blink) {
@@ -257,10 +257,10 @@ static void sync_hook(chan_id_t chan)
         led_set(LED_1, (chan == 15*2) ? LED_ON : LED_OFF);
         led_set(LED_3, (chan == 17*2) ? LED_ON : LED_OFF);
         #else
-        led_set(LED_0, (chan == 11) ? 2 : LED_OFF);
-        led_set(LED_2, (chan == 13) ? 2: LED_OFF);
-        led_set(LED_1, (chan == 15) ? 2 : LED_OFF);
-        led_set(LED_3, (chan == 17) ? 2 : LED_OFF);
+        led_set(LED_0, (u8) ((chan == 11) ? 2 : LED_OFF));
+        led_set(LED_2, (u8) ((chan == 13) ? 2 : LED_OFF));
+        led_set(LED_1, (u8) ((chan == 15) ? 2 : LED_OFF));
+        led_set(LED_3, (u8) ((chan == 17) ? 2 : LED_OFF));
         #endif
 
         net_stat(nets[0], &stat);

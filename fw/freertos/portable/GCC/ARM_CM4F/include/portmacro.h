@@ -29,6 +29,8 @@
 #ifndef PORTMACRO_H
 #define PORTMACRO_H
 
+#include <usr/type.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -94,8 +96,8 @@ typedef unsigned long UBaseType_t;
 /*-----------------------------------------------------------*/
 
 /* Critical section management. */
-extern void vPortEnterCritical( void );
-extern void vPortExitCritical( void );
+extern void vPortEnterCritical( void ) __fast_code;
+extern void vPortExitCritical( void ) __fast_code;
 #define portSET_INTERRUPT_MASK_FROM_ISR()		ulPortRaiseBASEPRI()
 #define portCLEAR_INTERRUPT_MASK_FROM_ISR(x)	vPortSetBASEPRI(x)
 #define portDISABLE_INTERRUPTS()				vPortRaiseBASEPRI()
@@ -114,7 +116,7 @@ not necessary for to use this port.  They are defined so the common demo files
 
 /* Tickless idle/low power functionality. */
 #ifndef portSUPPRESS_TICKS_AND_SLEEP
-	extern void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime );
+	extern void vPortSuppressTicksAndSleep( TickType_t xExpectedIdleTime ) __fast_code;
 	#define portSUPPRESS_TICKS_AND_SLEEP( xExpectedIdleTime ) vPortSuppressTicksAndSleep( xExpectedIdleTime )
 #endif
 /*-----------------------------------------------------------*/
@@ -153,7 +155,7 @@ not necessary for to use this port.  They are defined so the common demo files
 /*-----------------------------------------------------------*/
 
 #ifdef configASSERT
-	void vPortValidateInterruptPriority( void );
+	void vPortValidateInterruptPriority( void ) __fast_code;
 	#define portASSERT_IF_INTERRUPT_PRIORITY_INVALID() 	vPortValidateInterruptPriority()
 #endif
 

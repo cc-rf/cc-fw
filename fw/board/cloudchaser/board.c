@@ -9,8 +9,6 @@
 
 void board_boot(void)
 {
-    InstallIRQHandler(0, 0);
-
     extern u32 __fast_text_begin[];
     extern u32 __fast_text_end[];
     extern u32 __fast_code_begin[];
@@ -21,6 +19,21 @@ void board_boot(void)
     while (src < __fast_text_end) {
         *dst++ = *src++;
     }
+
+    /*
+    extern u32 __fast_data_rom_begin[];
+    extern u32 __fast_data_rom_end[];
+    extern u32 __fast_data_begin[];
+
+    src = __fast_data_rom_begin;
+    dst = __fast_data_begin;
+
+    while (src < __fast_data_rom_end) {
+        *dst++ = *src++;
+    }
+    */
+
+    InstallIRQHandler(0, 0);
 
     boot_pins_init();
     boot_clock_run_hs_oc();

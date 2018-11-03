@@ -1,15 +1,12 @@
 set(NAME fw_project_cloudchaser)
 
-add_executable(
-        ${NAME}
-        main.c
+add_library(
+        ${NAME} STATIC EXCLUDE_FROM_ALL
         cloudchaser.c
         console.c
         rf_uart.c
         ccio.c
 )
-
-#set_source_files_properties(main.c PROPERTIES COMPILE_FLAGS "-Wa,-a,-ad")
 
 target_include_directories(
         ${NAME}
@@ -28,7 +25,7 @@ target_link_libraries(
 
 target_compile_options(
         ${NAME}
-        PUBLIC "-Wl,-defsym=__heap_size__=0x10000"
+        PUBLIC "-Wl,-defsym=__heap_size__=0x1000" # probably not working
         PUBLIC "-Wl,-defsym=__stack_size__=0x500"
 )
 

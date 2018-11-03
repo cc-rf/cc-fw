@@ -24,7 +24,7 @@ typedef struct __packed {
  * @param frame Output buffer pointer for encoded frame (malloc'd).
  * @return Size of resulting frame.
  */
-size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame);
+size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame) __fast_code __nonnull_all;
 
 /**
  * Decode a serial frame delimited by a zero at the end.
@@ -34,4 +34,4 @@ size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame);
  * @param frame Output buffer for decoded frame.
  * @return Size of decoded frame, if any.
  */
-size_t serf_decode(u8 *data, size_t *size, serf_t *frame);
+size_t serf_decode(u8 *data, size_t *size, serf_t *frame) __fast_code __nonnull_all;

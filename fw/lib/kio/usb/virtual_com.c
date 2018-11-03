@@ -391,7 +391,7 @@ static void usb_vcom_task(void *param)
     class_handle_t const cdc = g_deviceComposite->cdcVcom[instance].cdcAcmHandle;
     const u8 ep = ((u8[]){USB_CDC_VCOM0_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_IN_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_IN_ENDPOINT})[instance];
 
-    usb_status_t error = kStatus_USB_Error;
+    usb_status_t error;
 
     usb_io_t io;
 

@@ -13,7 +13,7 @@ set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16"
 # NOTE: what about rdpmon? and redboot?
 #set(SPECS "-specs=rdimon.specs -specs=nano.specs")
 set(SPECS "-specs=nosys.specs -specs=nano.specs"  CACHE STRING "" FORCE)
-set(LFLAGS_FW "-Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
+set(LFLAGS_FW "-Wl,-flto -Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
 
 set(CFLAGS_BASE "${CFLAGS_STD} ${CFLAGS_KINETIS} ${CFLAGS_CPU_CM4F}")
 
@@ -55,13 +55,24 @@ add_subdirectory(project)
 
 message(STATUS "FW_PROJECT_TARGET=${FW_PROJECT_TARGET}")
 
+set(TARGET "${PROJECT_NAME}")
+
+add_executable(
+        ${TARGET}
+        ${FW_PROJECT_PATH}/main.c
+)
+
+#set_source_files_properties(main.c PROPERTIES COMPILE_FLAGS "-Wa,-a,-ad")
+
 set_target_properties(
-        ${FW_PROJECT_TARGET} PROPERTIES
+        ${TARGET} PROPERTIES
         OUTPUT_NAME "fw"
 )
 
-set(TARGET "${PROJECT_NAME}")
-add_executable(${TARGET} ALIAS ${FW_PROJECT_TARGET})
+target_link_libraries(
+        ${TARGET}
+        PUBLIC ${FW_PROJECT_TARGET}
+)
 
 add_custom_target(
         fw_hex
