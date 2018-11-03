@@ -13,7 +13,7 @@
 #include <fsl_tickless_generic.h>
 
 #include "cloudchaser.h"
-#include "led.h"
+#include <board/led.h>
 
 #define MAIN_TASK_STACK_SIZE    (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
 

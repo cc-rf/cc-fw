@@ -2,8 +2,8 @@
 
 #include <usr/type.h>
 
-
-static inline size_t cobs_encode_size_max(size_t sz) __fast_code
+static inline size_t cobs_encode_size_max(size_t sz) __fast_code;
+static inline size_t cobs_encode_size_max(size_t sz)
 {
     return sz + sz / 254 + 1;
 }

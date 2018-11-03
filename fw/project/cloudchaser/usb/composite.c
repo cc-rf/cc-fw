@@ -38,7 +38,7 @@
 #include "usb_device_descriptor.h"
 
 #include "fsl_device_registers.h"
-#include "board.h"
+#include <board/board.h>
 
 #include <stdio.h>
 #include <stdlib.h>

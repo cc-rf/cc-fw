@@ -1,5 +1,5 @@
 #include "cloudchaser.h"
-#include "led.h"
+#include <board/led.h>
 #include "console.h"
 #include "rf_uart.h"
 #include "ccio.h"

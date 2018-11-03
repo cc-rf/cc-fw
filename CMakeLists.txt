@@ -14,6 +14,7 @@ if(NOT CMAKE_BUILD_TYPE)
     message(STATUS "CMAKE_BUILD_TYPE defaulting to Debug")
 endif()
 
+include(armgcc)
 include(util)
 
 include(fw/config.cmake)
