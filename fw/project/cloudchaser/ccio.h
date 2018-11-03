@@ -45,7 +45,10 @@
 
 #define RESET_MAGIC             0xD1E00D1E
 
-#define CODE_SEND_FLAG_WAIT     1
+#define CODE_MAC_SEND_FLAG_WAIT 0b1
+
+#define CODE_SEND_FLAG_MESG     0b01
+#define CODE_SEND_FLAG_RSLT     0b10
 
 #define CC_MAC_FLAG             0
 
@@ -101,7 +104,7 @@ typedef struct __packed {
     net_addr_t addr;
     net_port_t port;
     net_type_t type;
-    u8 mesg;
+    u8 flag;
     u8 data[];
 
 } code_send_t;

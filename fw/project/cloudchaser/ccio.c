@@ -81,7 +81,7 @@ static void handle_code_mac_send(u8 port, size_t size, u8 *data)
 
     for (u8 i = 0; i < CLOUDCHASER_RDIO_COUNT; ++i) {
         if (!code_send->addr || code_send->addr == mac_addr(macs[i])) {
-            const bool wait = (code_send->flag & CODE_SEND_FLAG_WAIT) != 0;
+            const bool wait = (code_send->flag & CODE_MAC_SEND_FLAG_WAIT) != 0;
 
             const mac_size_t result = mac_send(
                     macs[i],
@@ -130,12 +130,13 @@ static void handle_code_send(u8 port __unused, size_t size, u8 *data)
 
     net_size_t sent;
 
-    if (code_send->mesg)
+    if (code_send->flag & CODE_SEND_FLAG_MESG)
          sent = net_mesg(nets[0], path, (net_size_t) size - sizeof(code_send_t), code_send->data);
     else
         sent = net_send(nets[0], path, (net_size_t) size - sizeof(code_send_t), code_send->data);
 
-    write_code_send_done(port, sent);
+    if (code_send->flag & CODE_SEND_FLAG_RSLT)
+        write_code_send_done(port, sent);
 }
 
 
@@ -215,7 +216,7 @@ static void handle_code_resp(u8 port __unused, size_t size, u8 *data)
             }
     };
 
-    if (code_send->mesg)
+    if (code_send->flag & CODE_SEND_FLAG_MESG)
         net_resp(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
     else
         net_send(nets[0], path, (net_size_t)size - sizeof(code_send_t), code_send->data);
