@@ -15,7 +15,7 @@ for arg in "$@"; do
         do_clear=true
     fi
     if [[ "$arg" == "-r" ]]; then
-        release = "Release"
+        release="Release"
     fi
 done
 
