@@ -10,6 +10,12 @@ add_library(
         pit.c
         sclk.c
         uart.c
+        usb/composite.c
+        usb/usb_device_cdc_acm.c
+        usb/usb_device_ch9.c
+        usb/usb_device_class.c
+        usb/usb_device_descriptor.c
+        usb/virtual_com.c
 )
 
 target_include_directories(
@@ -25,8 +31,17 @@ target_compile_definitions(
 target_link_libraries(
         ${NAME}
         PUBLIC usr
+        PUBLIC fw_board
         PUBLIC kinetis_sdk
         PUBLIC kinetis_sdk_driver
         PUBLIC kinetis_freertos
         PUBLIC kinetis_middleware_dma_manager
+        PUBLIC kinetis_middleware_usb
+        PUBLIC kinetis_middleware_usb_phy
+        PUBLIC kinetis_middleware_usb_device
+        PUBLIC kinetis_middleware_usb_config
 )
+
+add_library(kinetis_middleware_usb_config INTERFACE)
+target_include_directories(kinetis_middleware_usb_config INTERFACE usb/include)
+
