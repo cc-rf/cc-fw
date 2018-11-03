@@ -184,7 +184,7 @@ static void fabi_task(void *param)
     memset(init1, 0, sizeof(fabi_rgb_t) * INIT_COUNT);
     memset(init2, 0, sizeof(fabi_rgb_t) * INIT_COUNT);
 
-    u16 counter, i;
+    u16 i;
 
     /*while (1) {
 
@@ -265,6 +265,8 @@ static void fabi_dma_run(size_t size)
     EDMA_ResetChannel(DMA0, edma_handle[1].channel);
     EDMA_ResetChannel(DMA0, edma_handle[2].channel);*/
 
+    taskENTER_CRITICAL();
+
     DMAMUX_DisableChannel(DMAMUX0, edma_handle[0].channel);
     DMAMUX_DisableChannel(DMAMUX0, edma_handle[1].channel);
     DMAMUX_DisableChannel(DMAMUX0, edma_handle[2].channel);
@@ -284,6 +286,8 @@ static void fabi_dma_run(size_t size)
     FTM->CNT = 0;
     //FTM_ClearStatusFlags(FTM, UINT32_MAX);
     FTM_StartTimer(FTM, kFTM_SystemClock);
+
+    taskEXIT_CRITICAL();
 
     u32 notify = 0;
 
