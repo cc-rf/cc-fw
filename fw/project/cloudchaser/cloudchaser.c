@@ -296,7 +296,8 @@ static void sync_hook(chan_id_t chan)
 
 void usb_recv(u8 port, size_t size, u8 *data)
 {
-    //itm_printf(0, "usb[%i] rx: size=%lu\r\n", port, size);
+    if (port >= USB_CDC_INSTANCE_COUNT)
+        return;
 
     usb_read_t *read = &usb_read[port];
 
