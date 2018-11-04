@@ -6,7 +6,7 @@
 #include <kio/itm.h>
 
 
-#define RF_UART_TASK_STACK_SIZE     (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
+#define RF_UART_TASK_STACK_SIZE     TASK_STACK_SIZE_MEDIUM
 #define RF_UART_BUF_SIZE            1024u
 
 

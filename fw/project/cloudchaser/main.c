@@ -1,7 +1,9 @@
 #include <board/board.h>
+#include <board/trace.h>
 
 #include <kio/itm.h>
 #include <kio/uid.h>
+#include <kio/flsh.h>
 
 #include <composite.h>
 
@@ -15,7 +17,7 @@
 #include "cloudchaser.h"
 #include <board/led.h>
 
-#define MAIN_TASK_STACK_SIZE    (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
+#define MAIN_TASK_STACK_SIZE    TASK_STACK_SIZE_MEDIUM
 
 
 #if BOARD_REVISION <= 1
@@ -60,11 +62,11 @@
 
 static void main_task(void *param);
 static void pin_flag_init(void);
-extern void usb_recv(u8 port, size_t size, u8 *data);
+extern void usb_recv(u8 port, size_t size, u8 *data) __fast_code;
 
 
-StackType_t main_task_stack[MAIN_TASK_STACK_SIZE];
-StaticTask_t main_task_static;
+StackType_t main_task_stack[MAIN_TASK_STACK_SIZE] __fast_data;
+StaticTask_t main_task_static __fast_data;
 
 bool __pflag_set, __uflag1_set/*, __uflag2_set*/;
 
@@ -82,6 +84,7 @@ int main(void)
     vTaskStartScheduler();
 }
 
+
 static void main_task(void *param)
 {
     (void)param;
@@ -89,12 +92,12 @@ static void main_task(void *param)
     board_rtos_init();
 
     if (!usb_composite_init(usb_recv)) {
-        itm_puts(0, "usb: init fail\r\n");
+        board_trace("usb: init fail");
         goto _end;
     }
 
     /*while (1) {
-        itm_printf(0, "hello! t=%lu\n", pdMS_TO_TICKS(1000));
+        board_trace_f("hello! t=%lu", pdMS_TO_TICKS(1000));
         vTaskDelay(pdMS_TO_TICKS(1000));
     }*/
 
@@ -119,9 +122,9 @@ static void main_task(void *param)
         for (int i = 0; i < 100000; ++i) asm("nop");
 
         spi_master_io(ch[0], &ch[1], &ch[1]);
-        itm_printf(0, "r=0x%x ch=%s\n", r, &ch[1]);
+        board_trace_f("r=0x%x ch=%s", r, &ch[1]);
 
-        //itm_puts(0, "\ndone.\n");
+        //board_trace("done.");
         vTaskDelay(portMAX_DELAY);
 
     } else {
@@ -141,7 +144,7 @@ static void main_task(void *param)
             spi_slave_io(1, &len, &len);
             spi_slave_io(len, ch, ch);
 
-            itm_printf(0, "ch/%u=%s\n", len, ch);
+            board_trace_f("ch/%u=%s", len, ch);
         }
 
     }*/
@@ -223,83 +226,7 @@ bool uflag2_set(void)
 }
 
 
-/*
-#define USER_FLASH_ADDR 0x000FF000
-#define USER_FLASH_SIZE FSL_FEATURE_FLASH_PFLASH_BLOCK_SECTOR_SIZE
-
-typedef struct {
-    u32 header;
-
-    u8 pad[USER_FLASH_SIZE - sizeof(u32)];
-
-} user_flash_t;
-
-static user_flash_t user_flash_data = {
-        .header = 0xBABCCAB1,
-        .pad = {0}
-};
-
-//__attribute__((section(".heap")))
-static void user_flash_init(void)
-{
-    BOARD_BootClockRUN();
-    itm_init();
-
-
-    flash_config_t flash_config;
-    memset(&flash_config, 0, sizeof(flash_config_t));
-
-    itm_puts(0, "initializing...\n");
-
-    status_t status = FLASH_Init(&flash_config);
-
-    if (status != kStatus_FLASH_Success) {
-        itm_printf(0, "init fail: status = %li\n", status);
-
-    } else {
-        //FLASH_PrepareExecuteInRamFunctions(&flash_config);
-
-        user_flash_t *user_flash = (user_flash_t *) USER_FLASH_ADDR;
-
-        itm_printf(0, "flash header value: 0x%lX\n", user_flash->header);
-
-        itm_puts(0, "erasing...\n");
-
-        taskENTER_CRITICAL();
-
-        status = FLASH_Erase(&flash_config, USER_FLASH_ADDR, USER_FLASH_SIZE, kFLASH_ApiEraseKey);
-
-        if (status != kStatus_FLASH_Success) {
-            itm_printf(0, "erase fail: status = %li\n", status);
-            taskEXIT_CRITICAL();
-
-        } else {
-            //itm_puts(0, "erase successful\n");
-
-
-
-            //itm_puts(0, "writing...\n");
-
-            status = FLASH_Program(&flash_config, USER_FLASH_ADDR, (u32 *) &user_flash_data, USER_FLASH_SIZE);
-
-            taskEXIT_CRITICAL();
-
-            if (status != kStatus_FLASH_Success) {
-                itm_printf(0, "%li fail\n", status);
-            } else {
-                itm_puts(0, "write successful\n");
-            }
-
-            vTaskDelay(1);
-        }
-    }
-
-    //while (1) asm("nop");
-
-    boot_clock_run_hs_oc();
-    itm_init();
-}
-*/
+//// ------
 
 
 // begin: write.c
@@ -378,77 +305,6 @@ caddr_t _sbrk(int incr)
     return (caddr_t)prev_heap_end;
 }
 
-
-// begin: rtos.c (hooks)
-//
-
-void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
-{
-    itm_printf(0, "stack overflow in task %p '%s'\r\n", xTask, pcTaskName);
-    while (1) asm("nop");
-}
-
-void vApplicationMallocFailedHook(void)
-{
-    itm_puts(0, "malloc failed!\r\n");
-    while (1) asm("nop");
-}
-
-StaticTask_t xIdleTaskTCB;
-StackType_t uxIdleTaskStack[configMINIMAL_STACK_SIZE];
-
-void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize)
-{
-    /* Pass out a pointer to the StaticTask_t structure in which the Idle task's
-    state will be stored. */
-    *ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
-
-    /* Pass out the array that will be used as the Idle task's stack. */
-    *ppxIdleTaskStackBuffer = uxIdleTaskStack;
-
-    /* Pass out the size of the array pointed to by *ppxIdleTaskStackBuffer.
-    Note that, as the array is necessarily of type StackType_t,
-    configMINIMAL_STACK_SIZE is specified in words, not bytes. */
-    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
-}
-
-static StaticTask_t xTimerTaskTCB; // TODO: Force in RAM
-static StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH]; // TODO: Force in RAM
-
-void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer, StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize)
-{
-    *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
-    *ppxTimerTaskStackBuffer = uxTimerTaskStack;
-    *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
-}
-
-#if configUSE_TICKLESS_IDLE
-
-#if configUSE_LPTMR
-
-LPTMR_Type *vPortGetLptrmBase(void)
-{
-    return TICKLESS_LPTMR_BASE_PTR;
-}
-
-IRQn_Type vPortGetLptmrIrqn(void)
-{
-    return TICKLESS_LPTMR_IRQn;
-}
-
-#endif
-
-void rtos_sleep_pre(TickType_t xExpectedIdleTime)
-{
-    //itm_printf(0, "sleep-pre %lu\n", xExpectedIdleTime);
-}
-
-void rtos_sleep_post(TickType_t xExpectedIdleTime)
-{
-    //itm_printf(0, "sleep-post %lu\n", xExpectedIdleTime);
-}
-
-#endif
 
 // -
 #include "fault.c"

@@ -174,6 +174,7 @@ SECTIONS
   } > m_text
 
   __etext = .;    /* define a global symbol at end of code */
+  __text_size = __etext - __text_begin;
   __DATA_ROM = .; /* Symbol is used by startup for data initialization */
 
   .data : AT(__DATA_ROM)
@@ -189,7 +190,9 @@ SECTIONS
   } > m_data
 
   __DATA_END = __DATA_ROM + (__data_end__ - __data_start__);
+  __text_begin = ORIGIN(m_text);
   text_end = ORIGIN(m_text) + LENGTH(m_text);
+
   ASSERT(__DATA_END <= text_end, "region m_text overflowed with text and data")
 
   __fast_text_begin = ORIGIN(m_fast_text);

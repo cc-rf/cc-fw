@@ -40,8 +40,8 @@
 #endif
 
 
-#define USB_VCOM_TASK_STACK_SIZE            (TASK_STACK_SIZE_MEDIUM / sizeof(StackType_t))
-#define USB_VCOM_RX_TASK_STACK_SIZE         (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
+#define USB_VCOM_TASK_STACK_SIZE            TASK_STACK_SIZE_MEDIUM
+#define USB_VCOM_RX_TASK_STACK_SIZE         TASK_STACK_SIZE_LARGE
 #define USB_VCOM_TX_QUEUE_LEN               4
 #define USB_VCOM_RX_QUEUE_LEN               4
 

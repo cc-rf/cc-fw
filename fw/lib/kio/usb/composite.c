@@ -65,7 +65,7 @@ extern usb_device_class_struct_t g_UsbDeviceCdcVcomConfig[USB_CDC_INSTANCE_COUNT
 #define USB_HS_CLK_FREQ 0U
 
 
-#define USB_DEVICE_TASK_STACK_SIZE     (TASK_STACK_SIZE_LARGE / sizeof(StackType_t))
+#define USB_DEVICE_TASK_STACK_SIZE     TASK_STACK_SIZE_LARGE
 
 static struct {
 

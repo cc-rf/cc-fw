@@ -8,11 +8,13 @@
 
 /* Phillip: specific task stack sizes and priorities */
 
+#define configMINIMAL_STACK_SIZE    ((unsigned short) 128u)
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
-#define TASK_STACK_SIZE_HUGE        (TASK_STACK_SIZE_SMALL * 13)
-#define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 9)
-#define TASK_STACK_SIZE_MEDIUM      (TASK_STACK_SIZE_SMALL * 5)
-#define TASK_STACK_SIZE_DEFAULT     (TASK_STACK_SIZE_SMALL * 2)
+#define TASK_STACK_SIZE_HUGE        (TASK_STACK_SIZE_SMALL * 3)
+#define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 2)
+#define TASK_STACK_SIZE_MEDIUM      (TASK_STACK_SIZE_SMALL * 3 / 2)
+#define TASK_STACK_SIZE_DEFAULT     TASK_STACK_SIZE_SMALL
+#define TASK_STACK_SIZE_TIMER       TASK_STACK_SIZE_LARGE
 
 #define TASK_PRIO_MAX               (configMAX_PRIORITIES - 1)
 #define TASK_PRIO_MIN               0
@@ -68,7 +70,6 @@ extern void rtos_sleep_post(uint32_t xExpectedIdleTime) __fast_code;
 #define configCPU_CLOCK_HZ (CLOCK_GetCoreSysClkFreq())
 #define configTICK_RATE_HZ ((TickType_t) 10000U)
 #define configMAX_PRIORITIES (18U)
-#define configMINIMAL_STACK_SIZE ((unsigned short) 192U)
 #define configTOTAL_HEAP_SIZE ((size_t)(138U * 1024U))
 
 #define configMAX_TASK_NAME_LEN (10U)
@@ -92,7 +93,7 @@ extern void rtos_sleep_post(uint32_t xExpectedIdleTime) __fast_code;
 #define configUSE_TIMERS 1U
 #define configTIMER_TASK_PRIORITY (configMAX_PRIORITIES - 1U)
 #define configTIMER_QUEUE_LENGTH 10U
-#define configTIMER_TASK_STACK_DEPTH TASK_STACK_SIZE_LARGE
+#define configTIMER_TASK_STACK_DEPTH TASK_STACK_SIZE_TIMER
 
 /* Set the following definitions to 1 to include the API function, or zero
 to exclude the API function. */

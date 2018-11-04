@@ -20,3 +20,11 @@ typedef int32_t     s32;
 typedef uint32_t    u32;
 typedef int64_t     s64;
 typedef uint64_t    u64;
+
+
+static inline void wcpy(u32 *restrict src, u32 *restrict end, u32 *restrict dst)
+{
+    while (src < end) {
+        *dst++ = *src++;
+    }
+}

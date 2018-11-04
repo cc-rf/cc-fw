@@ -19,7 +19,7 @@
 
 
 #define FABI_NOTIFY             (1u<<23u)
-#define FABI_TASK_STACK_SIZE    (TASK_STACK_SIZE_DEFAULT / sizeof(StackType_t))
+#define FABI_TASK_STACK_SIZE    TASK_STACK_SIZE_DEFAULT
 
 
 #define FABI_CHAN_MASK      ((u8)((u8)(1u << (u8)FABI_CHAN_COUNT) - 1u))

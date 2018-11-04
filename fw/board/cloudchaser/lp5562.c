@@ -158,7 +158,7 @@ void lp5562_set_current(lp5562_t lp, u8 chan, u8 current)
     lp5562_write(lp, chan, current);
 
     /*if (chan == LP5562_CURRENT_RED) {
-        itm_printf(0, "lp5562 red set=%u desired=%u\n", lp5562_read(lp, chan), current);
+        board_trace_f("lp5562 red set=%u desired=%u\n", lp5562_read(lp, chan), current);
     }*/
 }
 
