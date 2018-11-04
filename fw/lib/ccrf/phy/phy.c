@@ -492,7 +492,7 @@ static void phy_task(phy_t phy)
             const u32 elapsed = (u32)(ts - loop_time_start);
             const u32 loop_time_avg_usec = (u32)(loop_time_sum / loop_time_count);
             const u32 loops_per_sec = (u32)(1000000ul * (u64)loop_time_count / elapsed);
-            itm_printf(0, "(loop) time=%lu us\tfreq=%lu Hz\r\n", loop_time_avg_usec, loops_per_sec);
+            board_trace_f("(loop) time=%lu us\tfreq=%lu Hz\r\n", loop_time_avg_usec, loops_per_sec);
             loop_time_sum = 0;
             loop_time_count = 0;
             loop_time_start = ccrf_clock();

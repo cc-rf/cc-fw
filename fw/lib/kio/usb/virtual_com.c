@@ -18,6 +18,8 @@
 
 #include <MK66F18.h>
 #include <fsl_sim.h>
+
+#include <board/trace.h>
 #include <usr/serf.h>
 
 
@@ -147,7 +149,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
     }
 
     if (instance == USB_CDC_INSTANCE_COUNT) {
-        itm_puts(0, "usb: instance not found\r\n");
+        board_trace("usb: instance not found\r\n");
         return kStatus_USB_Error;
     }
 
@@ -184,7 +186,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
                     memcpy(io.buf, usb_vcom[instance].rx_buf, recv_size);
 
                     if (!xQueueSend(usb_vcom[instance].rxq, &io, pdMS_TO_TICKS(10))) {
-                        itm_puts(0, "usb: rx queue fail\r\n");
+                        board_trace("usb: rx queue fail\r\n");
                         vPortFree(io.buf);
                     }
                 }
@@ -352,7 +354,7 @@ usb_status_t USB_DeviceCdcVcomCallback(class_handle_t handle, uint32_t event, vo
     }
 
     if (error) {
-        itm_printf(0, "ev=%u er=%u\n", event, error);
+        board_trace_f("ev=%u er=%u\n", event, error);
     }
 
     return error;
@@ -402,11 +404,11 @@ static void usb_vcom_task(void *param)
     while (1) {
         if (!xQueueReceive(vcom->txq, &io, portMAX_DELAY)) continue;
         ++vcom->sending;
-        //itm_printf(0, "<itm> usb: send io=0x%08X size=%lu receiving=%u\n", io, io.len, receiving);
+        //board_trace_f("<itm> usb: send io=0x%08X size=%lu receiving=%u\n", io, io.len, receiving);
 
         if ((error = USB_DeviceCdcAcmSend(cdc, ep, io.buf, io.len))) {
             --vcom->sending;
-            itm_printf(0, "usb: tx error=%u\r\n", error);
+            board_trace_f("usb: tx error=%u\r\n", error);
 
             vPortFree(io.buf);
             io.buf = NULL;
@@ -417,7 +419,7 @@ static void usb_vcom_task(void *param)
         if (!xSemaphoreTake(vcom->txs, portMAX_DELAY /*pdMS_TO_TICKS(100)*/)) {
             //error = USB_DeviceCdcAcmSendCancel(cdc, ep);
             --vcom->sending;
-            itm_printf(0, "usb: tx timeout, len=%u\r\n", io.len);
+            board_trace_f("usb: tx timeout, len=%u\r\n", io.len);
         }
 
         vPortFree(io.buf);
@@ -486,16 +488,16 @@ void usb_write_direct(u8 port, u8 *buf, size_t len)
 
     usb_io_t io = { len, buf };
 
-    //itm_printf(0, "<itm> usb: queu io=0x%08X size=%lu\n", io, io->len);
+    //board_trace_f("<itm> usb: queu io=0x%08X size=%lu\n", io, io->len);
 
     if (!isInterrupt()) {
         if (!xQueueSend(usb_vcom[port].txq, &io, pdMS_TO_TICKS(1000))) {
-            itm_puts(0, "usb: queue failed\r\n");
+            board_trace("usb: queue failed\r\n");
             vPortFree(buf);
         }
     } else {
         if (!xQueueSendFromISR(usb_vcom[port].txq, &io, NULL)) {
-            itm_puts(0, "usb: queue failed\r\n");
+            board_trace("usb: queue failed\r\n");
             vPortFree(buf);
         }
     }
@@ -525,7 +527,7 @@ usb_status_t USB_DeviceCdcVcomSetConfigure(class_handle_t handle, uint8_t config
 
         const u8 ep = ((u8[]){USB_CDC_VCOM0_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM1_DIC_BULK_OUT_ENDPOINT, USB_CDC_VCOM2_DIC_BULK_OUT_ENDPOINT})[instance];
 
-        //itm_printf(0, "usb: attach com #%i p=%u\r\n", instance, g_deviceComposite->cdcVcom[instance].attach);
+        //board_trace_f("usb: attach com #%i p=%u\r\n", instance, g_deviceComposite->cdcVcom[instance].attach);
 
         g_deviceComposite->cdcVcom[instance].attach = 1;
         /* Schedule buffer for receive */

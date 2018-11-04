@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <kio/itm.h>
+#include <board/trace.h>
+
 
 #ifdef UART_DMA
 static void uart_dma_callback(UART_Type *base, uart_edma_handle_t *handle, status_t status, void *userData);
@@ -142,7 +144,7 @@ void uart_write(uart_t const uart, size_t size, const u8 *data)
     #endif
 
     if (status != kStatus_Success) {
-        itm_printf(0, "[uart-tx] fail: status=%li\n", status);
+        board_trace_f("[uart-tx] fail: status=%li\n", status);
 
         #if defined(UART_LOCK)
             xSemaphoreGive(uart->tx_mtx);
@@ -202,7 +204,7 @@ size_t uart_read(uart_t const uart, size_t size, u8 *data)
     #endif
 
     if (status != kStatus_Success) {
-        itm_printf(0, "[uart-rx] fail: status=%li\n", status);
+        board_trace_f("[uart-rx] fail: status=%li\n", status);
 
         #if defined(UART_LOCK)
             xSemaphoreGive(uart->rx_mtx);
@@ -321,7 +323,7 @@ static void uart_callback(UART_Type *base, uart_handle_t *handle, status_t statu
             case kStatus_UART_ParityError:
                 // TODO: See if UART can be reset before overrun, just resetting from here
                 //       causes a weird buffer offset issue...
-                itm_printf(0, "[uart] error=%li\n", status);
+                board_trace_f("[uart] error=%li\n", status);
                 break;
 
             case kStatus_UART_RxHardwareOverrun:
@@ -373,7 +375,7 @@ static void uart_callback(UART_Type *base, uart_handle_t *handle, status_t statu
                 break;
 
             default:
-                itm_printf(0, "[uart] unknown status=%li\n", status);
+                board_trace_f("[uart] unknown status=%li\n", status);
                 break;
         }
 

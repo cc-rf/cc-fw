@@ -64,7 +64,7 @@ static void rf_uart_task(void *p __unused)
     while (1) {
         size = (net_size_t) uart_read(rf_uart.uart, RF_UART_BUF_SIZE, rf_uart.buf);
         //rf_uart.buf[size] = 0;
-        //itm_printf(0, "uart-recv %lu [%s]\n", size, rf_uart.buf);
+        //board_trace_f("uart-recv %lu [%s]\n", size, rf_uart.buf);
 
         if (size) {
             rf_uart_send(size, rf_uart.buf);

@@ -60,8 +60,8 @@ MEMORY
   m_interrupts          (RX)  : ORIGIN = 0x00000000, LENGTH = 0x00000400
   m_flash_config        (RX)  : ORIGIN = 0x00000400, LENGTH = 0x00000010
   m_fast_text           (RX)  : ORIGIN = 0x00000410, LENGTH = 0x0000BC00
-  m_text                (RX)  : ORIGIN = 0x0000C010, LENGTH = 0x001F2FF0
-  m_user                (RW)  : ORIGIN = 0x001FF000, LENGTH = 0x00001000
+  m_text                (RX)  : ORIGIN = 0x0000C010, LENGTH = 0x00080000
+  m_user                (RW)  : ORIGIN = 0x000FE000, LENGTH = 0x00001000
   m_interrupts_ram      (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00000400
   m_fast_data           (RW)  : ORIGIN = 0x1FFF0400, LENGTH = 0x00004000
   m_fast_code           (RX)  : ORIGIN = 0x1FFF4400, LENGTH = 0x0000BC00
@@ -212,9 +212,15 @@ SECTIONS
   .user (NOLOAD) : AT(ORIGIN(m_user))
   {
     . = ALIGN(4);
+    __user_flash_base = .;
+    *(.user.base)
     *(.user)
+    *(.user*)
+    __user_flash_end = .;
     . = ALIGN(4);
   } > m_user
+
+  __user_flash_size = __user_flash_end - __user_flash_base;
 
   .interrupts_ram (NOLOAD) :
   {
