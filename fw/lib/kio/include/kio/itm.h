@@ -11,7 +11,7 @@
 
 static inline void itm_init(void)
 {
-    uint32_t SWOSpeed = 1200000; //1000kbps, default for JLinkSWOViewer
+    uint32_t SWOSpeed = 1000000; //1000kbps, default for JLinkSWOViewer
     //uint32_t SWOSpeed = 6000000; //6000kbps, default for JLinkSWOViewer
     uint32_t SWOPrescaler = (CLOCK_GetCoreSysClkFreq() / SWOSpeed) - 1; // SWOSpeed in Hz, note that F_CPU is expected to be 96000000 in this case
     CoreDebug->DEMCR = CoreDebug_DEMCR_TRCENA_Msk;

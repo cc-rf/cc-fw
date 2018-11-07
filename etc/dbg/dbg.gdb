@@ -34,12 +34,13 @@ monitor halt
 symbol-file fw.elf
 load fw.elf
 
-monitor SWO DisableTarget 0xFFFFFFFF
-monitor SWO EnableTarget 0 1200000 0xFFFFFFFF 0
+#monitor SWO DisableTarget 0xFFFFFFFF
+monitor SWO EnableTarget 0 1000000 0xFFFFFFFF 0
 
 monitor clrbp
 monitor reset
 #monitor halt
 
 flushreg
+
 continue

@@ -114,7 +114,7 @@ static void prvTaskExitError( void );
 
 /* Each task maintains its own interrupt status in the critical nesting
 variable. */
-static UBaseType_t uxCriticalNesting __fast_data = 0xaaaaaaaa;
+static UBaseType_t uxCriticalNesting __fast_data;
 
 /*
  * Used by the portASSERT_IF_INTERRUPT_PRIORITY_INVALID() macro to ensure
@@ -122,8 +122,8 @@ static UBaseType_t uxCriticalNesting __fast_data = 0xaaaaaaaa;
  * a priority above configMAX_SYSCALL_INTERRUPT_PRIORITY.
  */
 #if( configASSERT_DEFINED == 1 )
-	 static uint8_t ucMaxSysCallPriority __fast_data = 0;
-	 static uint32_t ulMaxPRIGROUPValue __fast_data = 0;
+	 static uint8_t ucMaxSysCallPriority __fast_data;
+	 static uint32_t ulMaxPRIGROUPValue __fast_data;
 	 static const volatile uint8_t * const pcInterruptPriorityRegisters = ( const volatile uint8_t * const ) portNVIC_IP_REGISTERS_OFFSET_16;
 #endif /* configASSERT_DEFINED */
 
