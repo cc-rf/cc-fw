@@ -11,27 +11,31 @@
 
 void board_boot(void)
 {
+    portDISABLE_INTERRUPTS();
+
     extern u32 __fast_text_begin[];
     extern u32 __fast_text_end[];
     extern u32 __fast_code_begin[];
 
     wcpy(__fast_text_begin, __fast_text_end, __fast_code_begin);
 
-    /*
-    extern u32 __fast_data_rom_begin[];
+    /*extern u32 __fast_data_rom_begin[];
     extern u32 __fast_data_rom_end[];
     extern u32 __fast_data_begin[];
 
-    wcpy(__fast_data_rom_begin, __fast_data_rom_end, __fast_data_begin);
-    */
+    wcpy(__fast_data_rom_begin, __fast_data_rom_end, __fast_data_begin);*/
 
     InstallIRQHandler(0, 0);
 
     boot_pins_init();
-    boot_clock_run_hs_oc();
+    boot_clock_run();
 
     itm_init();
-    itm_puts(0, "<boot>\r\n");
+    board_trace("<boot>");
+
+    flsh_init();
+
+    portENABLE_INTERRUPTS();
 
     /*board_trace_f("\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",
                CLOCK_GetFreq(kCLOCK_CoreSysClk),

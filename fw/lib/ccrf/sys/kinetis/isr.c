@@ -80,7 +80,7 @@ typedef struct __packed {
 static void isr_noop(void *param __unused) { }
 
 #define DECL_PORT_ISR_MAP(P)     \
-    static isr_map_t isr_map_port##P[ISRD_PORT##P##_MAX_PIN+1] __fast_data = { [ 0 ... ISRD_PORT##P##_MAX_PIN ] = {isr_noop, NULL} };
+    static isr_map_t isr_map_port##P[ISRD_PORT##P##_MAX_PIN+1] __ccrf_data;
 
 #define DECL_PORT_MAP_ELEM(P)        isr_map_port ## P,
 #define DECL_PORT_MAP_ELEM_NULL(P)   NULL,

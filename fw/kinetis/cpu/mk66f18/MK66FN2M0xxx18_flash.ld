@@ -59,9 +59,9 @@ MEMORY
 {
   m_interrupts          (RX)  : ORIGIN = 0x00000000, LENGTH = 0x00000400
   m_flash_config        (RX)  : ORIGIN = 0x00000400, LENGTH = 0x00000010
-  m_fast_text           (RX)  : ORIGIN = 0x00000410, LENGTH = 0x0000BC00
-  m_text                (RX)  : ORIGIN = 0x0000C010, LENGTH = 0x00080000
-  m_user                (RW)  : ORIGIN = 0x000FE000, LENGTH = 0x00001000
+  m_user                (RW)  : ORIGIN = 0x00020000, LENGTH = 0x00001000
+  m_fast_text           (RX)  : ORIGIN = 0x00021000, LENGTH = 0x0000BC00
+  m_text                (RX)  : ORIGIN = 0x0002CC00, LENGTH = 0x00040000
   m_interrupts_ram      (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00000400
   m_fast_data           (RW)  : ORIGIN = 0x1FFF0400, LENGTH = 0x00004000
   m_fast_code           (RX)  : ORIGIN = 0x1FFF4400, LENGTH = 0x0000BC00
@@ -72,6 +72,7 @@ MEMORY
 SECTIONS
 {
   /* The startup code goes first into internal flash */
+
   .interrupts :
   {
     __VECTOR_TABLE = .;
@@ -87,12 +88,68 @@ SECTIONS
     . = ALIGN(4);
   } > m_flash_config
 
-  /* The program code and other data goes into internal flash */
-  .text :
+  __flash_header_begin = ORIGIN(m_interrupts);
+  __flash_header_end = __flash_header_begin + LENGTH(m_interrupts) + LENGTH(m_flash_config);
+
+  .user : AT(ORIGIN(m_user))
+  {
+    __user_flash_base = .;
+    *(.user.base)
+    *(.user)
+    *(.user*)
+    . = ALIGN(16);
+    __user_flash_end = .;
+  } > m_user
+
+  __fast_text_begin = ORIGIN(m_fast_text);
+
+  .fast_code (NOLOAD) : AT(__fast_text_begin)
+  {
+    __fast_code_begin = .;
+    *(.fast_text)
+    *(.fast_text*)
+    *freertos.a:*(.text)
+    *freertos.a:*(.text.*)
+    /*
+    *gcc.a:*(.text)
+    *gcc.a:*(.text.*)
+    */
+    /* If doing this one, need to copy to ram earlier.
+    *nano.a:*(.text) /* adds 10K */
+    *nano.a:*(.text.*)
+    */
+    . = ALIGN(16);
+    __fast_code_end = .;
+  } > m_fast_code
+
+  __fast_text_end = __fast_text_begin + (__fast_code_end - __fast_code_begin);
+
+  /* __fast_data_rom_begin = ORIGIN(m_fast_data_rom); */
+
+  .fast_data (NOLOAD) : AT(ORIGIN(m_fast_data))
   {
     . = ALIGN(4);
-    *(EXCLUDE_FILE(*freertos.a) .text)                 /* .text sections (code) */
-    *(EXCLUDE_FILE(*freertos.a) .text*)                /* .text* sections (code) */
+    __fast_data_begin = .;
+    *(.fast_data)
+    *(.fast_data*)
+    . = ALIGN(4);
+    __fast_data_end = .;
+
+  } > m_fast_data
+
+  __fast_data_size = __fast_data_end - __fast_data_begin;
+  /*__fast_data_rom_end = .;
+  __fast_data_size = __fast_data_rom_end - __fast_data_rom_begin;
+  */
+
+  __text_begin = ORIGIN(m_text);
+
+  /* The program code and other data goes into internal flash */
+  .text : AT(__text_begin)
+  {
+    . = ALIGN(16);
+    *(.text)                 /* .text sections (code) */
+    *(.text*)                /* .text* sections (code) */
     *(.rodata)               /* .rodata sections (constants, strings, etc.) */
     *(.rodata*)              /* .rodata* sections (constants, strings, etc.) */
     *(.glue_7)               /* glue arm to thumb code */
@@ -100,130 +157,48 @@ SECTIONS
     *(.eh_frame)
     KEEP (*(.init))
     KEEP (*(.fini))
-    . = ALIGN(4);
-  } > m_text
-
-  .ARM.extab :
-  {
-    *(.ARM.extab* .gnu.linkonce.armextab.*)
-  } > m_text
-
-  .ARM :
-  {
-    __exidx_start = .;
-    *(.ARM.exidx*)
-    __exidx_end = .;
-  } > m_text
-
- .ctors :
-  {
-    __CTOR_LIST__ = .;
-    /* gcc uses crtbegin.o to find the start of
-       the constructors, so we make sure it is
-       first.  Because this is a wildcard, it
-       doesn't matter if the user does not
-       actually link against crtbegin.o; the
-       linker won't look for a file to match a
-       wildcard.  The wildcard also means that it
-       doesn't matter which directory crtbegin.o
-       is in.  */
-    KEEP (*crtbegin.o(.ctors))
-    KEEP (*crtbegin?.o(.ctors))
-    /* We don't want to include the .ctor section from
-       from the crtend.o file until after the sorted ctors.
-       The .ctor section from the crtend file contains the
-       end of ctors marker and it must be last */
-    KEEP (*(EXCLUDE_FILE(*crtend?.o *crtend.o) .ctors))
-    KEEP (*(SORT(.ctors.*)))
-    KEEP (*(.ctors))
-    __CTOR_END__ = .;
-  } > m_text
-
-  .dtors :
-  {
-    __DTOR_LIST__ = .;
-    KEEP (*crtbegin.o(.dtors))
-    KEEP (*crtbegin?.o(.dtors))
-    KEEP (*(EXCLUDE_FILE(*crtend?.o *crtend.o) .dtors))
-    KEEP (*(SORT(.dtors.*)))
-    KEEP (*(.dtors))
-    __DTOR_END__ = .;
-  } > m_text
-
-  .preinit_array :
-  {
     PROVIDE_HIDDEN (__preinit_array_start = .);
     KEEP (*(.preinit_array*))
     PROVIDE_HIDDEN (__preinit_array_end = .);
-  } > m_text
-
-  .init_array :
-  {
     PROVIDE_HIDDEN (__init_array_start = .);
     KEEP (*(SORT(.init_array.*)))
     KEEP (*(.init_array*))
     PROVIDE_HIDDEN (__init_array_end = .);
-  } > m_text
-
-  .fini_array :
-  {
     PROVIDE_HIDDEN (__fini_array_start = .);
     KEEP (*(SORT(.fini_array.*)))
     KEEP (*(.fini_array*))
     PROVIDE_HIDDEN (__fini_array_end = .);
+    . = ALIGN(4);
   } > m_text
 
+    .ARM :
+    {
+      __exidx_start = .;
+      *(.ARM.exidx*)
+      __exidx_end = .;
+    } > m_text
+
+  . = ALIGN(16);
   __etext = .;    /* define a global symbol at end of code */
-  __text_size = __etext - __text_begin;
+  __text_end = .;
   __DATA_ROM = .; /* Symbol is used by startup for data initialization */
 
   .data : AT(__DATA_ROM)
   {
-    . = ALIGN(4);
+    . = ALIGN(16);
     __DATA_RAM = .;
     __data_start__ = .;      /* create a global symbol at data start */
     *(.data)                 /* .data sections */
     *(.data*)                /* .data* sections */
     KEEP(*(.jcr*))
-    . = ALIGN(4);
+    . = ALIGN(16);
     __data_end__ = .;        /* define a global symbol at data end */
   } > m_data
 
   __DATA_END = __DATA_ROM + (__data_end__ - __data_start__);
-  __text_begin = ORIGIN(m_text);
-  text_end = ORIGIN(m_text) + LENGTH(m_text);
 
-  ASSERT(__DATA_END <= text_end, "region m_text overflowed with text and data")
-
-  __fast_text_begin = ORIGIN(m_fast_text);
-
-  .fast_code (NOLOAD) : AT(__fast_text_begin)
-  {
-    . = ALIGN(4);
-    __fast_code_begin = .;
-    *(.fast_text)
-    *(.fast_text*)
-    *freertos.a:*(.text)
-    *freertos.a:*(.text.*)
-    . = ALIGN(4);
-    __fast_code_end = .;
-  } > m_fast_code
-
-  __fast_code_size = SIZEOF(.fast_code);
-  __fast_text_end = __fast_text_begin + __fast_code_size;
-
-  .user (NOLOAD) : AT(ORIGIN(m_user))
-  {
-    . = ALIGN(4);
-    __user_flash_base = .;
-    *(.user.base)
-    *(.user)
-    *(.user*)
-    __user_flash_end = .;
-    . = ALIGN(4);
-  } > m_user
-
-  __user_flash_size = __user_flash_end - __user_flash_base;
+  m_text_end = ORIGIN(m_text) + LENGTH(m_text);
+  ASSERT(__DATA_END <= m_text_end, "region m_text overflowed with text and data")
 
   .interrupts_ram (NOLOAD) :
   {
@@ -237,24 +212,6 @@ SECTIONS
 
   __VECTOR_RAM = __VECTOR_RAM__;
   __RAM_VECTOR_TABLE_SIZE_BYTES = __interrupts_ram_end__ - __interrupts_ram_start__;
-
-    /*
-    __fast_data_rom_begin = ORIGIN(m_fast_data_rom);
-    .fast_data (NOLOAD) : AT(__fast_data_rom_begin)
-    */
-    .fast_data (NOLOAD) : AT(ORIGIN(m_fast_data))
-    {
-      . = ALIGN(4);
-      __fast_data_begin = .;
-      *(.fast_data)
-      *(.fast_data*)
-      . = ALIGN(4);
-      __fast_data_end = .;
-
-    } > m_fast_data
-
-    __fast_data_size = SIZEOF(.fast_data);
-    /* __fast_data_rom_end = __fast_data_rom_begin + __fast_data_size; */
 
   /* Uninitialized data section */
   .bss (NOLOAD) :

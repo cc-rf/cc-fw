@@ -37,6 +37,10 @@
 
 #include "fsl_ftfx_controller.h"
 
+// phillip: to use __fast_code for the flash run command,
+//      since we have set FTFx_DRIVER_IS_FLASH_RESIDENT=0.
+#include <usr/type.h>
+
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -113,7 +117,7 @@ static void ftfx_copy_run_command_to_ram(uint32_t *ftfxRunCommand);
 #endif /* FTFx_DRIVER_IS_FLASH_RESIDENT */
 
 /*! @brief Internal function Flash command sequence. Called by driver APIs only*/
-static status_t ftfx_command_sequence(ftfx_config_t *config);
+static status_t ftfx_command_sequence(ftfx_config_t *config) __fast_code;
 
 /*! @brief Validates the range and alignment of the given address range.*/
 static status_t ftfx_check_mem_range(ftfx_config_t *config,
@@ -183,6 +187,7 @@ static const uint16_t s_ftfxRunCommandFunctionCode[] = {
     0x4770  /* BX    LR */
 };
 #if (!FTFx_DRIVER_IS_EXPORTED)
+
 /*! @brief A static buffer used to hold flash_run_command() */
 static uint32_t s_ftfxRunCommand[kFTFx_RamFuncMaxSizeInWords];
 #endif /* (!FTFx_DRIVER_IS_EXPORTED) */
@@ -475,10 +480,11 @@ status_t FTFx_CMD_Program(ftfx_config_t *config,
     status_t returnCode;
     uint8_t blockWriteUnitSize = config->opsConfig.addrAligment.blockWriteUnitSize;
 
-    if (src == NULL)
+    // phillip: need to copy from 0x00, go figure....
+    /*if (src == NULL)
     {
         return kStatus_FTFx_InvalidArgument;
-    }
+    }*/
 
     /* Check the supplied address range. */
     returnCode = ftfx_check_mem_range(config, start, lengthInBytes, blockWriteUnitSize);

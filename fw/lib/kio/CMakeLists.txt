@@ -6,6 +6,7 @@ endif()
 
 add_library(
         ${NAME} STATIC EXCLUDE_FROM_ALL
+        flsh.c
         iic.c
         pit.c
         sclk.c

@@ -83,7 +83,7 @@ if(KINETIS_SDK_DRIVER_EWM)
 endif()
 
 if(KINETIS_SDK_DRIVER_FLASH)
-    list(APPEND KINETIS_SDK_DRIVERS fsl_flash.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_ftfx_flash.c fsl_ftfx_controller.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_FLEXBUS)
@@ -161,6 +161,18 @@ target_compile_definitions(
         ${NAME}
         PUBLIC ENABLE_RAM_VECTOR_TABLE
 )
+
+if(KINETIS_SDK_DRIVER_FLASH)
+    target_compile_definitions(
+            ${NAME}
+            PUBLIC FTFx_DRIVER_IS_FLASH_RESIDENT=0
+    )
+
+    target_link_libraries(
+            ${NAME}
+            PUBLIC usr # needed for __fast_code
+    )
+endif()
 
 target_link_libraries(
         ${NAME}
