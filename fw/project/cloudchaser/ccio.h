@@ -29,6 +29,8 @@
 
 #define CODE_ID_ECHO            0
 #define CODE_ID_STATUS          1
+#define CODE_ID_CONFIG          30
+#define CODE_ID_CONFIG_RSP      31
 #define CODE_ID_MAC_SEND        2
 #define CODE_ID_MAC_RECV        3
 #define CODE_ID_SEND            4
@@ -42,6 +44,11 @@
 #define CODE_ID_UART            26
 #define CODE_ID_LED             27
 #define CODE_ID_RAINBOW         29
+
+#define CONFIG_ID_ADDR          0xADD1
+
+#define CONFIG_RSLT_OK          0x1
+#define CONFIG_RSLT_ERR         0x0
 
 #define RESET_MAGIC             0xD1E00D1E
 
@@ -74,6 +81,30 @@ typedef struct __packed {
     } stat;
 
 } code_status_t;
+
+typedef struct __packed {
+    u32 id;
+
+    union {
+
+        u32 param;
+
+        struct __packed {
+
+            net_addr_t orig;
+            net_addr_t addr;
+
+        } addr;
+    };
+
+    u8 data[];
+
+} code_config_t;
+
+typedef struct __packed {
+    u32 rslt;
+
+} code_config_rsp_t;
 
 typedef struct __packed {
     u32 magic;

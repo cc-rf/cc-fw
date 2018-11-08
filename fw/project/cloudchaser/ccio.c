@@ -4,17 +4,21 @@
 #include "rf_uart.h"
 #include <kio/sclk.h>
 
+static void handle_code_status(u8 port, size_t size, u8 *data);
+static void handle_code_config(u8 port, size_t size, u8 *data);
 static void handle_code_mac_send(u8 port, size_t size, u8 *data);
 static void handle_code_send(u8 port, size_t size, u8 *data);
 static void handle_code_trxn(u8 port, size_t size, u8 *data);
 static void handle_code_resp(u8 port, size_t size, u8 *data);
 static void handle_code_reset(u8 port, size_t size, u8 *data);
-static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_peer(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
 static void handle_code_uart(size_t size, u8 *data);
 static void handle_code_rainbow(size_t size, u8 *data);
 static void handle_code_led(size_t size, u8 *data);
+
+static void write_code(u8 port, u8 code, size_t size, void *data) __nonnull_all;
+static void write_code_config_rsp(u8 port, code_config_rsp_t *config_rsp) __nonnull_all;
 
 
 void ccio_recv(u8 port, serf_t *frame, size_t size)
@@ -33,6 +37,9 @@ void ccio_recv(u8 port, serf_t *frame, size_t size)
 
         case CODE_ID_STATUS:
             return handle_code_status(port, size, frame->data);
+
+        case CODE_ID_CONFIG:
+            return handle_code_config(port, size, frame->data);
 
         case CODE_ID_MAC_SEND:
             return handle_code_mac_send(port, size, frame->data);
@@ -65,6 +72,54 @@ void ccio_recv(u8 port, serf_t *frame, size_t size)
             printf("(frame) unknown code: size=%u code=0x%02x\r\n", size, frame->code);
             break;
     }
+}
+
+
+static void handle_code_status(u8 port, size_t size, u8 *data)
+{
+    (void)size;
+    (void)data;
+
+    status.uptime = SCLK_MSEC(sclk_time());
+
+    phy_stat(mac_phy(macs[0]), &status.stat.phy);
+    mac_stat(macs[0], &status.stat.mac);
+    net_stat(nets[0], &status.stat.net);
+
+    status.phy_task_stack_usage = phy_task_stack_usage(mac_phy(macs[0]));
+    status.mac_task_stack_usage_tx = mac_task_tx_stack_usage(macs[0]);
+    status.mac_task_stack_usage_rx = mac_task_rx_stack_usage(macs[0]);
+
+    status.heap_free = xPortGetFreeHeapSize();
+    status.heap_usage = configTOTAL_HEAP_SIZE - xPortGetMinimumEverFreeHeapSize();
+
+    write_code_status(port, &status);
+}
+
+
+static void handle_code_config(u8 port, size_t size, u8 *data)
+{
+    assert(size >= sizeof(code_config_t)); assert(data);
+
+    code_config_t *const code_config = (code_config_t *)data;
+
+    code_config_rsp_t rsp = {
+            .rslt = CONFIG_RSLT_ERR
+    };
+
+    switch (code_config->id) {
+        case CONFIG_ID_ADDR: {
+            net_addr_t addr = net_addr(nets[0]);
+
+            if (code_config->addr.orig == addr) {
+                // net_set_addr()
+                rsp.rslt = addr;
+            }
+        }
+        break;
+    }
+
+    write_code_config_rsp(port, &rsp);
 }
 
 
@@ -239,28 +294,6 @@ static void handle_code_reset(u8 port __unused, size_t size, u8 *data)
 }
 
 
-static void handle_code_status(u8 port, size_t size, u8 *data)
-{
-    (void)size;
-    (void)data;
-
-    status.uptime = SCLK_MSEC(sclk_time());
-
-    phy_stat(mac_phy(macs[0]), &status.stat.phy);
-    mac_stat(macs[0], &status.stat.mac);
-    net_stat(nets[0], &status.stat.net);
-
-    status.phy_task_stack_usage = phy_task_stack_usage(mac_phy(macs[0]));
-    status.mac_task_stack_usage_tx = mac_task_tx_stack_usage(macs[0]);
-    status.mac_task_stack_usage_rx = mac_task_rx_stack_usage(macs[0]);
-
-    status.heap_free = xPortGetFreeHeapSize();
-    status.heap_usage = configTOTAL_HEAP_SIZE - xPortGetMinimumEverFreeHeapSize();
-
-    write_code_status(port, &status);
-}
-
-
 static void handle_code_peer(u8 port, size_t size, u8 *data)
 {
     (void)size;
@@ -325,6 +358,28 @@ static void handle_code_led(size_t size, u8 *data)
 }
 
 
+static void write_code(u8 port, u8 code, size_t size, void *data)
+{
+    if (usb_attached(port)) {
+        u8 *frame;
+        const size_t frame_size = serf_encode(code, data, size, &frame);
+        if (frame) usb_write_direct(port, frame, frame_size);
+    }
+}
+
+
+void write_code_status(u8 port, code_status_t *code_status)
+{
+    return write_code(port, CODE_ID_STATUS, sizeof(code_status_t), code_status);
+}
+
+
+static void write_code_config_rsp(u8 port, code_config_rsp_t *config_rsp)
+{
+    return write_code(port, CODE_ID_CONFIG_RSP, sizeof(code_config_rsp_t), config_rsp);
+}
+
+
 void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta)
 {
     if (usb_attached(SERF_USB_PORT)) {
@@ -337,16 +392,12 @@ void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], p
         code_recv->meta = meta;
 
         if (size) memcpy(code_recv->data, data, size);
+
         size += sizeof(code_mac_recv_t);
 
-        u8 *frame;
-        size = serf_encode(CODE_ID_MAC_RECV, (u8 *) code_recv, size, &frame);
+        write_code(SERF_USB_PORT, CODE_ID_MAC_RECV, size, code_recv);
 
         vPortFree(code_recv);
-
-        if (frame) {
-            usb_write_direct(SERF_USB_PORT, frame, size);
-        }
     }
 }
 
@@ -362,85 +413,49 @@ void write_code_recv(net_path_t path, net_addr_t dest, size_t size, u8 data[])
         code_recv->type = path.info.type;
 
         if (size) memcpy(code_recv->data, data, size);
+
         size += sizeof(code_recv_t);
 
-        u8 *frame;
-        size = serf_encode(CODE_ID_RECV, (u8 *) code_recv, size, &frame);
+        write_code(SERF_USB_PORT, CODE_ID_RECV, size, code_recv);
 
         vPortFree(code_recv);
-
-        if (frame) {
-            usb_write_direct(SERF_USB_PORT, frame, size);
-        }
     }
 }
 
 
 void write_code_evnt(net_size_t size, u8 data[])
 {
-    if (usb_attached(SERF_USB_PORT)) {
-        u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_EVNT, data, size, &frame);
-        if (frame) usb_write_direct(SERF_USB_PORT, frame, fsize);
-    }
-}
-
-
-void write_code_status(u8 port, code_status_t *code_status)
-{
-    if (usb_attached(port)) {
-        u8 *frame;
-        const size_t size = serf_encode(CODE_ID_STATUS, (u8 *) code_status, sizeof(code_status_t), &frame);
-        if (frame) usb_write_direct(port, frame, size);
-    }
+    return write_code(SERF_USB_PORT, CODE_ID_EVNT, size, data);
 }
 
 
 void write_code_peer(u8 port, size_t size, code_peer_t *code_peer)
 {
-    u8 *frame;
-    const size_t fsize = serf_encode(CODE_ID_PEER, (u8 *)code_peer, size + sizeof(code_peer_t), &frame);
-    if (frame) usb_write_direct(port, frame, fsize);
+    return write_code(port, CODE_ID_PEER, size + sizeof(code_peer_t), code_peer);
 }
 
 
 void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat)
 {
-    if (usb_attached(port)) {
-        u8 *frame;
-        const size_t size = serf_encode(CODE_ID_MAC_SEND, (u8 *) code_send_stat, sizeof(code_mac_send_stat_t), &frame);
-        if (frame) usb_write_direct(port, frame, size);
-    }
+    return write_code(port, CODE_ID_MAC_SEND, sizeof(code_mac_send_stat_t), code_send_stat);
 }
 
 
 void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat)
 {
-    if (usb_attached(port)) {
-        u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_TRXN, (u8 *) code_trxn_stat, size + sizeof(code_trxn_stat_t), &frame);
-        if (frame) usb_write_direct(port, frame, fsize);
-    }
+    return write_code(port, CODE_ID_TRXN, size + sizeof(code_trxn_stat_t), code_trxn_stat);
 }
 
 
 void write_code_send_done(u8 port, net_size_t size)
 {
-    if (usb_attached(port)) {
-        u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_SEND_DONE, (u8 *) &size, sizeof(net_size_t), &frame);
-        if (frame) usb_write_direct(port, frame, fsize);
-    }
+    return write_code(port, CODE_ID_SEND_DONE, sizeof(net_size_t), &size);
 }
 
 
 void write_code_uart(size_t size, u8 *data)
 {
-    if (usb_attached(SERF_USB_PORT)) {
-        u8 *frame;
-        const size_t fsize = serf_encode(CODE_ID_UART, data, size, &frame);
-        if (frame) usb_write_direct(SERF_USB_PORT, frame, fsize);
-    }
+    write_code(SERF_USB_PORT, CODE_ID_UART, size, data);
 
     if (usb_attached(UART_USB_PORT))
         usb_write_raw(UART_USB_PORT, data, size);
