@@ -68,7 +68,6 @@ typedef struct __packed {
     u8 cell;
     u8 rdid;
     u32 phy_task_stack_usage;
-    u32 mac_task_stack_usage_tx;
     u32 mac_task_stack_usage_rx;
     u32 heap_free;
     u32 heap_usage;

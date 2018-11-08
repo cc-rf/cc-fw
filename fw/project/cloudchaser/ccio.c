@@ -87,7 +87,6 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
     net_stat(nets[0], &status.stat.net);
 
     status.phy_task_stack_usage = phy_task_stack_usage(mac_phy(macs[0]));
-    status.mac_task_stack_usage_tx = mac_task_tx_stack_usage(macs[0]);
     status.mac_task_stack_usage_rx = mac_task_rx_stack_usage(macs[0]);
 
     status.heap_free = xPortGetFreeHeapSize();

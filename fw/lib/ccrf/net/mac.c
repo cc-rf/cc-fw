@@ -21,9 +21,7 @@
 #define MAC_PEND_TIME           10
 #define MAC_PEND_RETRY          10
 
-#define MAC_TXQ_COUNT           7 // This should eventually reflect the number of threads waiting on messages
-#define MAC_TXQ_SIZE            (MAC_TXQ_COUNT)
-#define MAC_RXQ_SIZE            7
+#define MAC_RXQ_SIZE            16
 
 #define MAC_TX_TASK_STACK_SIZE  ((768) / sizeof(StackType_t))
 #define MAC_RX_TASK_STACK_SIZE  ((1400) / sizeof(StackType_t))
@@ -64,12 +62,6 @@ typedef struct __packed {
     u8  data[MAC_PKT_SIZE_MAX];
 
 } mac_static_pkt_t;
-
-typedef struct __packed {
-    mac_static_pkt_t pkt;
-    u8 flag;
-
-} mac_send_queue_t;
 
 typedef struct __packed {
     mac_addr_t dest;
@@ -115,17 +107,9 @@ struct mac {
     mac_peer_t peer[MAC_PEER_MAX];
     mac_pend_t pend;
 
-    TaskHandle_t task;
-    StaticTask_t task_static;
-    StackType_t task_stack[MAC_TX_TASK_STACK_SIZE];
-
     TaskHandle_t rx_task;
     StaticTask_t rx_task_static;
     StackType_t rx_task_stack[MAC_RX_TASK_STACK_SIZE];
-    
-    QueueHandle_t txq;
-    StaticQueue_t txq_static;
-    mac_send_queue_t txq_buf[MAC_TXQ_SIZE];
     
     QueueHandle_t rxq;
     StaticQueue_t rxq_static;
@@ -140,7 +124,6 @@ static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr) __ccrf_code;
 static mac_size_t mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t size, u8 data[]) __ccrf_code;
 static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt) __ccrf_code;
 
-static void mac_task_send(mac_t mac) __ccrf_code;
 static void mac_task_recv(mac_t mac) __ccrf_code;
 
 static void mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta) __ccrf_code;
@@ -173,12 +156,7 @@ mac_t mac_init(mac_config_t *config)
     // This is important for variability in rand() calls within phy.
     srand(mac->addr);
 
-    mac->txq = xQueueCreateStatic(MAC_TXQ_SIZE, sizeof(mac->txq_buf[0]), (u8 *)mac->txq_buf, &mac->txq_static);
     mac->rxq = xQueueCreateStatic(MAC_RXQ_SIZE, sizeof(mac->rxq_buf[0]), (u8 *)mac->rxq_buf, &mac->rxq_static);
-
-    mac->task = xTaskCreateStatic(
-            (TaskFunction_t) mac_task_send, "mac:send", MAC_TX_TASK_STACK_SIZE, mac, TASK_PRIO_HIGHEST - 2, mac->task_stack, &mac->task_static
-    );
     
     mac->rx_task = xTaskCreateStatic(
             (TaskFunction_t) mac_task_recv, "mac:recv", MAC_RX_TASK_STACK_SIZE, mac, TASK_PRIO_HIGH, mac->rx_task_stack, &mac->rx_task_static
@@ -211,12 +189,6 @@ mac_addr_t mac_addr(mac_t mac)
 void mac_stat(mac_t mac, mac_stat_t *stat)
 {
     *stat = mac->stat;
-}
-
-
-u32 mac_task_tx_stack_usage(mac_t mac)
-{
-    return (MAC_TX_TASK_STACK_SIZE - uxTaskGetStackHighWaterMark(mac->task)) * sizeof(StackType_t);
 }
 
 
@@ -351,26 +323,10 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
     u8 phy_flag =
             (u8)(flag & PHY_PKT_FLAG_USER_MASK) |
             (u8)(imm ? PHY_PKT_FLAG_IMMEDIATE : 0) |
-            (u8)(!imm || needs_ack ? PHY_PKT_FLAG_BLOCK : 0);
+            (u8)(!imm || needs_ack || (flag & MAC_FLAG_PKT_BLK) ? PHY_PKT_FLAG_BLOCK : 0);
 
     u8 retry = MAC_PEND_RETRY;
     TickType_t backoff = pdMS_TO_TICKS(5 + (rand() % 6));
-
-    if (!(flag & MAC_FLAG_PKT_BLK)) {
-        mac_send_queue_t sq = {
-                .flag = flag
-        };
-
-        memcpy(&sq.pkt, pkt, pkt_len);
-
-        if (!xQueueSend(mac->txq, &sq, portMAX_DELAY)) {
-            mac_trace_debug("mac/tx: queue failed");
-            return false;
-        }
-
-        // packet was queued
-        return true;
-    }
 
     if (needs_ack) {
         // TODO: This needs a lock
@@ -440,19 +396,6 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
     }
 
     return true;
-}
-
-
-static void mac_task_send(mac_t mac)
-{
-    const QueueHandle_t txq = mac->txq;
-    mac_send_queue_t sq;
-
-    while (1) {
-        while (!xQueueReceive(txq, &sq, portMAX_DELAY));
-        sq.flag |= MAC_FLAG_PKT_BLK;
-        mac_send_packet(mac, sq.flag, &sq.pkt);
-    }
 }
 
 
