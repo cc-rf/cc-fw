@@ -186,6 +186,21 @@ mac_addr_t mac_addr(mac_t mac)
 }
 
 
+mac_addr_t mac_addr_set(mac_t mac, mac_addr_t orig, mac_addr_t addr)
+{
+    if (addr != MAC_ADDR_BCST && orig == mac->addr) {
+        for (u8 i = 0; i < MAC_PEER_MAX; ++i) {
+            if (mac->peer[i].addr == addr)
+                return mac->addr;
+        }
+
+        mac->addr = addr;
+    }
+
+    return mac->addr;
+}
+
+
 void mac_stat(mac_t mac, mac_stat_t *stat)
 {
     *stat = mac->stat;

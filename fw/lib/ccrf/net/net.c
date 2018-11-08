@@ -22,15 +22,16 @@
 
 
 #define NET_PEER_MAX            64u
-#define NET_PEER_EXPIRE_TIME    600u
+#define NET_PEER_EXPIRE_TIME    30u
 #define NET_TIMER_INTERVAL      10u
 
 #define NET_NOTIFY_TRXN_DONE    (1u << 18u)
 
 #define NET_MAC_FLAG_NETLAYER   MAC_FLAG_0
 
-#define NET_CORE_PEER_PORT      1
-#define NET_CORE_PEER_TYPE      2
+#define NET_CORE_PEER_PORT          1
+#define NET_CORE_PEER_TYPE          2
+#define NET_CORE_PEER_LEAVE_TYPE    3
 
 
 typedef struct __packed {
@@ -79,10 +80,10 @@ struct net {
 };
 
 
-static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
+static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, void *data) __ccrf_code;
 static void net_mesg_free(net_mesg_t **mesg) __ccrf_code;
-static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, u8 data[]) __ccrf_code;
-static net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
+static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, void *data) __ccrf_code;
+static net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, void *data) __ccrf_code;
 static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg) __ccrf_code;
@@ -90,10 +91,13 @@ static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t ac
 static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta) __ccrf_code;
 static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg) __ccrf_code;
 static void net_peer_bcast(net_t net);
+static void net_peer_bcast_leave(net_t net, net_addr_t addr);
 static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add) __ccrf_code;
 static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta) __ccrf_code;
 static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, net_peer_info_t *peers);
 static void net_peer_expire(net_t net, net_time_t time);
+static bool net_peer_delete(net_t net, net_addr_t addr);
+static void net_peer_remove(net_t net, net_peer_t *peer, net_event_peer_action_t action);
 static void net_timer(TimerHandle_t timer);
 
 
@@ -168,6 +172,24 @@ net_addr_t net_addr(net_t net)
 }
 
 
+net_addr_t net_addr_set(net_t net, net_addr_t orig, net_addr_t addr)
+{
+    net_addr_t set = net->mac.addr;
+
+    if (addr && orig && orig == set) {
+        set = (net_addr_t) mac_addr_set(net->mac.mac, orig, addr);
+
+        if (set && set != net->mac.addr) {
+            net->mac.addr = set;
+            net_peer_delete(net, orig);
+            net_peer_bcast_leave(net, orig);
+        }
+    }
+
+    return set;
+}
+
+
 void net_stat(net_t net, net_stat_t *stat)
 {
     *stat = net->stat;
@@ -216,7 +238,7 @@ net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t
 }
 
 
-static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, u8 data[])
+static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, void *data)
 {
     net_mesg_t *mesg = pvPortMalloc(sizeof(*mesg) + size);
 
@@ -242,13 +264,13 @@ void net_sync(net_t net)
 }
 
 
-net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[])
+net_size_t net_send(net_t net, net_path_t path, net_size_t size, void *data)
 {
     return net_send_base(net, true, path, size, data);
 }
 
 
-net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, u8 data[])
+net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, void *data)
 {
     if (!path.addr) {
         return net_send(net, path, size, data);
@@ -258,13 +280,13 @@ net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, u8 data[])
 }
 
 
-net_size_t net_resp(net_t net, net_path_t path, net_size_t size, u8 data[])
+net_size_t net_resp(net_t net, net_path_t path, net_size_t size, void *data)
 {
     return net_mesg(net, path, size, data);
 }
 
 
-net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, u8 data[])
+net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, void *data)
 {
     path.info.mode = 0;
 
@@ -281,7 +303,7 @@ net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size,
 }
 
 
-void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry, net_trxn_rslt_t *rslt)
+void net_trxn(net_t net, net_path_t path, net_size_t size, void *data, net_time_t expiry, net_trxn_rslt_t *rslt)
 {
     if (!expiry || expiry >= portMAX_DELAY || !rslt) return;
 
@@ -345,7 +367,7 @@ void net_trxn_rslt_free(net_trxn_rslt_t *rslt)
 }
 
 
-static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, u8 data[])
+static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, void *data)
 {
     // TODO: Is a race condition possible here?
 
@@ -461,9 +483,10 @@ static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t
 
     if (!(mesg->info.mode & NET_MODE_FLAG_CORE)) {
         net_trace_verbose(
-                "net: %04X->%04X %u:%u:%u",
-                peer, net->mac.addr,
-                mesg->info.mode, mesg->info.port, mesg->info.type
+                "net: %04X: %04X->%04X %u:%u:%u #%u",
+                net->mac.addr, peer, dest,
+                mesg->info.mode, mesg->info.port, mesg->info.type,
+                size
         );
     }
 
@@ -506,10 +529,27 @@ static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_
             switch (mesg->info.type) {
 
                 case NET_CORE_PEER_TYPE: {
+
                     net_size_t count = size / sizeof(net_peer_info_t);
                     if (count) net_peer_update_list(net, addr,  count, (net_peer_info_t *) mesg->data);
-                    net_peer_bcast(net);
+
+                    //net_peer_bcast(net);
                 }
+
+                break;
+
+
+                case NET_CORE_PEER_LEAVE_TYPE:
+                    if (size == sizeof(net_addr_t)) {
+
+                        net_addr_t left = *(net_addr_t *)mesg->data;
+
+                        if (net_peer_delete(net, left)) {
+                            net_evnt_peer(net, left, NET_EVENT_PEER_OUT);
+                        }
+                    }
+
+                break;
 
             }
     }
@@ -540,6 +580,25 @@ static void net_peer_bcast(net_t net)
 }
 
 
+static void net_peer_bcast_leave(net_t net, net_addr_t addr)
+{
+    const static net_path_t path = {
+        .addr = NET_ADDR_BCST,
+        .info = {
+            .mode = NET_MODE_FLAG_CORE,
+            .port = NET_CORE_PEER_PORT,
+            .type = NET_CORE_PEER_LEAVE_TYPE
+        }
+    };
+
+    net_mesg_t *mesg = net_mesg_init(net, path, sizeof(net_addr_t), &addr);
+
+    net_send_base_bcst(net, sizeof(net_addr_t), mesg);
+
+    net_mesg_free(&mesg);
+}
+
+
 static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add)
 {
     net_peer_t *peer, *temp;
@@ -556,7 +615,7 @@ static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add)
 
     memset(peer, 0, sizeof(*peer));
 
-    peer->info.addr = net_addr(net);
+    peer->info.node = net_addr(net);
     peer->info.peer = addr;
     peer->info.last = net_time();
 
@@ -581,17 +640,17 @@ static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta)
 static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, net_peer_info_t *peers)
 {
     net_peer_t *peer = net_peer_get(net, addr, true);
-    net_time_t now = net_time();
+    net_time_t now;
     net_peer_t *peeri;
     bool found;
 
-    peer->info.last = now;
+    peer->info.last = now = net_time();
 
     for (net_size_t pi = 0; pi < count; ++pi) {
         found = false;
 
         list_for_each_entry(peeri, &peer->peer, item) {
-            if ((peeri->info.addr == peers[pi].addr) && (peeri->info.peer == peers[pi].peer)) {
+            if ((peeri->info.node == peers[pi].node) && (peeri->info.peer == peers[pi].peer)) {
                 found = true;
                 break;
             }
@@ -610,32 +669,75 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
         peeri->info.last = now - peers[pi].last/*expected relative*/;
         peeri->info.meta = peers[pi].meta;
     }
+
+    net_evnt_peer(net, peer->info.peer, NET_EVENT_PEER_UPD);
 }
 
 
 static void net_peer_expire(net_t net, net_time_t time)
 {
-    net_peer_t *peer, *temp, *peeri, *tempi;
+    net_peer_t *peer, *temp;
 
     list_for_each_entry_safe(peer, temp, &net->peer, item) {
-        if (peer->info.addr && (!time || (time - peer->info.last) >= NET_PEER_EXPIRE_TIME)) {
-            net_addr_t addr = peer->info.addr;
+        if (peer->info.peer && (!time || (time - peer->info.last) >= NET_PEER_EXPIRE_TIME)) {
+            net_addr_t peer_addr = peer->info.peer;
+            net_peer_remove(net, peer, NET_EVENT_PEER_EXP);
+            net_peer_delete(net, peer_addr);
+        }
+    }
+}
 
-            peer->info.addr = NET_ADDR_NONE;
-            peer->info.peer = NET_ADDR_NONE;
-            peer->info.last = NET_ADDR_NONE;
+static bool net_peer_delete(net_t net, net_addr_t addr)
+{
+    net_peer_t *peer, *temp, *peeri, *tempi;
+    bool known = false, match;
 
-            net_evnt_peer(net, addr, NET_EVENT_PEER_EXP);
+    if (!addr) return known;
 
-            list_for_each_entry_safe(peeri, tempi, &peer->peer, item) {
-                assert(list_empty(&peeri->peer));
+    list_for_each_entry_safe(peer, temp, &net->peer, item) {
+
+        match = peer->info.node == addr || peer->info.peer == addr;
+        known |= match;
+
+        list_for_each_entry_safe(peeri, tempi, &peer->peer, item) {
+
+            if (match || peeri->info.node == addr || peeri->info.peer == addr) {
+                match = true;
                 list_del(&peeri->item);
                 vPortFree(peeri);
             }
-
-            list_del(&peer->item);
-            vPortFree(peer);
         }
+
+        if (match) {
+            known = true;
+            net_peer_remove(net, peer, 0);
+        }
+    }
+
+    return known;
+}
+
+static void net_peer_remove(net_t net, net_peer_t *peer, net_event_peer_action_t action)
+{
+    net_peer_t *peeri, *tempi;
+
+    if (peer) {
+        net_addr_t peer_addr = peer->info.peer;
+
+        peer->info.node = NET_ADDR_NONE;
+        peer->info.peer = NET_ADDR_NONE;
+        peer->info.last = NET_ADDR_NONE;
+
+        list_for_each_entry_safe(peeri, tempi, &peer->peer, item) {
+            assert(list_empty(&peeri->peer));
+            list_del(&peeri->item);
+            vPortFree(peeri);
+        }
+
+        list_del(&peer->item);
+        vPortFree(peer);
+
+        if (action) net_evnt_peer(net, peer_addr, action);
     }
 }
 

@@ -50,7 +50,7 @@ typedef struct __packed {
 typedef struct list_head net_peer_list_t;
 
 typedef struct __packed {
-    net_addr_t addr;
+    net_addr_t node;
     net_addr_t peer;
     net_time_t last;
     pkt_meta_t meta;
@@ -81,7 +81,9 @@ typedef enum __packed {
 
 typedef enum __packed {
     NET_EVENT_PEER_SET,
-    NET_EVENT_PEER_EXP
+    NET_EVENT_PEER_EXP,
+    NET_EVENT_PEER_OUT,
+    NET_EVENT_PEER_UPD,
 
 } net_event_peer_action_t;
 
@@ -135,15 +137,16 @@ net_t net_init(net_config_t *config);
 net_time_t net_time(void) __ccrf_code;
 mac_t net_mac(net_t net) __ccrf_code;
 net_addr_t net_addr(net_t net) __ccrf_code;
+net_addr_t net_addr_set(net_t net, net_addr_t orig, net_addr_t addr);
 void net_stat(net_t net, net_stat_t *stat);
 void net_peers(net_t net, net_peer_list_t **peer) __ccrf_code;
 net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list) __ccrf_code;
 void net_sync(net_t net) __ccrf_code;
 
-net_size_t net_send(net_t net, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
-net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
-net_size_t net_resp(net_t net, net_path_t path, net_size_t size, u8 data[]) __ccrf_code;
-void net_trxn(net_t net, net_path_t path, net_size_t size, u8 data[], net_time_t expiry, net_trxn_rslt_t *rslt) __ccrf_code;
+net_size_t net_send(net_t net, net_path_t path, net_size_t size, void *data) __ccrf_code;
+net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, void *data) __ccrf_code;
+net_size_t net_resp(net_t net, net_path_t path, net_size_t size, void *data) __ccrf_code;
+void net_trxn(net_t net, net_path_t path, net_size_t size, void *data, net_time_t expiry, net_trxn_rslt_t *rslt) __ccrf_code;
 void net_trxn_rslt_free(net_trxn_rslt_t *rslt) __ccrf_code;
 
 

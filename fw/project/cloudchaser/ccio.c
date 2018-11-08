@@ -80,6 +80,9 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
     (void)size;
     (void)data;
 
+    status.macid = mac_addr(macs[0]);
+    status.cell = phy_cell(mac_phy(macs[0]));
+
     status.uptime = SCLK_MSEC(sclk_time());
 
     phy_stat(mac_phy(macs[0]), &status.stat.phy);
@@ -107,15 +110,9 @@ static void handle_code_config(u8 port, size_t size, u8 *data)
     };
 
     switch (code_config->id) {
-        case CONFIG_ID_ADDR: {
-            net_addr_t addr = net_addr(nets[0]);
-
-            if (code_config->addr.orig == addr) {
-                // net_set_addr()
-                rsp.rslt = addr;
-            }
-        }
-        break;
+        case CONFIG_ID_ADDR:
+            rsp.rslt = net_addr_set(nets[0], code_config->addr.orig, code_config->addr.addr);
+            break;
     }
 
     write_code_config_rsp(port, &rsp);

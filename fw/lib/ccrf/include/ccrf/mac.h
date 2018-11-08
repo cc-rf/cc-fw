@@ -54,8 +54,9 @@ typedef struct __packed {
 
 mac_t mac_init(mac_config_t *config);
 
-phy_t mac_phy(mac_t mac);
-mac_addr_t mac_addr(mac_t mac);
+phy_t mac_phy(mac_t mac) __ccrf_code;
+mac_addr_t mac_addr(mac_t mac) __ccrf_code;
+mac_addr_t mac_addr_set(mac_t mac, mac_addr_t orig, mac_addr_t addr);
 void mac_stat(mac_t mac, mac_stat_t *stat);
 u32 mac_task_rx_stack_usage(mac_t mac);
 pkt_meta_t mac_meta(mac_t mac) __ccrf_code;
