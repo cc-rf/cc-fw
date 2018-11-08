@@ -59,7 +59,8 @@ MEMORY
 {
   m_interrupts          (RX)  : ORIGIN = 0x00000000, LENGTH = 0x00000400
   m_flash_config        (RX)  : ORIGIN = 0x00000400, LENGTH = 0x00000010
-  m_user                (R)   : ORIGIN = 0x00020000, LENGTH = 0x00001000
+  m_user                (RW)  : ORIGIN = 0x0001F000, LENGTH = 0x00001000
+  m_user_init           (R)   : ORIGIN = 0x00020000, LENGTH = 0x00001000
   m_fast_text           (RX)  : ORIGIN = 0x00021000, LENGTH = 0x0000BC00
   m_text                (RX)  : ORIGIN = 0x0002CC00, LENGTH = 0x00040000
   m_interrupts_ram      (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00000400
@@ -92,9 +93,10 @@ SECTIONS
   __flash_header_begin = ORIGIN(m_interrupts);
   __flash_header_end = __flash_header_begin + LENGTH(m_interrupts) + LENGTH(m_flash_config);
 
+  __user_flash_init_base = ORIGIN(m_user_init);
   __user_flash_base = ORIGIN(m_user);
 
-  .user (NOLOAD) : AT(__user_flash_base)
+  .user_rom : AT(__user_flash_init_base)
   {
     __user_ram_base = .;
     *(.user.base)
@@ -104,7 +106,9 @@ SECTIONS
     __user_ram_end = .;
   } > m_user_ram
 
-  __user_flash_end = __user_flash_base + (__user_ram_end - __user_ram_base);
+  __user_flash_size = __user_ram_end - __user_ram_base;
+  __user_flash_init_end = __user_flash_init_base + __user_flash_size;
+  __user_flash_end = __user_flash_base + __user_flash_size;
 
   __fast_text_begin = ORIGIN(m_fast_text);
 

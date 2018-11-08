@@ -28,3 +28,11 @@ static inline void wcpy(u32 *restrict src, u32 *restrict end, u32 *restrict dst)
         *dst++ = *src++;
     }
 }
+
+
+static inline void wset(u32 val, u32 *restrict dst, u32 *restrict end)
+{
+    while (dst < end) {
+        *dst++ = val;
+    }
+}
