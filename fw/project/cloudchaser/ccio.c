@@ -3,6 +3,8 @@
 #include "virtual_com.h"
 #include "rf_uart.h"
 #include <kio/sclk.h>
+#include <kio/flsh.h>
+
 
 static void handle_code_status(u8 port, size_t size, u8 *data);
 static void handle_code_config(u8 port, size_t size, u8 *data);
@@ -110,9 +112,17 @@ static void handle_code_config(u8 port, size_t size, u8 *data)
     };
 
     switch (code_config->id) {
-        case CONFIG_ID_ADDR:
+        case CONFIG_ID_ADDR: {
+            net_addr_t addr = net_addr(nets[0]);
+
             rsp.rslt = net_addr_set(nets[0], code_config->addr.orig, code_config->addr.addr);
-            break;
+
+            if (rsp.rslt && rsp.rslt != addr) {
+                ccrf_addr_flsh = (net_addr_t) rsp.rslt;
+                flsh_user_cmit();
+            }
+        }
+        break;
     }
 
     write_code_config_rsp(port, &rsp);

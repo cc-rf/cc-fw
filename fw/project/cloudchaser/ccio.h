@@ -192,7 +192,9 @@ typedef struct __packed {
 
 } code_led_t;
 
+
 extern code_status_t status;
+extern net_addr_t ccrf_addr_flsh;
 
 
 void ccio_init(net_t nets[], mac_t macs[]) __nonnull_all;

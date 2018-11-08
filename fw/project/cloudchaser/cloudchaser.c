@@ -42,6 +42,8 @@ mac_t macs[CLOUDCHASER_RDIO_COUNT];
 
 code_status_t status;
 
+net_addr_t ccrf_addr_flsh __section(".user") = NET_ADDR_NONE;
+
 static usb_read_t usb_read[USB_CDC_INSTANCE_COUNT] = {{0}};
 
 static const net_path_t rf_uart_path = {
@@ -112,6 +114,10 @@ void cloudchaser_main(void)
     status.serial = uid();
     status.macid = uid_short();
     status.rdid = 0;
+
+    if (ccrf_addr_flsh != NET_ADDR_NONE) {
+        status.macid = ccrf_addr_flsh;
+    }
 
     net_config_t net_config = {
             .phy = {

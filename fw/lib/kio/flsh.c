@@ -15,7 +15,7 @@ static_assert(FSL_FEATURE_SIM_FCFG_HAS_PFLSH_SWAP, "FSL_FEATURE_SIM_FCFG_HAS_PFL
 #define FLASH_SWAP_ADDR     (((FSL_FEATURE_FLASH_PFLASH_BLOCK_SIZE * FSL_FEATURE_FLASH_PFLASH_BLOCK_COUNT) >> 1u) - BLOCK_SIZE)
 
 #define FLASH_SANITY        0xB10B510B
-#define FLASH_VERSION       0xB10BFACA
+#define FLASH_VERSION       0xDADFECE5
 
 
 static_assert(BLOCK_SIZE >= USER_FLASH_SIZE, "user flash must fit in one block");
@@ -32,6 +32,8 @@ typedef struct {
 
 extern u32 __user_flash_base[];
 extern u32 __user_flash_end[];
+extern u32 __user_ram_base[];
+extern u32 __user_ram_end[];
 
 extern u32 __fast_text_begin[];
 extern u32 __fast_text_end[];
@@ -57,6 +59,7 @@ static const user_flash_t user_flash_locl __section(".user.base") = {
 };
 
 static user_flash_t *user_flash;
+//static user_flash_t *user_flash_ram;
 static user_flash_t *user_flash_othr;
 
 static flash_config_t flash_config;
@@ -74,6 +77,8 @@ status_t flsh_init(void)
     FLASH_Init(&flash_config);
 
     ftfx_config = flash_config.ftfxConfig;
+
+    wcpy(__user_flash_base, __user_flash_end, __user_ram_base);
 
     user_flash = (user_flash_t *) __user_flash_base;
     user_flash_othr = (user_flash_t *) OFFSET(__user_flash_base);
@@ -282,4 +287,9 @@ status_t flsh_write(u32 begin, size_t size, u32 *data)
 
     portENABLE_INTERRUPTS();
     return status;
+}
+
+status_t flsh_user_cmit(void)
+{
+    return flsh_bcpy(__user_ram_base, __user_ram_end, __user_flash_base);
 }
