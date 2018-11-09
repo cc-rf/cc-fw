@@ -1,7 +1,7 @@
 #include <board/board.h>
+#include <board/clock.h>
 #include <fsl_common.h>
 #include <fsl_smc.h>
-#include "clock.h"
 
 
 static void BOARD_InitOsc0(void);

@@ -1,11 +1,11 @@
 #include <board/board.h>
+#include <board/clock.h>
 #include <board/trace.h>
 #include <usr/type.h>
 #include <kio/itm.h>
 #include <kio/flsh.h>
 #include <board/led.h>
 #include <fsl_common.h>
-#include "clock.h"
 #include "pins.h"
 
 
@@ -34,6 +34,10 @@ void board_boot(void)
     board_trace("<boot>");
 
     flsh_init();
+
+    boot_clock_run_hs_oc();
+    itm_init();
+
 
     portENABLE_INTERRUPTS();
 

@@ -1,4 +1,5 @@
 #include <kio/flsh.h>
+#include <board/clock.h>
 #include <board/trace.h>
 #include <fsl_flash.h>
 #include <fsl_flash.h>
@@ -228,7 +229,21 @@ status_t flsh_write(u32 begin, size_t size, u32 *data)
 
 status_t flsh_user_cmit(void)
 {
-    return flsh_bcpy(__user_ram_base, __user_ram_end, __user_flash_base);
+    status_t status;
+
+    portDISABLE_INTERRUPTS();
+
+    boot_clock_run();
+    itm_init();
+
+    status = flsh_bcpy(__user_ram_base, __user_ram_end, __user_flash_base);
+
+    boot_clock_run_hs_oc();
+    itm_init();
+
+    portENABLE_INTERRUPTS();
+
+    return status;
 }
 
 
