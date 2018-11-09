@@ -2,6 +2,7 @@
 #include "phy/phy.h"
 #include "sys/trace.h"
 #include "sys/local.h"
+#include <fsl_rnga.h>
 
 #include <FreeRTOS.h>
 #include <assert.h>
@@ -152,9 +153,6 @@ mac_t mac_init(mac_config_t *config)
     if (!(mac->phy = phy_init(&phy_config))) {
         goto _fail;
     }
-
-    // This is important for variability in rand() calls within phy.
-    srand(mac->addr);
 
     mac->rxq = xQueueCreateStatic(MAC_RXQ_SIZE, sizeof(mac->rxq_buf[0]), (u8 *)mac->rxq_buf, &mac->rxq_static);
     
@@ -341,7 +339,7 @@ static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
             (u8)(!imm || needs_ack || (flag & MAC_FLAG_PKT_BLK) ? PHY_PKT_FLAG_BLOCK : 0);
 
     u8 retry = MAC_PEND_RETRY;
-    TickType_t backoff = pdMS_TO_TICKS(5 + (rand() % 6));
+    TickType_t backoff = pdMS_TO_TICKS(5 + (RNGA_ReadEntropy(RNG) % 6));
 
     if (needs_ack) {
         // TODO: This needs a lock

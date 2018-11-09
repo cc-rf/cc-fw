@@ -183,8 +183,6 @@
  * Prototypes
  *******************************************************************************/
 
-static uint32_t rnga_ReadEntropy(RNG_Type *base);
-
 /*******************************************************************************
  * Code
  ******************************************************************************/
@@ -219,7 +217,7 @@ void RNGA_Deinit(RNG_Type *base)
  *
  * @param base RNGA base address
  */
-static uint32_t rnga_ReadEntropy(RNG_Type *base)
+uint32_t RNGA_ReadEntropy(RNG_Type *base)
 {
     uint32_t data = 0;
     if (RNGA_GetMode(base) == kRNGA_ModeNormal) /* Is in normal mode.*/
@@ -249,7 +247,7 @@ status_t RNGA_GetRandomData(RNG_Type *base, void *data, size_t data_size)
         do
         {
             /* Read Entropy.*/
-            random_32 = rnga_ReadEntropy(base);
+            random_32 = RNGA_ReadEntropy(base);
 
             random_p = (uint8_t *)&random_32;
 

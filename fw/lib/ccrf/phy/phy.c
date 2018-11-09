@@ -1,3 +1,4 @@
+#include <ccrf/phy.h>
 #include "phy/phy.h"
 #include "phy/config.h"
 #include "sys/amp.h"
@@ -5,13 +6,15 @@
 #include "sys/timer.h"
 #include "sys/clock.h"
 #include "sys/local.h"
+
 #include "chan.h"
+
+#include <fsl_rnga.h>
 
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
 #include <assert.h>
-#include <ccrf/phy.h>
 
 
 #define phy_trace_info      ccrf_trace_info
@@ -202,6 +205,9 @@ phy_t phy_init(phy_config_t *config)
     chan_group_init(&phy->chan.group, phy->chan.hop_table);
     chan_table_reorder(&phy->chan.group, phy->cell, phy->chan.hop_table);
     chan_group_calibrate(&phy->chan.group);
+
+    RNGA_Init(RNG);
+    RNGA_Seed(RNG, phy->cell ^ RNGA_ReadEntropy(RNG));
 
     if (!(phy->hop_timer = ccrf_timer_init(CHAN_TIME, (ccrf_timer_handler_t) hop_timer_handler, phy))) {
         phy_trace_error("timer init fail");
@@ -563,7 +569,7 @@ static void phy_task(phy_t phy)
 
                             if (!(((phy_pkt_t *)pkt)->hdr.flag & PHY_PKT_FLAG_IMMEDIATE)) {
                                 rdio_cca_end(phy->rdio, ccac);
-                                //tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(1000 + (rand() % 2000));
+                                //tx_next = xTaskGetTickCount() + pdUS_TO_TICKS(1000 + (RNGA_ReadEntropy(RNG) % 2000));
                             }
 
                             if (phy->diag.cw) rdio_cw_set(phy->rdio, true);
@@ -666,7 +672,7 @@ static void phy_task(phy_t phy)
 
                         if ((ts - phy->sync_time) >= PHY_SYNC_DROP_TIME) {
                             phy->stay = PHY_CHAN_COUNT;
-                            phy->cycle = (u8) (1 + rand() % (PHY_CHAN_COUNT - 1));
+                            phy->cycle = (u8) (1 + RNGA_ReadEntropy(RNG) % (PHY_CHAN_COUNT - 1));
                             phy_trace_verbose("sync loss: stay to %u", phy->cycle);
 
                         } else if ((ts - phy->sync_time) >= PHY_SYNC_CYCLE_TIME) {

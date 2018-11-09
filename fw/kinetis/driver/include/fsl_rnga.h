@@ -100,6 +100,11 @@ void RNGA_Deinit(RNG_Type *base);
  */
 status_t RNGA_GetRandomData(RNG_Type *base, void *data, size_t data_size);
 
+// phillip: make public
+#include <usr/type.h>
+uint32_t RNGA_ReadEntropy(RNG_Type *base) __fast_code;
+
+
 /*!
  * @brief Feeds the RNGA module.
  *

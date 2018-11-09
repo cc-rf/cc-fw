@@ -123,6 +123,8 @@
  * CHAN_BW: 0x03->0x02. RX filter BW 500kHz->800kHz. Important for low rssi rx.
  * DEVIATION_M/DEV_E: 0x55/0x2E->0x55/0x0D. For certified field operation with 25 channels.
  * CHAN_BW: 0x02->0x03->0x04. Accidental but helpful, ended up going to 4 (250kHz?) with good results (needs validation though).
+ * DEVIATION_M/DEV_E: 0x55/0x0D->0x55/0x2E. Back to high-speed mode by default.
+ * CHAN_BW: 0x04->0x02. Back to 800kHz for high-speed mode.
  *
  * TODO: Research more about DC offset removal (DCFILT), Low-IF and image correction. Also look at DCFILT auto vs. fixed compensation.
  * TODO: Revisit FB2PLL (FREQOFF_CFG)
@@ -144,11 +146,11 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
         {CC1200_IQIC,              0xD8},
         {CC1200_DEVIATION_M,       0x47},
         #endif
-        {CC1200_MODCFG_DEV_E,      0x0D},
+        {CC1200_MODCFG_DEV_E,      0x2E},
         {CC1200_DCFILT_CFG,        0x0E},
         {CC1200_PREAMBLE_CFG1,     0x18},
         {CC1200_PREAMBLE_CFG0,     0x8F},
-        {CC1200_CHAN_BW,           0x04},
+        {CC1200_CHAN_BW,           0x02},
         {CC1200_MDMCFG1,           0x42},
         {CC1200_MDMCFG0,           0x05},
         #if defined(BOARD_CLOUDCHASER) && BOARD_REVISION == 2
