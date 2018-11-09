@@ -14,9 +14,9 @@ void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
 {
     assert(group); assert(group->size); assert(group->rdio);
 
-    const u32 step = group->freq.bw;
+    const freq_t step = group->freq.bw;
 
-    u32 freq = CHAN_FREQ_ROUND(group->freq.base + step / 2);
+    freq_t freq = CHAN_FREQ_ROUND(group->freq.base + step / 2);
 
     /**
      * Degraded sensitivity in RX at multiples of XOSC/2 and in TX at multiples of XOSC.
@@ -27,6 +27,7 @@ void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
 
     for (chan_id_t c = 0; c < group->size; ++c, freq = CHAN_FREQ_ROUND(freq+step)) {
         group->chan[c].id = c;
+        group->chan[c].rssi = group->chan[c].rssi_prev = (rssi_t) 0xFF;
         group->chan[c].cal.valid = false;
 
         while (IS_TOO_CLOSE(freq)) {

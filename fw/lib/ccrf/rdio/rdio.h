@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ccrf/ccrf.h>
+#include <ccrf/phy.h>
 #include "rdio/cc1200.h"
 #include "sys/spi.h"
 
@@ -76,7 +77,7 @@ rdio_status_t rdio_mode_rx(rdio_t rdio) __ccrf_code;
 rdio_status_t rdio_mode_tx(rdio_t rdio) __ccrf_code;
 rdio_status_t rdio_cca_begin(rdio_t rdio, rdio_ccac_t *ccac) __ccrf_code;
 rdio_status_t rdio_cca_end(rdio_t rdio, rdio_ccac_t ccac) __ccrf_code;
-rdio_status_t rdio_rssi_read(rdio_t rdio, s16 *rssi) __ccrf_code;
+rdio_status_t rdio_rssi_read(rdio_t rdio, rssi_t *rssi) __ccrf_code;
 rdio_status_t rdio_cw_set(rdio_t rdio, bool cw) __ccrf_code;
 
 bool rdio_reg_config(rdio_t rdio, const rdio_reg_config_t config[], size_t size);

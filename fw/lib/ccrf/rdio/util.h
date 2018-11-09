@@ -3,6 +3,7 @@
  */
 #pragma once
 
+#include <ccrf/phy.h>
 #include "rdio/rdio.h"
 
 //typedef u32 freq_t;
@@ -169,6 +170,6 @@ u64 rdio_util_get_rx_timeout(rdio_t rdio);
  */
 u64 rdio_util_set_rx_timeout(rdio_t rdio, u64 ns);
 
-s16 rdio_util_get_rssi(rdio_t rdio);
+rssi_t rdio_util_get_rssi(rdio_t rdio);
 
 u32 rdio_util_get_tx_time(rdio_t rdio, u32 len);

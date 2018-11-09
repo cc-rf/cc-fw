@@ -144,7 +144,7 @@ struct phy {
 static void phy_task(phy_t phy) __ccrf_code __nonnull_all;
 
 static void phy_recv(phy_t phy) __ccrf_code __nonnull_all;
-static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi) __ccrf_code __nonnull_all;
+static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, rssi_t rssi, lqi_t lqi) __ccrf_code __nonnull_all;
 
 static inline void phy_chan_next(phy_t phy) __ccrf_code __nonnull_all;
 static inline void phy_chan_set(phy_t phy, chan_id_t chan) __ccrf_code __nonnull_all;
@@ -267,9 +267,9 @@ void phy_sync(phy_t phy, bool *resy)
 }
 
 
-chan_id_t phy_chan_real(phy_t phy, u32 *freq)
+chan_id_t phy_chan_real(phy_t phy, freq_t *freq)
 {
-    const chan_id_t chan = phy->chan.hop_table[phy->chan.cur];
+    const chan_id_t chan = phy->chan.hop_table[phy->stay ? 0 : phy->chan.cur];
     if (freq) *freq = phy->chan.channel[chan].freq;
     return chan;
 }
@@ -284,7 +284,21 @@ chan_id_t phy_chan(phy_t phy)
 }
 
 
-u32 phy_freq(phy_t phy, chan_id_t chan)
+void phy_chan_all(phy_t phy, phy_chan_t chan[PHY_CHAN_COUNT])
+{
+    chan_id_t cid;
+
+    for (chan_id_t id = 0; id < PHY_CHAN_COUNT; ++id) {
+        cid = phy->chan.hop_table[id];
+        chan[cid].hop = id;
+        chan[cid].freq = phy->chan.channel[cid].freq;
+        chan[cid].rssi = phy->chan.channel[cid].rssi;
+        chan[cid].rssi_prev = phy->chan.channel[cid].rssi_prev;
+    }
+}
+
+
+freq_t phy_freq(phy_t phy, chan_id_t chan)
 {
     return phy->chan.channel[chan].freq;
 }
@@ -339,7 +353,7 @@ bool phy_diag_boss(phy_t phy, bool boss, bool nosync)
 }
 
 
-bool phy_diag_chan(phy_t phy, chan_id_t chan, u32 *freq)
+bool phy_diag_chan(phy_t phy, chan_id_t chan, freq_t *freq)
 {
     if (freq) *freq = phy->chan.channel[chan].freq;
 
@@ -477,6 +491,7 @@ static void phy_task(phy_t phy)
     };
 
     bool sync_needed = false;
+    bool rssi_needed = false;
     phy->sync_time = 0;
     phy->cycle = 0;
 
@@ -668,6 +683,7 @@ static void phy_task(phy_t phy)
                 }
 
                 if (!phy->stay) {
+
                     if (!phy->boss && !phy->chan.cur) {
 
                         if ((ts - phy->sync_time) >= PHY_SYNC_DROP_TIME) {
@@ -679,6 +695,8 @@ static void phy_task(phy_t phy)
                             phy_trace_verbose("sync: miss last=%lu", CCRF_CLOCK_MSEC(ts) - CCRF_CLOCK_MSEC(phy->sync_time));
                         }
                     }
+
+                    rssi_needed = !phy->stay;
 
                     if (pkt) {
                         const u8 tx_bytes = rdio_reg_get(phy->rdio, CC1200_NUM_TXBYTES, NULL);
@@ -812,7 +830,22 @@ static void phy_task(phy_t phy)
         _restart_rx:
 
         if (!phy->diag.cw) {
-            rdio_mode_rx(phy->rdio);
+
+            if (rssi_needed) {
+
+                rssi_needed = false;
+
+                chan_id_t chan_id = phy_chan_real(phy, NULL);
+
+                phy->chan.channel[chan_id].rssi_prev = phy->chan.channel[chan_id].rssi;
+
+                rdio_rssi_read(phy->rdio, &phy->chan.channel[chan_id].rssi);
+
+            } else {
+
+                rdio_mode_rx(phy->rdio);
+            }
+
         } else {
             rdio_mode_tx(phy->rdio);
         }
@@ -891,7 +924,7 @@ static void phy_recv(phy_t phy)
 }
 
 
-static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, s8 rssi, u8 lqi)
+static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, rssi_t rssi, lqi_t lqi)
 {
     phy_pkt_t *const ppkt = (phy_pkt_t *)pkt;
 

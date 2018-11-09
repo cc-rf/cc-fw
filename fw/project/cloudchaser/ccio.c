@@ -97,6 +97,8 @@ static void handle_code_status(u8 port, size_t size, u8 *data)
     status.heap_free = xPortGetFreeHeapSize();
     status.heap_usage = configTOTAL_HEAP_SIZE - xPortGetMinimumEverFreeHeapSize();
 
+    phy_chan_all(mac_phy(macs[0]), status.chan);
+
     write_code_status(port, &status);
 }
 

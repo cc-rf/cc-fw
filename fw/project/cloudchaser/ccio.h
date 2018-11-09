@@ -79,6 +79,8 @@ typedef struct __packed {
 
     } stat;
 
+    phy_chan_t chan[PHY_CHAN_COUNT];
+
 } code_status_t;
 
 typedef struct __packed {

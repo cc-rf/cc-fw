@@ -25,7 +25,9 @@ typedef struct __packed {
 
 typedef struct __packed {
     chan_id_t id;
-    u32 freq;
+    freq_t freq;
+    rssi_t rssi;
+    rssi_t rssi_prev;
     chan_cal_t cal;
 
 } chan_info_t;
@@ -34,8 +36,8 @@ typedef struct __packed {
     rdio_t rdio;
 
     struct {
-        u32 base;
-        u32 bw;
+        freq_t base;
+        freq_t bw;
     } freq;
 
     chan_id_t size;

@@ -479,9 +479,9 @@ u64 rdio_util_set_rx_timeout(rdio_t rdio, u64 ns)
     return ((1000000000ul * 1250ul * ev) << (4 * wr)) / CC_XOSC_FREQ; /* TODO: Is rounding needed? */
 }
 
-s16 rdio_util_get_rssi(rdio_t rdio)
+rssi_t rdio_util_get_rssi(rdio_t rdio)
 {
-    return (s16)(s8)rdio_reg_get(rdio, CC1200_RSSI1, NULL);
+    return (rssi_t)rdio_reg_get(rdio, CC1200_RSSI1, NULL);
 }
 
 u32 rdio_util_get_tx_time(rdio_t rdio, u32 len)

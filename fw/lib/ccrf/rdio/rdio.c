@@ -315,7 +315,7 @@ rdio_status_t rdio_cca_end(rdio_t rdio, rdio_ccac_t ccac)
     return 0;
 }
 
-rdio_status_t rdio_rssi_read(rdio_t rdio, s16 *rssi)
+rdio_status_t rdio_rssi_read(rdio_t rdio, rssi_t *rssi)
 {
     rdio_status_t st;
     u8 reg;
