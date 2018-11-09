@@ -47,10 +47,8 @@
 /* Entry Point */
 ENTRY(Reset_Handler)
 
-/* Phillip: Increasing defaults (chip has 256K SRAM, 2M Flash). Old values are both 0x0400 (1024).
-*/
-HEAP_SIZE  = DEFINED(__heap_size__)  ? __heap_size__  : 0x00001000; /* 4 Kb */
-STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x00000500; /* 1280b */
+HEAP_SIZE  = 0x00001000; /* 4KB   */
+STACK_SIZE = 0x00000500; /* 1280B */
 
 M_VECTOR_RAM_SIZE = 0x0400;
 

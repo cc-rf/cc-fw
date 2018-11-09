@@ -13,7 +13,7 @@ set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16"
 # NOTE: what about rdpmon? and redboot?
 #set(SPECS "-specs=rdimon.specs -specs=nano.specs")
 set(SPECS "-specs=nosys.specs -specs=nano.specs"  CACHE STRING "" FORCE)
-set(LFLAGS_FW "-Wl,-flto -Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
+set(LFLAGS_FW_EXE "-flto -Wl,-flto -Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
 
 set(CFLAGS_BASE "${CFLAGS_STD} ${CFLAGS_KINETIS} ${CFLAGS_CPU_CM4F}")
 
@@ -26,7 +26,7 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ${CFLAGS_STD_RELEASE}" CACHE
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${CFLAGS_STD_RELEASE}" CACHE STRING "" FORCE)
 set(CMAKE_ASM_FLAGS_RELEASE "${CMAKE_ASM_FLAGS_RELEASE} ${CFLAGS_STD_RELEASE}" CACHE STRING "" FORCE)
 
-set(CMAKE_EXE_LINKER_FLAGS "${LFLAGS_FW}" CACHE STRING "" FORCE)
+set(CMAKE_EXE_LINKER_FLAGS "${LFLAGS_FW_EXE}" CACHE STRING "" FORCE)
 
 if(NOT DEFINED CONFIG_FW_PROJECT)
     message(FATAL_ERROR "CONFIG_FW_PROJECT is required")
@@ -55,9 +55,11 @@ add_subdirectory(kinetis)
 add_subdirectory(lib)
 add_subdirectory(project)
 
-message(STATUS "FW_PROJECT_TARGET=${FW_PROJECT_TARGET}")
 
-set(TARGET "${PROJECT_NAME}")
+set(TARGET "${PROJECT_NAME}" CACHE STRING "Project Target")
+
+message(STATUS "Project: ${FW_PROJECT_TARGET}")
+message(STATUS "Target: ${TARGET}")
 
 add_executable(
         ${TARGET}
