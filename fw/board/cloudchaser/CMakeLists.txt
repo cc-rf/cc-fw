@@ -20,6 +20,15 @@ target_link_libraries(
         PUBLIC kio
 )
 
+if(CONFIG_FABI)
+
+    target_link_libraries(
+            ${NAME}
+            PUBLIC fabi
+    )
+
+endif()
+
 target_compile_definitions(
         ${NAME}
         PUBLIC BOARD_CLOUDCHASER=1

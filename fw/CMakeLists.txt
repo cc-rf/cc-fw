@@ -47,6 +47,8 @@ if(DEFINED CONFIG_FW_BOARD)
     include("${FW_BOARD_PATH}/config.cmake")
 endif()
 
+# TODO: Read all config.cmake files recursively with glob?
+
 add_subdirectory(board)
 add_subdirectory(freertos)
 add_subdirectory(kinetis)

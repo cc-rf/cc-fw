@@ -3,7 +3,10 @@
 #include <ccrf/net.h>
 #include <usr/serf.h>
 #include "cloudchaser.h"
+
+#if FABI
 #include "fabi.h"
+#endif
 
 
 #define CCIO_PORT               0x01E0
@@ -195,6 +198,8 @@ typedef struct __packed {
 
 } code_peer_t;
 
+#if FABI
+
 typedef struct __packed {
     net_addr_t addr;
     fabi_msg_t msg;
@@ -202,6 +207,7 @@ typedef struct __packed {
 
 } code_led_t;
 
+#endif
 
 extern code_status_t status;
 extern net_addr_t ccrf_addr_flsh;

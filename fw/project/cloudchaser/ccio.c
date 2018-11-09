@@ -1,6 +1,5 @@
 #include "ccio.h"
 #include <board/trace.h>
-#include "fabi.h"
 #include "virtual_com.h"
 #include "rf_uart.h"
 #include <kio/sclk.h>
@@ -18,7 +17,10 @@ static void handle_code_peer(u8 port, size_t size, u8 *data);
 static void handle_code_echo(u8 port, size_t size, u8 *data);
 static void handle_code_uart(size_t size, u8 *data);
 static void handle_code_rainbow(size_t size, u8 *data);
+
+#if FABI
 static void handle_code_led(size_t size, u8 *data);
+#endif
 
 static void write_code(u8 port, u8 code, size_t size, void *data) __nonnull_all;
 static void write_code_config_rsp(u8 port, code_config_rsp_t *config_rsp) __nonnull_all;
@@ -67,9 +69,10 @@ void ccio_recv(u8 port, serf_t *frame, size_t size)
 
         case CODE_ID_RAINBOW:
             return handle_code_rainbow(size, frame->data);
-
+        #if FABI
         case CODE_ID_LED:
             return handle_code_led(size, frame->data);
+        #endif
 
         default:
             printf("(frame) unknown code: size=%u code=0x%02x\r\n", size, frame->code);
@@ -363,6 +366,8 @@ static void handle_code_rainbow(size_t size __unused, u8 *data __unused)
 }
 
 
+#if FABI
+
 static void handle_code_led(size_t size, u8 *data)
 {
     code_led_t *code_led = (code_led_t *)data;
@@ -383,6 +388,8 @@ static void handle_code_led(size_t size, u8 *data)
         net_send(nets[0], path, net_size, (u8 *)&code_led->msg);
     }
 }
+
+#endif
 
 
 static void write_code(u8 port, u8 code, size_t size, void *data)

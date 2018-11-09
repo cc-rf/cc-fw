@@ -15,7 +15,9 @@
 #include <ccrf/mac.h>
 #include <ccrf/net.h>
 
+#if FABI
 #include <fabi.h>
+#endif
 
 
 typedef struct {
@@ -189,7 +191,9 @@ void cloudchaser_main(void)
 
     #endif
 
-    //fabi_init();
+    #if FABI
+    fabi_init();
+    #endif
 
     phy_t phy = mac_phy(macs[0]);
 
@@ -205,10 +209,12 @@ static void net_recv(net_t net __unused, net_path_t path, net_addr_t dest, size_
     switch (path.info.port) {
         case CCIO_PORT:
             switch (path.info.type) {
+                #if FABI
                 case CCIO_LED: {
                     fabi_msg_t *msg = (fabi_msg_t *)data;
                     return fabi_write(msg->mask, (fabi_rgb_t *)msg->data, size - sizeof(msg->mask));
                 }
+                #endif
                 case CCIO_UART:
                     rf_uart_write(size, data);
                     write_code_uart(size, data);

@@ -20,7 +20,6 @@ target_link_libraries(
         PUBLIC fw_board
         PUBLIC kio
         PUBLIC ccrf
-        PUBLIC fabi
 )
 
 target_compile_options(
