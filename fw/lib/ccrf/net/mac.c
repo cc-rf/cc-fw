@@ -133,9 +133,10 @@ static void mac_phy_recv(mac_t mac, u8 flag, u8 size, u8 data[], pkt_meta_t meta
 static struct mac macs[CCRF_CONFIG_RDIO_COUNT] __ccrf_data;
 
 
-mac_t mac_init(mac_config_t *config)
+mac_t mac_init(mac_config_t *config, bool *fail)
 {
     mac_t mac = &macs[config->rdid];
+    *fail = false;
 
     memset(mac, 0, sizeof(struct mac));
 
@@ -150,9 +151,9 @@ mac_t mac_init(mac_config_t *config)
             .recv_param = mac
     };
 
-    if (!(mac->phy = phy_init(&phy_config))) {
-        goto _fail;
-    }
+    mac->phy = phy_init(&phy_config, fail);
+
+    if (*fail) goto _fail;
 
     mac->rxq = xQueueCreateStatic(MAC_RXQ_SIZE, sizeof(mac->rxq_buf[0]), (u8 *)mac->rxq_buf, &mac->rxq_static);
     
@@ -163,9 +164,7 @@ mac_t mac_init(mac_config_t *config)
     goto _done;
     _fail:
 
-    if (mac) {
-        mac = NULL;
-    }
+    *fail = true;
 
     _done:
     return mac;

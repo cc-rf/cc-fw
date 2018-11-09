@@ -154,9 +154,11 @@ void cloudchaser_main(void)
     led_off(LED_BLUE_0);
     led_off(LED_BLUE_1);
 
-    if (!(nets[0] = net_init(&net_config))) {
-        return;
-    }
+    bool fail;
+
+    nets[0] = net_init(&net_config, &fail);
+
+    if (fail) return;
 
     macs[0] = net_mac(nets[0]);
 

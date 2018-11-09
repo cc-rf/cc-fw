@@ -27,10 +27,8 @@ typedef struct __packed {
 } phy_config_t;
 
 
-phy_t phy_init(phy_config_t *config);
+phy_t phy_init(phy_config_t *config, bool *fail) __nonnull_all;
 
-rdio_t phy_rdio(phy_t phy);
+rdio_t phy_rdio(phy_t phy) __ccrf_code __nonnull_all;
 
-u32 phy_delay(u8 size);
-
-bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size);
+bool phy_send(phy_t phy, u8 flag, u8 *data, u8 size) __ccrf_code __nonnull((1));

@@ -52,13 +52,13 @@ typedef struct __packed {
 
 } mac_stat_t;
 
-mac_t mac_init(mac_config_t *config);
+mac_t mac_init(mac_config_t *config, bool *fail) __nonnull_all;
 
-phy_t mac_phy(mac_t mac) __ccrf_code;
-mac_addr_t mac_addr(mac_t mac) __ccrf_code;
-mac_addr_t mac_addr_set(mac_t mac, mac_addr_t orig, mac_addr_t addr);
-void mac_stat(mac_t mac, mac_stat_t *stat);
-u32 mac_task_rx_stack_usage(mac_t mac);
-pkt_meta_t mac_meta(mac_t mac) __ccrf_code;
+phy_t mac_phy(mac_t mac) __ccrf_code __nonnull_all;
+mac_addr_t mac_addr(mac_t mac) __ccrf_code __nonnull_all;
+mac_addr_t mac_addr_set(mac_t mac, mac_addr_t orig, mac_addr_t addr) __nonnull_all;
+void mac_stat(mac_t mac, mac_stat_t *stat) __nonnull_all;
+u32 mac_task_rx_stack_usage(mac_t mac) __nonnull_all;
+pkt_meta_t mac_meta(mac_t mac) __ccrf_code __nonnull_all;
 
-mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mac_size_t size, u8 data[], bool wait) __ccrf_code;
+mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mac_size_t size, u8 data[], bool wait) __ccrf_code __nonnull((1));

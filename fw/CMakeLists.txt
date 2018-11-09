@@ -4,7 +4,7 @@ set(FW_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 
 set(CFLAGS_STD "-std=gnu11 -Wall -D_GNU_SOURCE -fstack-usage -Wstack-usage=512" CACHE STRING "" FORCE)
 set(CFLAGS_STD_DEBUG "-O0 -g3 -D_DEBUG=1 -DDEBUG" CACHE STRING "" FORCE)
-set(CFLAGS_STD_RELEASE "-O3 -g0 -D_DEBUG=0" CACHE STRING "" FORCE)
+set(CFLAGS_STD_RELEASE "-Ofast -g0 -D_DEBUG=0" CACHE STRING "" FORCE)
 
 set(CFLAGS_KINETIS "-fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections" CACHE STRING "" FORCE)
 set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16" CACHE STRING "" FORCE)

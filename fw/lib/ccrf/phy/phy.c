@@ -159,9 +159,10 @@ static void hop_timer_handler(ccrf_timer_t timer, phy_t phy) __ccrf_code __nonnu
 static struct phy phys[CCRF_CONFIG_RDIO_COUNT] __ccrf_data;
 
 
-phy_t phy_init(phy_config_t *config)
+phy_t phy_init(phy_config_t *config, bool *fail)
 {
     phy_t phy = &phys[config->rdid];
+    *fail = false;
 
     memset(phy, 0, sizeof(struct phy));
 
@@ -231,9 +232,7 @@ phy_t phy_init(phy_config_t *config)
     goto _done;
     _fail:
 
-    if (phy) {
-        phy = NULL;
-    }
+    *fail = true;
 
     _done:
     return phy;

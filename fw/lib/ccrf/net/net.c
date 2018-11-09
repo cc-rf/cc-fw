@@ -104,9 +104,10 @@ static void net_timer(TimerHandle_t timer);
 static struct net nets[CCRF_CONFIG_RDIO_COUNT] __ccrf_data;
 
 
-net_t net_init(net_config_t *config)
+net_t net_init(net_config_t *config, bool *fail)
 {
     net_t net = &nets[config->phy.rdid];
+    *fail = false;
 
     memset(net, 0, sizeof(struct net));
 
@@ -125,9 +126,9 @@ net_t net_init(net_config_t *config)
             .recv_param = net
     };
 
-    if (!(net->mac.mac = mac_init(&mac_config))) {
-        goto _fail;
-    }
+    net->mac.mac = mac_init(&mac_config, fail);
+
+    if (*fail) goto _fail;
 
     net->phy = mac_phy(net->mac.mac);
 
@@ -145,9 +146,7 @@ net_t net_init(net_config_t *config)
     goto _done;
     _fail:
 
-    if (net) {
-        net = NULL;
-    }
+    *fail = true;
 
     _done:
     return net;
@@ -312,7 +311,7 @@ net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size,
 
 void net_trxn(net_t net, net_path_t path, net_size_t size, void *data, net_time_t expiry, net_trxn_rslt_t *rslt)
 {
-    if (!expiry || expiry >= portMAX_DELAY || !rslt) return;
+    if (!expiry || expiry >= portMAX_DELAY) return;
 
     INIT_LIST_HEAD(rslt);
 
