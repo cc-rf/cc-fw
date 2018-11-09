@@ -41,6 +41,7 @@ void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
     }
 }
 
+
 void chan_table_reorder(chan_group_t *group, u_int seed, chan_id_t hop_table[])
 {
     chan_id_t chan_temp;
@@ -59,6 +60,15 @@ void chan_table_reorder(chan_group_t *group, u_int seed, chan_id_t hop_table[])
         hop_table[rnd] = chan_temp;
     }
 }
+
+
+void chan_table_reset(chan_group_t *group, chan_id_t hop_table[])
+{
+    for (chan_id_t c = 0; c < group->size; ++c) {
+        hop_table[c] = c;
+    }
+}
+
 
 static void chan_calibrate(chan_group_t *group, chan_info_t *chan)
 {

@@ -140,6 +140,7 @@ net_addr_t net_addr(net_t net) __ccrf_code;
 net_addr_t net_addr_set(net_t net, net_addr_t orig, net_addr_t addr);
 void net_stat(net_t net, net_stat_t *stat);
 void net_peers(net_t net, net_peer_list_t **peer) __ccrf_code;
+void net_peers_wipe(net_t net);
 net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list) __ccrf_code;
 void net_sync(net_t net) __ccrf_code;
 

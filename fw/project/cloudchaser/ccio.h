@@ -46,6 +46,7 @@
 #define CODE_ID_RAINBOW         29
 
 #define CONFIG_ID_ADDR          0xADD1
+#define CONFIG_ID_CELL          0xCE11
 
 #define CONFIG_RSLT_OK          0x1
 #define CONFIG_RSLT_ERR         0x0
@@ -86,7 +87,7 @@ typedef struct __packed {
 typedef struct __packed {
     u32 id;
 
-    union {
+    union __packed {
 
         u32 param;
 
@@ -96,6 +97,13 @@ typedef struct __packed {
             net_addr_t addr;
 
         } addr;
+
+        struct __packed {
+            net_addr_t addr;
+            phy_cell_t orig;
+            phy_cell_t cell;
+
+        } cell;
     };
 
     u8 data[];
@@ -197,6 +205,7 @@ typedef struct __packed {
 
 extern code_status_t status;
 extern net_addr_t ccrf_addr_flsh;
+extern phy_cell_t ccrf_cell_flsh;
 
 
 void ccio_init(net_t nets[], mac_t macs[]) __nonnull_all;

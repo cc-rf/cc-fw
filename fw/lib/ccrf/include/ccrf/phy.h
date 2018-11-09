@@ -55,6 +55,7 @@ void phy_hops(phy_t phy, chan_id_t chan[]) __nonnull_all;
 
 bool phy_boss(phy_t phy) __nonnull_all;
 phy_cell_t phy_cell(phy_t phy) __nonnull_all;
+phy_cell_t phy_cell_set(phy_t phy, phy_cell_t orig, phy_cell_t cell) __nonnull_all;
 bool phy_hgm(phy_t phy) __nonnull_all;
 u8 phy_pwr(phy_t phy) __nonnull_all;
 

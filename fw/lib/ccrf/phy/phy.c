@@ -45,6 +45,7 @@
 #define NOTIFY_MASK_TX          (1u<<2u)
 #define NOTIFY_MASK_HOP         (1u<<3u)
 #define NOTIFY_MASK_DIAG        (1u<<4u)
+#define NOTIFY_MASK_CELL        (1u<<7u)
 #define NOTIFY_MASK_ALL         (NOTIFY_MASK_ISR | NOTIFY_MASK_TX | NOTIFY_MASK_HOP | NOTIFY_MASK_DIAG)
 
 #define CALLER_NOTIFY_TX_DONE   (1u<<5u)
@@ -100,7 +101,7 @@ typedef struct __packed {
 struct phy {
     rdio_t rdio;
     bool boss;
-    u8 cell;
+    phy_cell_t cell;
     TaskHandle_t sync;
     phy_recv_t recv;
     void *recv_param;
@@ -126,6 +127,7 @@ struct phy {
     volatile ccrf_clock_t sync_time;
     u8 cycle;
     chan_id_t stay;
+    phy_cell_t cell_new;
 
     TaskHandle_t task;
     StaticTask_t task_static;
@@ -324,6 +326,18 @@ bool phy_boss(phy_t phy)
 
 phy_cell_t phy_cell(phy_t phy)
 {
+    return phy->cell;
+}
+
+
+phy_cell_t phy_cell_set(phy_t phy, phy_cell_t orig, phy_cell_t cell)
+{
+    if (orig == phy->cell) {
+        phy->cell_new = cell;
+        xTaskNotify(phy->task, NOTIFY_MASK_CELL, eSetBits);
+        return cell;
+    }
+
     return phy->cell;
 }
 
@@ -604,6 +618,17 @@ static void phy_task(phy_t phy)
                         break;
                 }
             }
+
+            if (notify & NOTIFY_MASK_CELL && phy->cell != phy->cell_new) {
+                phy->cell = phy->cell_new;
+                chan_table_reset(&phy->chan.group, phy->chan.hop_table);
+                chan_table_reorder(&phy->chan.group, phy->cell, phy->chan.hop_table);
+                RNGA_Seed(RNG, phy->cell ^ RNGA_ReadEntropy(RNG));
+                rdio_reg_set(phy->rdio, CC1200_DEV_ADDR, phy->cell);
+                phy->boss = false;
+                if (phy->sync_time >= PHY_SYNC_DROP_TIME) phy->sync_time -= PHY_SYNC_DROP_TIME;
+            }
+
 
             if (notify & NOTIFY_MASK_DIAG) {
 

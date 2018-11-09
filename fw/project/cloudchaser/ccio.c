@@ -1,4 +1,5 @@
 #include "ccio.h"
+#include <board/trace.h>
 #include "fabi.h"
 #include "virtual_com.h"
 #include "rf_uart.h"
@@ -114,17 +115,35 @@ static void handle_code_config(u8 port, size_t size, u8 *data)
     };
 
     switch (code_config->id) {
-        case CONFIG_ID_ADDR: {
-            net_addr_t addr = net_addr(nets[0]);
+        case CONFIG_ID_ADDR:
+            {
+                net_addr_t addr = net_addr(nets[0]);
 
-            rsp.rslt = net_addr_set(nets[0], code_config->addr.orig, code_config->addr.addr);
+                rsp.rslt = net_addr_set(nets[0], code_config->addr.orig, code_config->addr.addr);
 
-            if (rsp.rslt && rsp.rslt != addr) {
-                ccrf_addr_flsh = (net_addr_t) rsp.rslt;
-                flsh_user_cmit();
+                if (rsp.rslt && rsp.rslt != addr) {
+                    ccrf_addr_flsh = (net_addr_t) rsp.rslt;
+                    flsh_user_cmit();
+                }
             }
-        }
-        break;
+            break;
+
+        case CONFIG_ID_CELL:
+            if (code_config->cell.addr == net_addr(nets[0]))
+            {
+                phy_t phy = mac_phy(macs[0]);
+                phy_cell_t cell = phy_cell(phy);
+
+
+                rsp.rslt = phy_cell_set(phy, code_config->cell.orig, code_config->cell.cell);
+
+                if (rsp.rslt && rsp.rslt != cell) {
+                    ccrf_cell_flsh = (phy_cell_t) rsp.rslt;
+                    flsh_user_cmit();
+                    net_peers_wipe(nets[0]);
+                }
+            }
+            break;
     }
 
     write_code_config_rsp(port, &rsp);

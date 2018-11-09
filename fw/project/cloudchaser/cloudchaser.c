@@ -43,6 +43,7 @@ mac_t macs[CLOUDCHASER_RDIO_COUNT];
 code_status_t status;
 
 net_addr_t ccrf_addr_flsh __section(".user") = NET_ADDR_NONE;
+phy_cell_t ccrf_cell_flsh __section(".user") = 0xA1;
 
 static usb_read_t usb_read[USB_CDC_INSTANCE_COUNT] = {{0}};
 
@@ -122,7 +123,7 @@ void cloudchaser_main(void)
     net_config_t net_config = {
             .phy = {
                     .rdid = 0,
-                    .cell = 0,
+                    .cell = ccrf_cell_flsh,
             },
 
             .mac = {
@@ -135,10 +136,6 @@ void cloudchaser_main(void)
                     .evnt = net_evnt
             }
     };
-
-    if (uflag1_set())       net_config.phy.cell = 0xA1;
-    else if (uflag2_set())  net_config.phy.cell = 0xA2;
-    else                    net_config.phy.cell = 0xA0;
 
     status.cell = net_config.phy.cell;
 

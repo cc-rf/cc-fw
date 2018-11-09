@@ -201,6 +201,13 @@ void net_peers(net_t net, net_peer_list_t **peer)
     *peer = &net->peer;
 }
 
+
+void net_peers_wipe(net_t net)
+{
+    net_peer_expire(net, 0);
+}
+
+
 net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list)
 {
     net_size_t count = 0, next = 0;
