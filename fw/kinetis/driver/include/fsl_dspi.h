@@ -606,7 +606,18 @@ static inline void DSPI_ClearStatusFlags(SPI_Type *base, uint32_t statusFlags)
  * @param base DSPI peripheral address.
  * @param mask The interrupt mask; use the enum _dspi_interrupt_enable.
  */
-void DSPI_EnableInterrupts(SPI_Type *base, uint32_t mask);
+static inline void DSPI_EnableInterrupts(SPI_Type *base, uint32_t mask)
+{
+    if (mask & SPI_RSER_TFFF_RE_MASK)
+    {
+        base->RSER &= ~SPI_RSER_TFFF_DIRS_MASK;
+    }
+    if (mask & SPI_RSER_RFDF_RE_MASK)
+    {
+        base->RSER &= ~SPI_RSER_RFDF_DIRS_MASK;
+    }
+    base->RSER |= mask;
+}
 
 /*!
  * @brief Disables the DSPI interrupts.
@@ -716,7 +727,7 @@ static inline uint32_t DSPI_GetRxRegisterAddress(SPI_Type *base)
  *
  * @param base DSPI peripheral base address.
  */
-uint32_t DSPI_GetInstance(SPI_Type *base);
+uint32_t DSPI_GetInstance(SPI_Type *base) __fast_code;
 
 /*!
  * @brief Configures the DSPI for master or slave.
@@ -949,7 +960,7 @@ void DSPI_GetDefaultDataCommandConfig(dspi_command_data_config_t *command);
  * @param command Pointer to the command structure.
  * @param data The data word to be sent.
  */
-void DSPI_MasterWriteDataBlocking(SPI_Type *base, dspi_command_data_config_t *command, uint16_t data);
+void DSPI_MasterWriteDataBlocking(SPI_Type *base, dspi_command_data_config_t *command, uint16_t data) __fast_code;
 
 /*!
  * @brief Returns the DSPI command word formatted to the PUSHR data register bit field.
@@ -1016,7 +1027,7 @@ static inline uint32_t DSPI_MasterGetFormattedCommand(dspi_command_data_config_t
  * @param base DSPI peripheral address.
  * @param data The data word (command and data combined) to be sent.
  */
-void DSPI_MasterWriteCommandDataBlocking(SPI_Type *base, uint32_t data);
+void DSPI_MasterWriteCommandDataBlocking(SPI_Type *base, uint32_t data) __fast_code;
 
 /*!
  * @brief Writes data into the data buffer in slave mode.
@@ -1097,7 +1108,7 @@ void DSPI_MasterTransferCreateHandle(SPI_Type *base,
  * @param transfer Pointer to the dspi_transfer_t structure.
  * @return status of status_t.
  */
-status_t DSPI_MasterTransferBlocking(SPI_Type *base, dspi_transfer_t *transfer);
+status_t DSPI_MasterTransferBlocking(SPI_Type *base, dspi_transfer_t *transfer) __fast_code;
 
 /*!
  * @brief DSPI master transfer data using interrupts.
@@ -1110,7 +1121,7 @@ status_t DSPI_MasterTransferBlocking(SPI_Type *base, dspi_transfer_t *transfer);
  * @param transfer Pointer to the dspi_transfer_t structure.
  * @return status of status_t.
  */
-status_t DSPI_MasterTransferNonBlocking(SPI_Type *base, dspi_master_handle_t *handle, dspi_transfer_t *transfer);
+status_t DSPI_MasterTransferNonBlocking(SPI_Type *base, dspi_master_handle_t *handle, dspi_transfer_t *transfer) __fast_code;
 
 /*!
  * @brief Transfers a block of data using a polling method.
@@ -1123,7 +1134,7 @@ status_t DSPI_MasterTransferNonBlocking(SPI_Type *base, dspi_master_handle_t *ha
  * @param xfer pointer to dspi_half_duplex_transfer_t structure
  * @return status of status_t.
  */
-status_t DSPI_MasterHalfDuplexTransferBlocking(SPI_Type *base, dspi_half_duplex_transfer_t *xfer);
+status_t DSPI_MasterHalfDuplexTransferBlocking(SPI_Type *base, dspi_half_duplex_transfer_t *xfer) __fast_code;
 
 /*!
  * @brief Performs a non-blocking DSPI interrupt transfer.
@@ -1139,7 +1150,7 @@ status_t DSPI_MasterHalfDuplexTransferBlocking(SPI_Type *base, dspi_half_duplex_
  */
 status_t DSPI_MasterHalfDuplexTransferNonBlocking(SPI_Type *base,
                                                   dspi_master_handle_t *handle,
-                                                  dspi_half_duplex_transfer_t *xfer);
+                                                  dspi_half_duplex_transfer_t *xfer) __fast_code;
 
 /*!
  * @brief Gets the master transfer count.
@@ -1151,7 +1162,7 @@ status_t DSPI_MasterHalfDuplexTransferNonBlocking(SPI_Type *base,
  * @param count The number of bytes transferred by using the non-blocking transaction.
  * @return status of status_t.
  */
-status_t DSPI_MasterTransferGetCount(SPI_Type *base, dspi_master_handle_t *handle, size_t *count);
+status_t DSPI_MasterTransferGetCount(SPI_Type *base, dspi_master_handle_t *handle, size_t *count) __fast_code;
 
 /*!
  * @brief DSPI master aborts a transfer using an interrupt.
@@ -1171,7 +1182,7 @@ void DSPI_MasterTransferAbort(SPI_Type *base, dspi_master_handle_t *handle);
  * @param base DSPI peripheral base address.
  * @param handle Pointer to the dspi_master_handle_t structure which stores the transfer state.
  */
-void DSPI_MasterTransferHandleIRQ(SPI_Type *base, dspi_master_handle_t *handle);
+void DSPI_MasterTransferHandleIRQ(SPI_Type *base, dspi_master_handle_t *handle) __fast_code;
 
 /*!
  * @brief Initializes the DSPI slave handle.

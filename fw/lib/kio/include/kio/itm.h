@@ -1,6 +1,9 @@
 #pragma once
 
 #include <usr/type.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdlib.h>
 
 #if !DEBUG
 
@@ -14,10 +17,6 @@ static inline void itm_write(const uint8_t port, const uint8_t *buf, const size_
 #include <fsl_device_registers.h>
 #include <core_cm4.h>
 #include <fsl_clock.h>
-
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdlib.h>
 
 static inline void itm_init(void)
 {

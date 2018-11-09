@@ -70,27 +70,27 @@ static void DSPI_SetOnePcsPolarity(SPI_Type *base, dspi_which_pcs_t pcs, dspi_pc
  * @brief Master fill up the TX FIFO with data.
  * This is not a public API.
  */
-static void DSPI_MasterTransferFillUpTxFifo(SPI_Type *base, dspi_master_handle_t *handle);
+static void DSPI_MasterTransferFillUpTxFifo(SPI_Type *base, dspi_master_handle_t *handle) __fast_code;
 
 /*!
  * @brief Master finish up a transfer.
  * It would call back if there is callback function and set the state to idle.
  * This is not a public API.
  */
-static void DSPI_MasterTransferComplete(SPI_Type *base, dspi_master_handle_t *handle);
+static void DSPI_MasterTransferComplete(SPI_Type *base, dspi_master_handle_t *handle) __fast_code;
 
 /*!
  * @brief Slave fill up the TX FIFO with data.
  * This is not a public API.
  */
-static void DSPI_SlaveTransferFillUpTxFifo(SPI_Type *base, dspi_slave_handle_t *handle);
+static void DSPI_SlaveTransferFillUpTxFifo(SPI_Type *base, dspi_slave_handle_t *handle) __fast_code;
 
 /*!
  * @brief Slave finish up a transfer.
  * It would call back if there is callback function and set the state to idle.
  * This is not a public API.
  */
-static void DSPI_SlaveTransferComplete(SPI_Type *base, dspi_slave_handle_t *handle);
+static void DSPI_SlaveTransferComplete(SPI_Type *base, dspi_slave_handle_t *handle) __fast_code;
 
 /*!
  * @brief DSPI common interrupt handler.
@@ -98,14 +98,14 @@ static void DSPI_SlaveTransferComplete(SPI_Type *base, dspi_slave_handle_t *hand
  * @param base DSPI peripheral address.
  * @param handle pointer to g_dspiHandle which stores the transfer state.
  */
-static void DSPI_CommonIRQHandler(SPI_Type *base, void *param);
+static void DSPI_CommonIRQHandler(SPI_Type *base, void *param) __fast_code;
 
 /*!
  * @brief Master prepare the transfer.
  * Basically it set up dspi_master_handle .
  * This is not a public API.
  */
-static void DSPI_MasterTransferPrepare(SPI_Type *base, dspi_master_handle_t *handle, dspi_transfer_t *transfer);
+static void DSPI_MasterTransferPrepare(SPI_Type *base, dspi_master_handle_t *handle, dspi_transfer_t *transfer) __fast_code;
 
 /*******************************************************************************
  * Variables
@@ -132,16 +132,16 @@ static clock_ip_name_t const s_dspiClock[] = DSPI_CLOCKS;
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
 
 /*! @brief Pointers to dspi handles for each instance. */
-static void *g_dspiHandle[ARRAY_SIZE(s_dspiBases)];
+static void *g_dspiHandle[ARRAY_SIZE(s_dspiBases)] __fast_data;
 
 /*! @brief Pointer to master IRQ handler for each instance. */
-static dspi_master_isr_t s_dspiMasterIsr;
+static dspi_master_isr_t s_dspiMasterIsr __fast_data;
 
 /*! @brief Pointer to slave IRQ handler for each instance. */
-static dspi_slave_isr_t s_dspiSlaveIsr;
+static dspi_slave_isr_t s_dspiSlaveIsr __fast_data;
 
 /* @brief Dummy data for each instance. This data is used when user's tx buffer is NULL*/
-volatile uint8_t g_dspiDummyData[ARRAY_SIZE(s_dspiBases)] = {0};
+volatile uint8_t g_dspiDummyData[ARRAY_SIZE(s_dspiBases)] __fast_data = {0};
 /**********************************************************************************************************************
 * Code
 *********************************************************************************************************************/
@@ -557,19 +557,6 @@ void DSPI_SlaveWriteDataBlocking(SPI_Type *base, uint32_t data)
     while (!(DSPI_GetStatusFlags(base) & kDSPI_TxCompleteFlag))
     {
     }
-}
-
-void DSPI_EnableInterrupts(SPI_Type *base, uint32_t mask)
-{
-    if (mask & SPI_RSER_TFFF_RE_MASK)
-    {
-        base->RSER &= ~SPI_RSER_TFFF_DIRS_MASK;
-    }
-    if (mask & SPI_RSER_RFDF_RE_MASK)
-    {
-        base->RSER &= ~SPI_RSER_RFDF_DIRS_MASK;
-    }
-    base->RSER |= mask;
 }
 
 /*Transactional APIs -- Master*/

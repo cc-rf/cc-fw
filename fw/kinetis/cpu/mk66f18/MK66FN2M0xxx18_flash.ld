@@ -119,10 +119,8 @@ SECTIONS
     *(.fast_text*)
     *freertos.a:*(.text)
     *freertos.a:*(.text.*)
-    /*
     *gcc.a:*(.text)
     *gcc.a:*(.text.*)
-    */
     /* If doing this one, need to copy to ram earlier.
     *nano.a:*(.text) /* adds 10K */
     *nano.a:*(.text.*)

@@ -41,6 +41,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+// phillip: for __fast_code/__fast_data
+#include <usr/type.h>
+
 #if defined(__ICCARM__)
 #include <stddef.h>
 #endif
