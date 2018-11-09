@@ -92,6 +92,16 @@ status_t flsh_init(void)
             (u32)__user_flash_end - (u32)__user_flash_base
     );
 
+    board_trace("");
+    board_trace(  "section measurements:")
+    board_trace_f("  header        %u", (u32) __flash_header_end - (u32) __flash_header_begin);
+    board_trace_f("  .user <local> %u", (u32) __user_flash_end - (u32) __user_flash_base);
+    board_trace_f("  .user_rom     %u", (u32) __user_flash_init_end - (u32) __user_flash_init_base);
+    board_trace_f("  .fast_code    %u", (u32) __fast_text_end - (u32) __fast_text_begin);
+    board_trace_f("  .text         %u", (u32) __text_end - (u32) __text_begin);
+    board_trace_f("  .data         %u", (u32) __DATA_END - (u32) __DATA_ROM);
+    board_trace("");
+
 
     if (user_flsh_ram.sanity != user_flsh_rom->sanity || user_flsh_ram.version != user_flsh_rom->version) {
         board_trace_fr("update to s=0x%08X v=0x%08X ... ", user_flsh_rom->sanity, user_flsh_rom->version);
@@ -127,14 +137,64 @@ status_t flsh_init(void)
             board_trace("done.");
         }
 
+        if (1) {
 
-        board_trace_fr("copy text/data s=%u ... ",
-                       (u32) __DATA_END - (u32) __user_flash_base);
+            board_trace_fr("copy text/data s=%u ... ",
+                           (u32) __DATA_END - (u32) __user_flash_base);
 
-        if ((status = flsh_bcpy(__user_flash_base, __DATA_END, (u32 *) OFFSET(__user_flash_base)))) {
-            return status;
+            if ((status = flsh_bcpy(__user_flash_base, __DATA_END, (u32 *) OFFSET(__user_flash_base)))) {
+                return status;
+            } else {
+                board_trace("done.");
+            }
+
         } else {
-            board_trace("done.");
+
+
+            board_trace(  "copy:")
+
+            board_trace_fr("  header        %u ... ", (u32) __flash_header_end - (u32) __flash_header_begin);
+            if ((status = flsh_bcpy(__flash_header_begin, __flash_header_end, (u32 *) OFFSET(__flash_header_begin)))) {
+                return status;
+            } else {
+                board_trace("done.");
+            }
+
+            board_trace_fr("  .user <local> %u ... ", (u32) __user_flash_end - (u32) __user_flash_base);
+            if ((status = flsh_bcpy(__user_flash_base, __user_flash_end, (u32 *) OFFSET(__user_flash_base)))) {
+                return status;
+            } else {
+                board_trace("done.");
+            }
+
+            board_trace_fr("  .user_rom     %u ... ", (u32) __user_flash_init_end - (u32) __user_flash_init_base);
+            if ((status = flsh_bcpy(__user_flash_init_base, __user_flash_init_end, (u32 *) OFFSET(__user_flash_init_base)))) {
+                return status;
+            } else {
+                board_trace("done.");
+            }
+
+            board_trace_fr("  .fast_code    %u ... ", (u32) __fast_text_end - (u32) __fast_text_begin);
+            if ((status = flsh_bcpy(__fast_text_begin, __fast_text_end, (u32 *) OFFSET(__fast_text_begin)))) {
+                return status;
+            } else {
+                board_trace("done.");
+            }
+
+            board_trace_fr("  .text         %u ... ", (u32) __text_end - (u32) __text_begin);
+            if ((status = flsh_bcpy(__text_begin, __text_end, (u32 *) OFFSET(__text_begin)))) {
+                return status;
+            } else {
+                board_trace("done.");
+            }
+
+            board_trace_fr("  .data         %u ... ", (u32) __DATA_END - (u32) __DATA_ROM);
+            if ((status = flsh_bcpy(__DATA_ROM, __DATA_END, (u32 *) OFFSET(__DATA_ROM)))) {
+                return status;
+            } else {
+                board_trace("done.");
+            }
+
         }
         
         board_trace_r("swapping... ");
@@ -166,11 +226,8 @@ static status_t flsh_bcpy(u32 *src, u32 *end, u32 *dst)
     while (src < end) {
         size = (u8 *) end - (u8 *) src;
 
-        // Disable this to allow errors that prevent copying garbage.
         if (size > BLOCK_SIZE) {
             size = BLOCK_SIZE;
-        } else {
-            if (size % 16) size += 16 - (size % 16);
         }
 
         /*board_trace_fr("copying %u: [0x%X:0x%X]->0x%X... ", size, src, (u8 *) src + size, dst)*/
@@ -191,12 +248,15 @@ static status_t flsh_bcpy(u32 *src, u32 *end, u32 *dst)
 status_t flsh_write(u32 begin, size_t size, u32 *data)
 {
     status_t status;
+    size_t erase_size = size;
 
     if (size % 4) return 1;
 
+    if (size % 16) erase_size = size + 16 - (size % 16);
+
     portDISABLE_INTERRUPTS();
 
-    status = FLASH_Erase(&flash_config, begin, size, kFLASH_ApiEraseKey);
+    status = FLASH_Erase(&flash_config, begin, erase_size, kFLASH_ApiEraseKey);
 
     if (status) {
         board_trace_f("erase fail: s=%li", status);

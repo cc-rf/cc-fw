@@ -60,7 +60,7 @@ MEMORY
   m_interrupts          (RX)  : ORIGIN = 0x00000000, LENGTH = 0x00000400
   m_flash_config        (RX)  : ORIGIN = 0x00000400, LENGTH = 0x00000010
   m_user                (RW)  : ORIGIN = 0x0001F000, LENGTH = 0x00001000
-  m_user_init           (R)   : ORIGIN = 0x00020000, LENGTH = 0x00001000
+  m_user_init           (RW)  : ORIGIN = 0x00020000, LENGTH = 0x00001000
   m_fast_text           (RX)  : ORIGIN = 0x00021000, LENGTH = 0x0000BC00
   m_text                (RX)  : ORIGIN = 0x0002CC00, LENGTH = 0x00040000
   m_interrupts_ram      (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00000400
@@ -151,12 +151,12 @@ SECTIONS
   __fast_data_size = __fast_data_rom_end - __fast_data_rom_begin;
   */
 
-  __text_begin = ORIGIN(m_text);
 
   /* The program code and other data goes into internal flash */
-  .text : AT(__text_begin)
+  .text : AT(ORIGIN(m_text))
   {
     . = ALIGN(16);
+    __text_begin = .;
     *(.text)                 /* .text sections (code) */
     *(.text*)                /* .text* sections (code) */
     *(.rodata)               /* .rodata sections (constants, strings, etc.) */
@@ -177,7 +177,8 @@ SECTIONS
     KEEP (*(SORT(.fini_array.*)))
     KEEP (*(.fini_array*))
     PROVIDE_HIDDEN (__fini_array_end = .);
-    . = ALIGN(4);
+    . = ALIGN(16);
+    __text_end = .;
   } > m_text
 
     .ARM :
@@ -187,14 +188,14 @@ SECTIONS
       __exidx_end = .;
     } > m_text
 
-  . = ALIGN(16);
+
+    . = ALIGN(16);
   __etext = .;    /* define a global symbol at end of code */
-  __text_end = .;
   __DATA_ROM = .; /* Symbol is used by startup for data initialization */
 
   .data : AT(__DATA_ROM)
   {
-    . = ALIGN(16);
+    . = ALIGN(4);
     __DATA_RAM = .;
     __data_start__ = .;      /* create a global symbol at data start */
     *(.data)                 /* .data sections */

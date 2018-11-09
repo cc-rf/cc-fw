@@ -1,6 +1,16 @@
 #pragma once
 
 #include <usr/type.h>
+
+#if !DEBUG
+
+static inline void itm_init(void) {}
+static inline void itm_puts(const uint8_t port, const char *str) {}
+static inline void itm_printf(const uint8_t port, const char *format, ...) {}
+static inline void itm_write(const uint8_t port, const uint8_t *buf, const size_t len) {}
+
+#else
+
 #include <fsl_device_registers.h>
 #include <core_cm4.h>
 #include <fsl_clock.h>
@@ -121,3 +131,5 @@ static inline void itm_write32(const uint8_t port, const uint32_t *buf, const si
         ITM->PORT[port].u16 = *buf++;
     }
 }
+
+#endif // DEBUG
