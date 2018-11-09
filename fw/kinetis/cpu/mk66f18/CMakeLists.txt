@@ -1,4 +1,3 @@
-set(NAME kinetis_sdk_mk66f18)
 
 if(NOT DEFINED CONFIG_KINETIS_CPU_PART)
     set(CONFIG_KINETIS_CPU_PART "MK66FN2M0VMD18" CACHE STRING "Target Kinetis CPU Part")
@@ -12,26 +11,22 @@ else()
     message(FATAL_ERROR "Unknown CONFIG_KINETIS_CPU_PART ${CONFIG_KINETIS_CPU_PART}")
 endif()
 
-add_library(
-        ${NAME} STATIC EXCLUDE_FROM_ALL
-        startup/startup_MK66F18.S
-        startup/system_MK66F18.c
+target_sources(
+        ${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/startup/startup_MK66F18.S
+        ${CMAKE_CURRENT_LIST_DIR}/startup/system_MK66F18.c
 )
 
 target_include_directories(
-        ${NAME}
-        PUBLIC cmsis
-        PUBLIC include
+        ${TARGET}
+        PRIVATE ${CMAKE_CURRENT_LIST_DIR}/cmsis
+        PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
 )
 
-target_link_libraries(
-        ${NAME}
-        PUBLIC kinetis_sdk_cmsis
-        "-Wl,-T${CMAKE_CURRENT_LIST_DIR}/${LDFILE_PREFIX}_flash.ld"
-)
+set(TARGET_LINK_PARAMS "-Wl,-T${CMAKE_CURRENT_LIST_DIR}/${LDFILE_PREFIX}_flash.ld" CACHE INTERNAL "" FORCE)
 
 target_compile_definitions(
-        ${NAME}
+        ${TARGET}
         PUBLIC CPU_${CONFIG_KINETIS_CPU_PART} __STARTUP_CLEAR_BSS
 )
 

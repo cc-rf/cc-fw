@@ -1,36 +1,19 @@
-set(NAME fw_board_cloudchaser)
-
-add_library(
-        ${NAME} STATIC EXCLUDE_FROM_ALL
-        board.c
-        clock.c
-        pins.c
-        led.c
-        lp5562.c
+target_sources(
+        ${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/board.c
+        ${CMAKE_CURRENT_LIST_DIR}/clock.c
+        ${CMAKE_CURRENT_LIST_DIR}/pins.c
+        ${CMAKE_CURRENT_LIST_DIR}/led.c
+        ${CMAKE_CURRENT_LIST_DIR}/lp5562.c
 )
 
 target_include_directories(
-        ${NAME}
-        PUBLIC include
+        ${TARGET}
+        PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
 )
-
-target_link_libraries(
-        ${NAME}
-        PUBLIC usr
-        PUBLIC kio
-)
-
-if(CONFIG_FABI)
-
-    target_link_libraries(
-            ${NAME}
-            PUBLIC fabi
-    )
-
-endif()
 
 target_compile_definitions(
-        ${NAME}
+        ${TARGET}
         PUBLIC BOARD_CLOUDCHASER=1
         PUBLIC BOARD_REVISION=${CONFIG_FW_BOARD_REV}
 )

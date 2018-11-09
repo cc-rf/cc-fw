@@ -1,31 +1,27 @@
-set(NAME kinetis_middleware_usb_host)
+if(CONFIG_KINETIS_MIDDLEWARE_USB_HOST)
 
-add_library(
-        ${NAME} STATIC EXCLUDE_FROM_ALL
-        usb_host_devices.c
-        usb_host_ehci.c
-        usb_host_framework.c
-        usb_host_hci.c
-        usb_host_khci.c
-        class/usb_host_audio.c
-        class/usb_host_cdc.c
-        class/usb_host_hid.c
-        class/usb_host_hub.c
-        class/usb_host_hub_app.c
-        class/usb_host_msd.c
-        class/usb_host_msd_ufi.c
-        class/usb_host_phdc.c
-        class/usb_host_printer.c
-)
+    target_sources(
+            ${TARGET} PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/usb_host_devices.c
+            ${CMAKE_CURRENT_LIST_DIR}/usb_host_ehci.c
+            ${CMAKE_CURRENT_LIST_DIR}/usb_host_framework.c
+            ${CMAKE_CURRENT_LIST_DIR}/usb_host_hci.c
+            ${CMAKE_CURRENT_LIST_DIR}/usb_host_khci.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_audio.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_cdc.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_hid.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_hub.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_hub_app.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_msd.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_msd_ufi.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_phdc.c
+            ${CMAKE_CURRENT_LIST_DIR}/class/usb_host_printer.c
+    )
 
-target_include_directories(
-        ${NAME}
-        PUBLIC include
-        PUBLIC class/include
-)
+    target_include_directories(
+            ${TARGET}
+            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
+            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/class/include
+    )
 
-target_link_libraries(
-        ${NAME}
-        PUBLIC kinetis_middleware_usb
-        PRIVATE kinetis_sdk
-)
+endif()

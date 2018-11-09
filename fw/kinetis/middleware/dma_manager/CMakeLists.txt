@@ -1,16 +1,13 @@
-set(NAME kinetis_middleware_dma_manager)
+if(CONFIG_KINETIS_MIDDLEWARE_DMA_MANAGER)
 
-add_library(
-        ${NAME} STATIC EXCLUDE_FROM_ALL
-        fsl_dma_manager.c
-)
+    target_sources(
+            ${TARGET} PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/fsl_dma_manager.c
+    )
 
-target_include_directories(
-        ${NAME}
-        PUBLIC include
-)
+    target_include_directories(
+            ${TARGET}
+            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
+    )
 
-target_link_libraries(
-        ${NAME}
-        PUBLIC kinetis_sdk_driver
-)
+endif()

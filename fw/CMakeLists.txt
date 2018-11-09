@@ -4,7 +4,7 @@ set(FW_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 
 set(CFLAGS_STD "-std=gnu11 -Wall -D_GNU_SOURCE -fstack-usage -Wstack-usage=512" CACHE STRING "" FORCE)
 set(CFLAGS_STD_DEBUG "-O0 -g3 -D_DEBUG=1 -DDEBUG" CACHE STRING "" FORCE)
-set(CFLAGS_STD_RELEASE "-Ofast -g0 -D_DEBUG=0" CACHE STRING "" FORCE)
+set(CFLAGS_STD_RELEASE "-Ofast -flto -Wl,--gc-sections -g0 -D_DEBUG=0" CACHE STRING "" FORCE)
 
 set(CFLAGS_KINETIS "-fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections" CACHE STRING "" FORCE)
 set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16" CACHE STRING "" FORCE)
@@ -13,7 +13,7 @@ set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16"
 # NOTE: what about rdpmon? and redboot?
 #set(SPECS "-specs=rdimon.specs -specs=nano.specs")
 set(SPECS "-specs=nosys.specs -specs=nano.specs"  CACHE STRING "" FORCE)
-set(LFLAGS_FW_EXE "-flto -Wl,-flto -Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
+set(LFLAGS_FW_EXE "-Wl,-flto -Wl,--gc-sections -Wl,--Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
 
 set(CFLAGS_BASE "${CFLAGS_STD} ${CFLAGS_KINETIS} ${CFLAGS_CPU_CM4F}")
 
@@ -32,8 +32,8 @@ if(NOT DEFINED CONFIG_FW_PROJECT)
     message(FATAL_ERROR "CONFIG_FW_PROJECT is required")
 endif()
 
-set(FW_PROJECT_TARGET fw_project_${CONFIG_FW_PROJECT})
 set(FW_PROJECT_PATH "project/${CONFIG_FW_PROJECT}")
+message(STATUS "Project: ${CONFIG_FW_PROJECT}")
 
 set(RUNTIME_OUTPUT_DIRECTORY "${BUILD_ROOT}" CACHE STRING "" FORCE)
 set(EXECUTABLE_OUTPUT_PATH "${RUNTIME_OUTPUT_DIRECTORY}" CACHE STRING "" FORCE)
@@ -49,6 +49,10 @@ endif()
 
 # TODO: Read all config.cmake files recursively with glob?
 
+set(TARGET "${PROJECT_NAME}" CACHE STRING "Project Target")
+
+add_executable(${TARGET})
+
 add_subdirectory(board)
 add_subdirectory(freertos)
 add_subdirectory(kinetis)
@@ -56,27 +60,16 @@ add_subdirectory(lib)
 add_subdirectory(project)
 
 
-set(TARGET "${PROJECT_NAME}" CACHE STRING "Project Target")
+if(DEFINED TARGET_LINK_PARAMS)
 
-message(STATUS "Project: ${FW_PROJECT_TARGET}")
-message(STATUS "Target: ${TARGET}")
+    target_link_libraries(
+            ${TARGET}
+            PRIVATE "${TARGET_LINK_PARAMS}"
+    )
 
-add_executable(
-        ${TARGET}
-        ${FW_PROJECT_PATH}/main.c
-)
+endif()
 
 #set_source_files_properties(main.c PROPERTIES COMPILE_FLAGS "-Wa,-a,-ad")
-
-set_target_properties(
-        ${TARGET} PROPERTIES
-        OUTPUT_NAME "fw"
-)
-
-target_link_libraries(
-        ${TARGET}
-        PUBLIC ${FW_PROJECT_TARGET}
-)
 
 add_custom_target(
         fw_hex

@@ -1,31 +1,19 @@
-set(NAME fabi) # Fast Blinky Interface
+if(CONFIG_LIB_FABI)
 
-if(CONFIG_FABI)
+    target_sources(
+            ${TARGET} PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/fabi.c
+            ${CMAKE_CURRENT_LIST_DIR}/ftm.c
+    )
 
-add_library(
-        ${NAME} STATIC EXCLUDE_FROM_ALL
-        fabi.c include/fabi.h
-        ftm.c ftm.h
-)
+    target_include_directories(
+            ${TARGET}
+            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
+    )
 
-target_include_directories(
-        ${NAME}
-        PUBLIC include
-)
-
-target_compile_definitions(
-        ${NAME}
-        PUBLIC FABI=1
-)
-
-target_link_libraries(
-        ${NAME}
-        PUBLIC usr
-        PUBLIC kio
-        PUBLIC kinetis_sdk
-        PUBLIC kinetis_sdk_driver
-        PUBLIC kinetis_freertos
-        PUBLIC kinetis_middleware_dma_manager
-)
+    target_compile_definitions(
+            ${TARGET}
+            PUBLIC FABI=1
+    )
 
 endif()

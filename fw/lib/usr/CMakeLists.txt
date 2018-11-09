@@ -1,16 +1,13 @@
-set(NAME usr)
+if(CONFIG_LIB_USR)
 
-add_library(
-        ${NAME} STATIC EXCLUDE_FROM_ALL
-        serf.c
-)
+    target_sources(
+            ${TARGET} PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/serf.c
+    )
 
-target_include_directories(
-        ${NAME}
-        PUBLIC include
-)
+    target_include_directories(
+            ${TARGET}
+            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
+    )
 
-target_link_libraries(
-        ${NAME}
-        PRIVATE freertos
-)
+endif()
