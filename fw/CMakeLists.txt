@@ -13,7 +13,7 @@ set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16"
 # NOTE: what about rdpmon? and redboot?
 #set(SPECS "-specs=rdimon.specs -specs=nano.specs")
 set(SPECS "-specs=nosys.specs -specs=nano.specs"  CACHE STRING "" FORCE)
-set(LFLAGS_FW_EXE "-Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
+set(LFLAGS_FW_EXE "-fwhole-program -Wl,-flto -Wl,--gc-sections -Wl,-Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
 
 set(CFLAGS_BASE "${CFLAGS_STD} ${CFLAGS_KINETIS} ${CFLAGS_CPU_CM4F}")
 

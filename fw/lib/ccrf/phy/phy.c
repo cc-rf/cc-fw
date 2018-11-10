@@ -723,15 +723,7 @@ static void phy_task(phy_t phy)
                     rssi_needed = !phy->stay;
 
                     if (pkt) {
-                        const u8 tx_bytes = rdio_reg_get(phy->rdio, CC1200_NUM_TXBYTES, NULL);
-
-                        /*if (tx_bytes == pkt->size + 1) {
-
-                        }*/
-
                         rdio_strobe_txfl(phy->rdio);
-
-                        phy_trace_debug("chan: hop tx canned: len=%u txbytes=%u", pkt->size, tx_bytes);
 
                         if (pkt == (rf_pkt_t *) &sq.pkt && sq.task) {
                             xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);

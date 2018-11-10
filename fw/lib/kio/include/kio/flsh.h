@@ -3,7 +3,7 @@
 #include <usr/type.h>
 #include <fsl_common.h>
 
-#define FLASH_SANITY        0xF00BAEBE
+#define FLASH_SANITY        0xF10BAEBE
 #define FLASH_VERSION       0xBEDFECE5
 
 status_t flsh_init(void) __fast_code;

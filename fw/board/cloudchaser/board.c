@@ -42,9 +42,6 @@ void board_init(void)
     boot_clock_run();
     itm_init();
 
-    board_trace_f("board: init VTOR=%p", SCB->VTOR);
-
-
     flsh_init();
 
     boot_clock_run_hs_oc();

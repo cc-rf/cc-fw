@@ -8,7 +8,7 @@
 
 /* Phillip: specific task stack sizes and priorities */
 
-#define configMINIMAL_STACK_SIZE    ((unsigned short) 128u)
+#define configMINIMAL_STACK_SIZE    ((unsigned short) (512u >> 2u))
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
 #define TASK_STACK_SIZE_HUGE        (TASK_STACK_SIZE_SMALL * 3)
 #define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 2)
@@ -70,7 +70,7 @@ extern void rtos_sleep_post(uint32_t xExpectedIdleTime) __fast_code;
 #define configCPU_CLOCK_HZ (CLOCK_GetCoreSysClkFreq())
 #define configTICK_RATE_HZ ((TickType_t) 10000U)
 #define configMAX_PRIORITIES (18U)
-#define configTOTAL_HEAP_SIZE ((size_t)(138U * 1024U))
+#define configTOTAL_HEAP_SIZE ((size_t)(171U * 1024U))
 
 #define configMAX_TASK_NAME_LEN (10U)
 #define configUSE_TRACE_FACILITY 1U

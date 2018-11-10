@@ -62,8 +62,8 @@ MEMORY
   m_fast_text           (RX)  : ORIGIN = 0x00021000, LENGTH = 0x0000BC00
   m_text                (RX)  : ORIGIN = 0x0002CC00, LENGTH = 0x00040000
   m_interrupts_ram      (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00000400
-  m_fast_data           (RW)  : ORIGIN = 0x1FFF0400, LENGTH = 0x00004000
-  m_fast_code           (RX)  : ORIGIN = 0x1FFF4400, LENGTH = 0x0000BC00
+  m_fast_data           (RW)  : ORIGIN = 0x1FFF0400, LENGTH = 0x00006000
+  m_fast_code           (RX)  : ORIGIN = 0x1FFF6400, LENGTH = 0x00009C00
   m_user_ram            (RW)  : ORIGIN = 0x20000000, LENGTH = 0x00001000
   m_data                (RW)  : ORIGIN = 0x20001000, LENGTH = 0x0002F000
 }
@@ -119,10 +119,6 @@ SECTIONS
     *freertos.a:*(.text.*)
     *gcc.a:*(.text)
     *gcc.a:*(.text.*)
-    /* If doing this one, need to copy to ram earlier.
-    *nano.a:*(.text) /* adds 10K */
-    *nano.a:*(.text.*)
-    */
     . = ALIGN(16);
     __fast_code_end = .;
   } > m_fast_code
