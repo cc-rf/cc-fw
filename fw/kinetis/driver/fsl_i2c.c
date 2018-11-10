@@ -486,7 +486,7 @@ static status_t I2C_MasterTransferRunStateMachine(I2C_Type *base, i2c_master_han
     return result;
 }
 
-static void I2C_TransferCommonIRQHandler(I2C_Type *base, void *handle)
+__fast_isr static void I2C_TransferCommonIRQHandler(I2C_Type *base, void *handle)
 {
     /* Check if master interrupt. */
     if ((base->S & kI2C_ArbitrationLostFlag) || (base->C1 & I2C_C1_MST_MASK))
@@ -1977,28 +1977,28 @@ void I2C_SlaveTransferHandleIRQ(I2C_Type *base, void *i2cHandle)
 }
 
 #if defined(I2C0)
-void I2C0_DriverIRQHandler(void)
+__used __fast_isr void I2C0_DriverIRQHandler(void)
 {
     I2C_TransferCommonIRQHandler(I2C0, s_i2cHandle[0]);
 }
 #endif
 
 #if defined(I2C1)
-void I2C1_DriverIRQHandler(void)
+__used __fast_isr void I2C1_DriverIRQHandler(void)
 {
     I2C_TransferCommonIRQHandler(I2C1, s_i2cHandle[1]);
 }
 #endif
 
 #if defined(I2C2)
-void I2C2_DriverIRQHandler(void)
+__used __fast_isr void I2C2_DriverIRQHandler(void)
 {
     I2C_TransferCommonIRQHandler(I2C2, s_i2cHandle[2]);
 }
 #endif
 
 #if defined(I2C3)
-void I2C3_DriverIRQHandler(void)
+__used __fast_isr void I2C3_DriverIRQHandler(void)
 {
     I2C_TransferCommonIRQHandler(I2C3, s_i2cHandle[3]);
 }

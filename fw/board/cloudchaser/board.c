@@ -9,10 +9,8 @@
 #include "pins.h"
 
 
-void board_boot(void)
+static void load_code(void)
 {
-    portDISABLE_INTERRUPTS();
-
     extern u32 __fast_text_begin[];
     extern u32 __fast_text_end[];
     extern u32 __fast_code_begin[];
@@ -27,19 +25,31 @@ void board_boot(void)
 
     InstallIRQHandler(0, 0);
 
-    boot_pins_init();
-    boot_clock_run();
-
     itm_init();
-    board_trace("<boot>");
+    board_trace("board: boot");
+
+}
+
+
+void board_boot(void)
+{
+    load_code();
+    boot_pins_init();
+}
+
+void board_init(void)
+{
+    boot_clock_run();
+    itm_init();
+
+    board_trace_f("board: init VTOR=%p", SCB->VTOR);
+
 
     flsh_init();
 
     boot_clock_run_hs_oc();
     itm_init();
 
-
-    portENABLE_INTERRUPTS();
 
     /*board_trace_f("\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",
                CLOCK_GetFreq(kCLOCK_CoreSysClk),
@@ -58,16 +68,15 @@ void board_boot(void)
     );*/
 
     #if configUSE_TICKLESS_IDLE && configUSE_LPTMR
-    lptmr_config_t config;
-    LPTMR_GetDefaultConfig(&config);
-    config.prescalerClockSource = kLPTMR_PrescalerClock_1; // Clock 1 == LPO?
-    config.bypassPrescaler = true;
+        lptmr_config_t config;
+        LPTMR_GetDefaultConfig(&config);
+        config.prescalerClockSource = kLPTMR_PrescalerClock_1; // Clock 1 == LPO?
+        config.bypassPrescaler = true;
 
-    LPTMR_Init(TICKLESS_LPTMR_BASE_PTR, &config);
-    LPTMR_EnableInterrupts(TICKLESS_LPTMR_BASE_PTR, kLPTMR_TimerInterruptEnable);
+        LPTMR_Init(TICKLESS_LPTMR_BASE_PTR, &config);
+        LPTMR_EnableInterrupts(TICKLESS_LPTMR_BASE_PTR, kLPTMR_TimerInterruptEnable);
     #endif
 }
-
 
 void board_rtos_init(void)
 {

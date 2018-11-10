@@ -13,8 +13,8 @@ endif()
 
 target_sources(
         ${TARGET} PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/startup/startup_MK66F18.S
-        ${CMAKE_CURRENT_LIST_DIR}/startup/system_MK66F18.c
+        ${CMAKE_CURRENT_LIST_DIR}/startup/startup.S
+        ${CMAKE_CURRENT_LIST_DIR}/startup/system.c
 )
 
 target_include_directories(

@@ -91,9 +91,9 @@ debugger. */
 /*
  * Exception handlers.
  */
-void xPortPendSVHandler( void ) __fast_code __attribute__ (( naked ));
-void xPortSysTickHandler( void ) __fast_code;
-void vPortSVCHandler( void ) __fast_code __attribute__ (( naked ));
+void xPortPendSVHandler( void ) __used __fast_isr __attribute__((naked));
+void xPortSysTickHandler( void ) __used __fast_isr;
+void vPortSVCHandler( void ) __used __fast_isr __attribute__((naked));
 
 /*
  * Start first task is a separate function so it can be tested in isolation.

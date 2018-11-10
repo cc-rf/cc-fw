@@ -79,7 +79,7 @@
 
 #if configUSE_TICKLESS_IDLE == 1
 
-	void vPortLptmrIsr(void)
+	void __used __fast_isr vPortLptmrIsr(void)
 	{
 		ulLPTimerInterruptFired = true;
 		LPTMR_ClearStatusFlags(vPortGetLptrmBase(), kLPTMR_TimerCompareFlag);

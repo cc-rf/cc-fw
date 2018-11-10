@@ -213,13 +213,13 @@ usb_device_class_config_list_struct_t g_compositeDeviceConfigList = {
  * @return None.
  */
 #if defined(USB_DEVICE_CONFIG_EHCI) && (USB_DEVICE_CONFIG_EHCI > 0U)
-void USBHS_IRQHandler(void)
+__used __fast_isr void USBHS_IRQHandler(void)
 {
     USB_DeviceEhciIsrFunction(g_composite.deviceHandle);
 }
 #if defined(USB_DEVICE_CONFIG_EHCI) && (USB_DEVICE_CONFIG_EHCI > 1U)
 #if defined(FSL_FEATURE_SOC_USBNC_COUNT) && (FSL_FEATURE_SOC_USBNC_COUNT > 1U)
-void USB1_IRQHandler(void)
+__used __fast_isr void USB1_IRQHandler(void)
 {
     USB_DeviceEhciIsrFunction(g_composite.deviceHandle);
 }
@@ -227,19 +227,19 @@ void USB1_IRQHandler(void)
 #endif
 #endif
 #if defined(USB_DEVICE_CONFIG_KHCI) && (USB_DEVICE_CONFIG_KHCI > 0U)
-void USB0_IRQHandler(void)
+__used __fast_isr void USB0_IRQHandler(void)
 {
     USB_DeviceKhciIsrFunction(g_composite.deviceHandle);
 }
 #endif
 #if defined(USB_DEVICE_CONFIG_LPCIP3511FS) && (USB_DEVICE_CONFIG_LPCIP3511FS > 0U)
-void USB0_IRQHandler(void)
+__used __fast_isr void USB0_IRQHandler(void)
 {
     USB_DeviceLpcIp3511IsrFunction(g_composite.deviceHandle);
 }
 #endif
 #if defined(USB_DEVICE_CONFIG_LPCIP3511HS) && (USB_DEVICE_CONFIG_LPCIP3511HS > 0U)
-void USB1_IRQHandler(void)
+__used __fast_isr void USB1_IRQHandler(void)
 {
     USB_DeviceLpcIp3511IsrFunction(g_composite.deviceHandle);
 }

@@ -85,7 +85,7 @@ static void isr_noop(void *param __unused) { }
 #define DECL_PORT_MAP_ELEM(P)        isr_map_port ## P,
 #define DECL_PORT_MAP_ELEM_NULL(P)   NULL,
 
-#define DECL_PORT_IRQ_FN(P)             void PORT##P##_IRQHandler(void) __ccrf_code;
+#define DECL_PORT_IRQ_FN(P)             void __used PORT##P##_IRQHandler(void) __ccrf_isr;
 #define DECL_PORT_IRQ_FN_ELEM(P)        PORT##P##_IRQHandler,
 #define DECL_PORT_IRQ_FN_ELEM_NULL(P)   NULL,
 
@@ -99,13 +99,6 @@ static isr_map_t *const isr_maps[] = {
         IFE_PORTS_FN(DECL_PORT_MAP_ELEM, DECL_PORT_MAP_ELEM_NULL)
 };
 
-/*
-#ifdef ENABLE_RAM_VECTOR_TABLE
-static void *port_irqs[] = {
-        IFE_PORTS_FN(DECL_PORT_IRQ_FN_ELEM, DECL_PORT_IRQ_FN_ELEM_NULL)
-};
-#endif
-*/
 
 static PORT_Type *const ports[] = PORT_BASE_PTRS;
 static GPIO_Type *const gpios[] = GPIO_BASE_PTRS;
@@ -156,13 +149,6 @@ void ccrf_isr_configure(rdio_t rdio, ccrf_isr_src_t src, ccrf_isr_edge_t edge, c
             break;
     }
 
-    // NOTE: Not actually needed, using the default handlers.
-    /*
-    #ifdef ENABLE_RAM_VECTOR_TABLE
-    InstallIRQHandler(irqns[port], (u32) port_irqs[port]);
-    #endif
-     */
-
     PORT_SetPinInterruptConfig(ports[port], pin, type);
 
     NVIC_SetPriority(irqns[port], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY);
@@ -187,7 +173,7 @@ bool ccrf_isr_state(rdio_t rdio, ccrf_isr_src_t src)
 
 // TODO: Compare this method with https://lemire.me/blog/2018/02/21/iterating-over-set-bits-quickly/
 #define DECL_PORT_ISR(P) \
-    __attribute__((interrupt,used)) void PORT##P##_IRQHandler(void) { \
+    void PORT##P##_IRQHandler(void) { \
         u32 isfr = PORT##P->ISFR;                           \
         PORT##P->ISFR = isfr;                               \
         static const isr_map_t *const isr_table = isr_map_port ## P;     \

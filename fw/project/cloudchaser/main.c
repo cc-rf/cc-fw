@@ -73,7 +73,8 @@ bool __pflag_set, __uflag1_set/*, __uflag2_set*/;
 
 int main(void)
 {
-    board_boot();
+    board_init();
+
     pin_flag_init();
 
     xTaskCreateStatic(

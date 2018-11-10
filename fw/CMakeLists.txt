@@ -4,7 +4,7 @@ set(FW_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 
 set(CFLAGS_STD "-std=gnu11 -Wall -D_GNU_SOURCE -fstack-usage -Wstack-usage=512" CACHE STRING "" FORCE)
 set(CFLAGS_STD_DEBUG "-O0 -g3 -D_DEBUG=1 -DDEBUG" CACHE STRING "" FORCE)
-set(CFLAGS_STD_RELEASE "-Ofast -flto -Wl,--gc-sections -g0 -D_DEBUG=0" CACHE STRING "" FORCE)
+set(CFLAGS_STD_RELEASE "-Ofast -Wl,--gc-sections -g0 -D_DEBUG=0" CACHE STRING "" FORCE)
 
 set(CFLAGS_KINETIS "-fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections" CACHE STRING "" FORCE)
 set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16" CACHE STRING "" FORCE)
@@ -13,7 +13,7 @@ set(CFLAGS_CPU_CM4F "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16"
 # NOTE: what about rdpmon? and redboot?
 #set(SPECS "-specs=rdimon.specs -specs=nano.specs")
 set(SPECS "-specs=nosys.specs -specs=nano.specs"  CACHE STRING "" FORCE)
-set(LFLAGS_FW_EXE "-Wl,-flto -Wl,--gc-sections -Wl,--Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
+set(LFLAGS_FW_EXE "-Wl,--gc-sections -Wl,--Map,\"${PROJECT_NAME}.map\" -Wl,--no-wchar-size-warning ${SPECS}" CACHE STRING "" FORCE)
 
 set(CFLAGS_BASE "${CFLAGS_STD} ${CFLAGS_KINETIS} ${CFLAGS_CPU_CM4F}")
 

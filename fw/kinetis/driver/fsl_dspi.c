@@ -98,7 +98,7 @@ static void DSPI_SlaveTransferComplete(SPI_Type *base, dspi_slave_handle_t *hand
  * @param base DSPI peripheral address.
  * @param handle pointer to g_dspiHandle which stores the transfer state.
  */
-static void DSPI_CommonIRQHandler(SPI_Type *base, void *param) __fast_code;
+static void DSPI_CommonIRQHandler(SPI_Type *base, void *param) __fast_isr;
 
 /*!
  * @brief Master prepare the transfer.
@@ -1742,7 +1742,7 @@ static void DSPI_CommonIRQHandler(SPI_Type *base, void *param)
 }
 
 #if defined(SPI0)
-void SPI0_DriverIRQHandler(void)
+__used __fast_isr void SPI0_DriverIRQHandler(void)
 {
     assert(g_dspiHandle[0]);
     DSPI_CommonIRQHandler(SPI0, g_dspiHandle[0]);
@@ -1750,7 +1750,7 @@ void SPI0_DriverIRQHandler(void)
 #endif
 
 #if defined(SPI1)
-void SPI1_DriverIRQHandler(void)
+__used __fast_isr void SPI1_DriverIRQHandler(void)
 {
     assert(g_dspiHandle[1]);
     DSPI_CommonIRQHandler(SPI1, g_dspiHandle[1]);
@@ -1758,7 +1758,7 @@ void SPI1_DriverIRQHandler(void)
 #endif
 
 #if defined(SPI2)
-void SPI2_DriverIRQHandler(void)
+__used __fast_isr void SPI2_DriverIRQHandler(void)
 {
     assert(g_dspiHandle[2]);
     DSPI_CommonIRQHandler(SPI2, g_dspiHandle[2]);
@@ -1766,7 +1766,7 @@ void SPI2_DriverIRQHandler(void)
 #endif
 
 #if defined(SPI3)
-void SPI3_DriverIRQHandler(void)
+__used __fast_isr void SPI3_DriverIRQHandler(void)
 {
     assert(g_dspiHandle[3]);
     DSPI_CommonIRQHandler(SPI3, g_dspiHandle[3]);
@@ -1774,7 +1774,7 @@ void SPI3_DriverIRQHandler(void)
 #endif
 
 #if defined(SPI4)
-void SPI4_DriverIRQHandler(void)
+__used __fast_isr void SPI4_DriverIRQHandler(void)
 {
     assert(g_dspiHandle[4]);
     DSPI_CommonIRQHandler(SPI4, g_dspiHandle[4]);
@@ -1782,7 +1782,7 @@ void SPI4_DriverIRQHandler(void)
 #endif
 
 #if defined(SPI5)
-void SPI5_DriverIRQHandler(void)
+__used __fast_isr void SPI5_DriverIRQHandler(void)
 {
     assert(g_dspiHandle[5]);
     DSPI_CommonIRQHandler(SPI5, g_dspiHandle[5]);

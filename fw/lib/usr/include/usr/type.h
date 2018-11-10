@@ -7,6 +7,7 @@
 
 #define __fast_data __section(".fast_data")
 #define __fast_code __section(".fast_text")
+#define __fast_isr  __section(".fast_text_isr")
 
 // http://stackoverflow.com/questions/4415524/common-array-length-macro-for-c
 #define COUNT_OF(x) ((sizeof(x)/sizeof(x[0])) / ((size_t)(!(sizeof(x) % sizeof(x[0])))))

@@ -5,6 +5,7 @@
 
 #define __ccrf_data __fast_data
 #define __ccrf_code __fast_code
+#define __ccrf_isr __fast_isr
 
 
 typedef u8 rdio_id_t;
