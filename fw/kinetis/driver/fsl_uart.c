@@ -1223,7 +1223,7 @@ void UART_TransferHandleErrorIRQ(UART_Type *base, uart_handle_t *handle)
 #if defined(UART0)
 #if ((!(defined(FSL_FEATURE_SOC_LPSCI_COUNT))) || \
      ((defined(FSL_FEATURE_SOC_LPSCI_COUNT)) && (FSL_FEATURE_SOC_LPSCI_COUNT == 0)))
-__used __fast_isr void UART0_DriverIRQHandler(void)
+void UART0_DriverIRQHandler(void)
 {
     s_uartIsr(UART0, s_uartHandle[0]);
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1233,7 +1233,7 @@ __used __fast_isr void UART0_DriverIRQHandler(void)
 #endif
 }
 
-__used __fast_isr void UART0_RX_TX_DriverIRQHandler(void)
+void UART0_RX_TX_DriverIRQHandler(void)
 {
     UART0_DriverIRQHandler();
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1246,7 +1246,7 @@ __used __fast_isr void UART0_RX_TX_DriverIRQHandler(void)
 #endif
 
 #if defined(UART1)
-__used __fast_isr void UART1_DriverIRQHandler(void)
+void UART1_DriverIRQHandler(void)
 {
     s_uartIsr(UART1, s_uartHandle[1]);
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1256,7 +1256,7 @@ __used __fast_isr void UART1_DriverIRQHandler(void)
 #endif
 }
 
-__used __fast_isr void UART1_RX_TX_DriverIRQHandler(void)
+void UART1_RX_TX_DriverIRQHandler(void)
 {
     UART1_DriverIRQHandler();
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1268,7 +1268,7 @@ __used __fast_isr void UART1_RX_TX_DriverIRQHandler(void)
 #endif
 
 #if defined(UART2)
-__used __fast_isr void UART2_DriverIRQHandler(void)
+void UART2_DriverIRQHandler(void)
 {
     s_uartIsr(UART2, s_uartHandle[2]);
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1278,7 +1278,7 @@ __used __fast_isr void UART2_DriverIRQHandler(void)
 #endif
 }
 
-__used __fast_isr void UART2_RX_TX_DriverIRQHandler(void)
+void UART2_RX_TX_DriverIRQHandler(void)
 {
     UART2_DriverIRQHandler();
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1290,7 +1290,7 @@ __used __fast_isr void UART2_RX_TX_DriverIRQHandler(void)
 #endif
 
 #if defined(UART3)
-__used __fast_isr void UART3_DriverIRQHandler(void)
+void UART3_DriverIRQHandler(void)
 {
     s_uartIsr(UART3, s_uartHandle[3]);
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1300,7 +1300,7 @@ __used __fast_isr void UART3_DriverIRQHandler(void)
 #endif
 }
 
-__used __fast_isr void UART3_RX_TX_DriverIRQHandler(void)
+void UART3_RX_TX_DriverIRQHandler(void)
 {
     UART3_DriverIRQHandler();
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1312,7 +1312,7 @@ __used __fast_isr void UART3_RX_TX_DriverIRQHandler(void)
 #endif
 
 #if defined(UART4)
-__used __fast_isr void UART4_DriverIRQHandler(void)
+void UART4_DriverIRQHandler(void)
 {
     s_uartIsr(UART4, s_uartHandle[4]);
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1322,7 +1322,7 @@ __used __fast_isr void UART4_DriverIRQHandler(void)
 #endif
 }
 
-__used __fast_isr void UART4_RX_TX_DriverIRQHandler(void)
+void UART4_RX_TX_DriverIRQHandler(void)
 {
     UART4_DriverIRQHandler();
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1334,7 +1334,7 @@ __used __fast_isr void UART4_RX_TX_DriverIRQHandler(void)
 #endif
 
 #if defined(UART5)
-__used __fast_isr void UART5_DriverIRQHandler(void)
+void UART5_DriverIRQHandler(void)
 {
     s_uartIsr(UART5, s_uartHandle[5]);
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
@@ -1344,7 +1344,7 @@ __used __fast_isr void UART5_DriverIRQHandler(void)
 #endif
 }
 
-__used __fast_isr void UART5_RX_TX_DriverIRQHandler(void)
+void UART5_RX_TX_DriverIRQHandler(void)
 {
     UART5_DriverIRQHandler();
 /* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping

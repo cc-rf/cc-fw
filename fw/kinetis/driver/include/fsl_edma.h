@@ -944,7 +944,7 @@ static inline uint32_t EDMA_GetNextTCDAddress(edma_handle_t *handle)
  *
  * @param handle eDMA handle pointer.
  */
-void __fast_isr EDMA_HandleIRQ(edma_handle_t *handle);
+void EDMA_HandleIRQ(edma_handle_t *handle);
 
 /* @} */
 
