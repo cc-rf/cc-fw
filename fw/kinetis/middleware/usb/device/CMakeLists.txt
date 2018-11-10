@@ -1,15 +1,19 @@
-if(CONFIG_KINETIS_MIDDLEWARE_USB_DEVICE)
+set(NAME kinetis_middleware_usb_device)
 
-    target_sources(
-            ${TARGET} PRIVATE
-            ${CMAKE_CURRENT_LIST_DIR}/usb_device_dci.c
-            ${CMAKE_CURRENT_LIST_DIR}/usb_device_ehci.c
-            ${CMAKE_CURRENT_LIST_DIR}/usb_device_khci.c
-    )
+add_library(
+        ${NAME} STATIC EXCLUDE_FROM_ALL
+        usb_device_dci.c
+        usb_device_ehci.c
+        usb_device_khci.c
+)
 
-    target_include_directories(
-            ${TARGET}
-            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
-    )
+target_include_directories(
+        ${NAME}
+        PUBLIC include
+)
 
-endif()
+target_link_libraries(
+        ${NAME}
+        PUBLIC kinetis_middleware_usb
+        PRIVATE kinetis_sdk
+)

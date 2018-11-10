@@ -1,11 +1,3 @@
 set(CONFIG_FW_BOARD "cloudchaser" CACHE STRING "Target Firmware Board (project: cloudchaser)")
 set(CONFIG_FW_BOARD_REV "2" CACHE INTEGER "Target Firmware Board Revision (project: cloudchaser)")
-
-set(CONFIG_KINETIS_MIDDLEWARE_USB ON CACHE BOOL "")
-set(CONFIG_KINETIS_MIDDLEWARE_USB_DEVICE ON CACHE BOOL "")
-
-
-set(CONFIG_LIB_CCRF ON CACHE BOOL "")
-set(CONFIG_LIB_KIO ON CACHE BOOL "")
-set(CONFIG_LIB_USR ON CACHE BOOL "")
-set(CONFIG_LIB_FABI OFF CACHE BOOL "")
+set(CONFIG_FABI "0" CACHE INTEGER "Enable FABI (project: cloudchaser)")

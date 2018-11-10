@@ -1,173 +1,180 @@
+set(NAME kinetis_sdk_driver)
 
 set(KINETIS_SDK_DRIVERS)
 
-list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_common.c)
+list(APPEND KINETIS_SDK_DRIVERS fsl_common.c)
 
 if(KINETIS_SDK_DRIVER_ADC16)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_adc16.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_adc16.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_CMP)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_cmp.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_cmp.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_CRC)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_crc.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_crc.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_DAC)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_dac.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_dac.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_DMAMUX)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_dmamux.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_dmamux.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_DSPI_EDMA)
     set(KINETIS_SDK_DRIVER_DSPI TRUE)
     set(KINETIS_SDK_DRIVER_EDMA TRUE)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_dspi_edma.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_dspi_edma.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_DSPI)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_dspi.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_dspi.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_I2C_EDMA)
     set(KINETIS_SDK_DRIVER_I2C TRUE)
     set(KINETIS_SDK_DRIVER_EDMA TRUE)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_i2c_edma.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_i2c_edma.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_I2C)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_i2c.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_i2c.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_LPUART_EDMA)
     set(KINETIS_SDK_DRIVER_LPUART TRUE)
     set(KINETIS_SDK_DRIVER_EDMA TRUE)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_lpuart_edma.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_lpuart_edma.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_LPUART)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_lpuart.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_lpuart.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_SAI_EDMA)
     set(KINETIS_SDK_DRIVER_SAI TRUE)
     set(KINETIS_SDK_DRIVER_EDMA TRUE)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_sai_edma.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_sai_edma.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_SAI)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_sai.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_sai.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_UART_EDMA)
     set(KINETIS_SDK_DRIVER_UART TRUE)
     set(KINETIS_SDK_DRIVER_EDMA TRUE)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_uart_edma.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_uart_edma.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_UART)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_uart.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_uart.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_EDMA)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_edma.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_edma.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_EWM)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_ewm.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_ewm.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_FLASH)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_ftfx_flash.c)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_ftfx_controller.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_ftfx_flash.c fsl_ftfx_controller.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_FLEXBUS)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_flexbus.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_flexbus.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_FTM)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_ftm.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_ftm.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_GPIO)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_gpio.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_gpio.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_LLWU)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_llwu.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_llwu.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_LPTMR)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_lptmr.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_lptmr.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_PDB)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_pdb.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_pdb.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_PIT)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_pit.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_pit.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_PMC)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_pmc.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_pmc.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_RCM)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_rcm.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_rcm.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_RNGA)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_rnga.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_rnga.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_RTC)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_rtc.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_rtc.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_SIM)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_sim.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_sim.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_SMC)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_smc.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_smc.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_VREF)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_vref.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_vref.c)
 endif()
 
 if(KINETIS_SDK_DRIVER_WDOG)
-    list(APPEND KINETIS_SDK_DRIVERS ${CMAKE_CURRENT_LIST_DIR}/fsl_wdog.c)
+    list(APPEND KINETIS_SDK_DRIVERS fsl_wdog.c)
 endif()
 
-if(KINETIS_SDK_DRIVERS)
 
-    target_sources(
-            ${TARGET} PRIVATE
-            ${KINETIS_SDK_DRIVERS}
-    )
+add_library(
+        ${NAME} STATIC EXCLUDE_FROM_ALL
+        ${KINETIS_SDK_DRIVERS}
+)
 
-    target_include_directories(
-            ${TARGET}
-            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
-    )
+target_include_directories(
+        ${NAME}
+        PUBLIC include
+)
 
+target_compile_definitions(
+        ${NAME}
+        PUBLIC ENABLE_RAM_VECTOR_TABLE
+)
+
+if(KINETIS_SDK_DRIVER_FLASH)
     target_compile_definitions(
-            ${TARGET}
-            PUBLIC ENABLE_RAM_VECTOR_TABLE
+            ${NAME}
+            PUBLIC FTFx_DRIVER_IS_FLASH_RESIDENT=0
     )
 
-    if(KINETIS_SDK_DRIVER_FLASH)
-        target_compile_definitions(
-                ${TARGET}
-                PUBLIC FTFx_DRIVER_IS_FLASH_RESIDENT=0
-        )
-    endif()
-
+    target_link_libraries(
+            ${NAME}
+            PUBLIC usr # needed for __fast_code
+    )
 endif()
+
+target_link_libraries(
+        ${NAME}
+        PUBLIC kinetis_sdk_cpu_driver
+)

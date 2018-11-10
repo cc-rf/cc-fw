@@ -3,3 +3,5 @@ if(NOT DEFINED CONFIG_FW_BOARD)
 endif()
 
 add_subdirectory(${CONFIG_FW_BOARD})
+
+add_library(fw_board ALIAS fw_board_${CONFIG_FW_BOARD})

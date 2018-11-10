@@ -3,3 +3,6 @@ if(NOT DEFINED CONFIG_KINETIS_CPU)
 endif()
 
 add_subdirectory(${CONFIG_KINETIS_CPU})
+
+add_library(kinetis_sdk_cpu ALIAS kinetis_sdk_${CONFIG_KINETIS_CPU})
+add_library(kinetis_sdk_cpu_driver ALIAS kinetis_sdk_${CONFIG_KINETIS_CPU}_driver)

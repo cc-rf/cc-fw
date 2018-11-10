@@ -1,15 +1,27 @@
+set(NAME fw_project_cloudchaser)
 
-target_sources(
-        ${TARGET} PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/main.c
-        ${CMAKE_CURRENT_LIST_DIR}/cloudchaser.c
-        ${CMAKE_CURRENT_LIST_DIR}/console.c
-        ${CMAKE_CURRENT_LIST_DIR}/rf_uart.c
-        ${CMAKE_CURRENT_LIST_DIR}/ccio.c
+add_library(
+        ${NAME} STATIC EXCLUDE_FROM_ALL
+        cloudchaser.c
+        console.c
+        rf_uart.c
+        ccio.c
 )
 
 target_include_directories(
-        ${TARGET}
-        PRIVATE include
-        PRIVATE usb/include
+        ${NAME}
+        PUBLIC include
+        PUBLIC usb/include
 )
+
+target_link_libraries(
+        ${NAME}
+        PUBLIC usr
+        PUBLIC fw_board
+        PUBLIC kio
+        PUBLIC ccrf
+)
+
+add_library(kinetis_freertos_config INTERFACE)
+target_include_directories(kinetis_freertos_config INTERFACE include)
+

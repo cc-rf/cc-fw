@@ -1,9 +1,17 @@
-target_sources(
-        ${TARGET} PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/usb_phy.c
+set(NAME kinetis_middleware_usb_phy)
+
+add_library(
+        ${NAME} STATIC EXCLUDE_FROM_ALL
+        usb_phy.c
 )
 
 target_include_directories(
-        ${TARGET}
-        PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
+        ${NAME}
+        PUBLIC include
+)
+
+target_link_libraries(
+        ${NAME}
+        PUBLIC kinetis_middleware_usb
+        PRIVATE kinetis_sdk
 )

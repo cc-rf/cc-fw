@@ -1,13 +1,22 @@
-if(CONFIG_KINETIS_MIDDLEWARE_USB)
+set(NAME kinetis_middleware_usb)
 
-    target_include_directories(
-        ${TARGET}
-        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include"
-    )
+add_library(
+        ${NAME} INTERFACE
+)
 
-    add_subdirectory(device)
-    add_subdirectory(host)
-    add_subdirectory(osa)
-    add_subdirectory(phy)
+target_include_directories(
+        ${NAME}
+        INTERFACE include
+)
 
-endif()
+target_link_libraries(
+        ${NAME}
+        INTERFACE kinetis_middleware_usb_osa
+        INTERFACE kinetis_sdk_driver
+        INTERFACE kinetis_middleware_usb_config
+)
+
+add_subdirectory(device)
+add_subdirectory(host)
+add_subdirectory(osa)
+add_subdirectory(phy)

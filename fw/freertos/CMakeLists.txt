@@ -1,24 +1,36 @@
-if(CONFIG_FREERTOS)
+set(NAME kinetis_freertos)
 
-    target_sources(
-            ${TARGET} PRIVATE
-            # ${CMAKE_CURRENT_LIST_DIR}/croutine.c
-            # ${CMAKE_CURRENT_LIST_DIR}/event_groups.c
-            ${CMAKE_CURRENT_LIST_DIR}/list.c
-            ${CMAKE_CURRENT_LIST_DIR}/queue.c
-            ${CMAKE_CURRENT_LIST_DIR}/tasks.c
-            ${CMAKE_CURRENT_LIST_DIR}/timers.c
-            # ${CMAKE_CURRENT_LIST_DIR}/stream_buffer.c
-            ${CMAKE_CURRENT_LIST_DIR}/portable/GCC/ARM_CM4F/fsl_tickless_systick.c
-            ${CMAKE_CURRENT_LIST_DIR}/portable/GCC/ARM_CM4F/port.c
-            ${CMAKE_CURRENT_LIST_DIR}/portable/MemMang/heap_4.c
-    )
+add_library(
+        ${NAME} STATIC EXCLUDE_FROM_ALL
+        # croutine.c
+        # event_groups.c
+        list.c
+        queue.c
+        tasks.c
+        timers.c
+        # stream_buffer.c
+        portable/GCC/ARM_CM4F/fsl_tickless_systick.c
+        portable/GCC/ARM_CM4F/port.c
+        portable/MemMang/heap_4.c
+)
 
-    target_include_directories(
-            ${TARGET}
-            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
-            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/driver/include
-            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/portable/GCC/ARM_CM4F/include
-    )
+target_include_directories(
+        ${NAME}
+        PUBLIC include
+        PUBLIC portable/GCC/ARM_CM4F/include
+        PUBLIC driver/include
+)
 
-endif()
+target_link_libraries(
+        ${NAME}
+        PUBLIC usr
+        PUBLIC kinetis_sdk_driver
+        PUBLIC kinetis_freertos_config
+)
+
+target_compile_definitions(
+        ${NAME}
+        PUBLIC FREERTOS
+)
+
+add_library(freertos ALIAS kinetis_freertos)
