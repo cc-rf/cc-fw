@@ -82,23 +82,48 @@ add_custom_target(
         fw_hex
         COMMAND ${CMAKE_OBJCOPY} -O ihex -S "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.hex"
         COMMAND size -A -d "${PROJECT_NAME}.hex"
+        DEPENDS ${TARGET}
         BYPRODUCTS "${PROJECT_NAME}.hex"
+        DEPENDS ${TARGET}
         WORKING_DIRECTORY "${BUILD_ROOT}"
 )
 
 add_custom_target(
         fw_bin
-        COMMAND ${CMAKE_OBJCOPY} -O binary -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.bin"
-        COMMAND size -A -d "${PROJECT_NAME}.bin"
-        BYPRODUCTS "${PROJECT_NAME}.bin"
+        COMMAND ${CMAKE_OBJCOPY} -O binary -j .interrupts -j .flash_config -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.bin.header"
+        COMMAND ${CMAKE_OBJCOPY} -O binary -j .user_rom -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.bin.user"
+        COMMAND ${CMAKE_OBJCOPY} -O binary -j .fast_code -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.bin.code"
+        COMMAND ${CMAKE_OBJCOPY} -O binary -j .text -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.bin.text"
+        COMMAND ${CMAKE_OBJCOPY} -O binary -j .data -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.bin.data"
+        BYPRODUCTS "${PROJECT_NAME}.header.bin" "${PROJECT_NAME}.bin.user" "${PROJECT_NAME}.bin.code" "${PROJECT_NAME}.bin.text" "${PROJECT_NAME}.bin.data"
+        DEPENDS ${TARGET}
         WORKING_DIRECTORY "${BUILD_ROOT}"
 )
+
+set(GZ "gzip")
+
+add_custom_target(
+        fw_pkg
+        #COMMAND ${GZ} "${PROJECT_NAME}.bin.header"
+        #COMMAND ${GZ} "${PROJECT_NAME}.bin.user"
+        #COMMAND ${GZ} "${PROJECT_NAME}.bin.code"
+        #COMMAND ${GZ} "${PROJECT_NAME}.bin.text"
+        #COMMAND ${GZ} "${PROJECT_NAME}.bin.data"
+        #COMMAND cat "${PROJECT_NAME}.bin.header.gz" "${PROJECT_NAME}.bin.user.gz" "${PROJECT_NAME}.bin.code.gz" "${PROJECT_NAME}.bin.text.gz" "${PROJECT_NAME}.bin.data.gz" > "${PROJECT_NAME}.bin"
+        
+        COMMAND cat "${PROJECT_NAME}.bin.header" "${PROJECT_NAME}.bin.user" "${PROJECT_NAME}.bin.code" "${PROJECT_NAME}.bin.text" "${PROJECT_NAME}.bin.data" > "${PROJECT_NAME}.bin"
+        
+        DEPENDS fw_bin
+        WORKING_DIRECTORY "${BUILD_ROOT}"
+)
+
 
 add_custom_target(
         fw_srec
         COMMAND ${CMAKE_OBJCOPY} -O srec -S  "$<TARGET_FILE:${TARGET}>" "${PROJECT_NAME}.srec"
         COMMAND size -A -d "${PROJECT_NAME}.srec"
         BYPRODUCTS "${PROJECT_NAME}.srec"
+        DEPENDS ${TARGET}
         WORKING_DIRECTORY "${BUILD_ROOT}"
 )
 
@@ -107,9 +132,9 @@ add_custom_target(
 # bss  + data = ram
 add_custom_target(
         fw_siz
-        COMMAND ${CMAKE_OBJSIZE} --format=berkeley --totals "$<TARGET_FILE:${TARGET}>"
-        COMMAND size -A -d "$<TARGET_FILE:${TARGET}>"
+        COMMAND size -A -d "$<TARGET_FILE:${TARGET}>" | tee fw.siz
+        DEPENDS ${TARGET}
         WORKING_DIRECTORY "${BUILD_ROOT}"
 )
 
-# add_dependencies(fw_hex ${TARGET})
+add_dependencies(fw_bin fw_siz)

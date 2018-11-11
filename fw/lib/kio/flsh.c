@@ -20,15 +20,6 @@ static_assert(FSL_FEATURE_SIM_FCFG_HAS_PFLSH_SWAP, "FSL_FEATURE_SIM_FCFG_HAS_PFL
 static_assert(BLOCK_SIZE >= USER_FLASH_SIZE, "user flash must fit in one block");
 
 
-typedef struct {
-    u32 sanity;
-    u32 version;
-
-    u8 data[];
-
-} user_flash_t;
-
-
 extern u32 __user_flash_init_base[];
 extern u32 __user_flash_init_end[];
 extern u32 __user_flash_base[];

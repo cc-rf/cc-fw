@@ -145,7 +145,7 @@ void cloudchaser_main(void)
     const u32 serial_lo = (u32)status.serial;
 
     printf(
-            "\r\nCloud Chaser %08lX%08lX@%02X.%04X\r\n\r\n",
+            "\r\nCloud Chaser %08lX%08lX@%02X:%04X\r\n\r\n",
             serial_hi, serial_lo, net_config.phy.cell, status.macid
     );
 
