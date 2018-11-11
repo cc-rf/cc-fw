@@ -332,8 +332,36 @@ void usb_recv(u8 port, size_t size, u8 *data)
             break;
 
         case SERF_USB_PORT: {
-            size_t frame_size = serf_decode(read->data, &read->used, (serf_t *) read->data);
-            if (frame_size) ccio_recv(port, (serf_t *) read->data, frame_size);
+            serf_t *const frame = (serf_t *) read->data;
+            size_t frame_size;
+            size_t read_used = read->used;
+
+            while (read->used && (frame_size = serf_decode(read->data, &read->used, frame))) {
+
+                if (frame->code == 0xFF && frame_size == sizeof(u32) + 1) {
+
+                    u32 newsize = *(u32 *)frame->data;
+
+                    board_trace_f("usb: resizing buffer to %u", newsize);
+
+                    if (newsize > read->size) {
+                        read->size = newsize;
+                        u8 *new = pvPortMalloc(read->size);
+                        if (read->used) memcpy(new, read->data, read->used);
+                        if (read->data) vPortFree(read->data);
+                        read->data = new;
+                    }
+
+                } else {
+                    ccio_recv(port, frame, frame_size);
+                }
+
+                if (read->used) {
+                    read_used = read->used;
+                    memcpy(read->data, &read->data[read_used - read->used], read->used);
+                }
+            }
+
             break;
         }
 

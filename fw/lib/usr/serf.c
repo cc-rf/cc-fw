@@ -56,7 +56,7 @@ size_t serf_decode(u8 *data, size_t *size, serf_t *frame)
     size_t decoded_size = cobs_decode(frame_size, data, (u8 *) frame);
     ((u8 *)frame)[decoded_size] = 0;
 
-    if ((*size -= frame_size + 1))
+    if ((*size -= frame_size + 1) && (void *)frame != (void *)data)
         memcpy(data, &data[frame_size + 1], *size);
 
     return decoded_size;

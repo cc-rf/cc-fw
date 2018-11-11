@@ -22,7 +22,7 @@ static void handle_code_rainbow(size_t size, u8 *data);
 static void handle_code_led(size_t size, u8 *data);
 #endif
 
-static void write_code(u8 port, u8 code, size_t size, void *data) __nonnull_all;
+static void write_code_usb(u8 port, u8 code, size_t size, void *data) __nonnull_all;
 static void write_code_config_rsp(u8 port, code_config_rsp_t *config_rsp) __nonnull_all;
 
 
@@ -392,7 +392,7 @@ static void handle_code_led(size_t size, u8 *data)
 #endif
 
 
-static void write_code(u8 port, u8 code, size_t size, void *data)
+static void write_code_usb(u8 port, u8 code, size_t size, void *data)
 {
     if (usb_attached(port)) {
         u8 *frame;
@@ -404,13 +404,13 @@ static void write_code(u8 port, u8 code, size_t size, void *data)
 
 void write_code_status(u8 port, code_status_t *code_status)
 {
-    return write_code(port, CODE_ID_STATUS, sizeof(code_status_t), code_status);
+    return write_code_usb(port, CODE_ID_STATUS, sizeof(code_status_t), code_status);
 }
 
 
 static void write_code_config_rsp(u8 port, code_config_rsp_t *config_rsp)
 {
-    return write_code(port, CODE_ID_CONFIG_RSP, sizeof(code_config_rsp_t), config_rsp);
+    return write_code_usb(port, CODE_ID_CONFIG_RSP, sizeof(code_config_rsp_t), config_rsp);
 }
 
 
@@ -429,7 +429,7 @@ void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], p
 
         size += sizeof(code_mac_recv_t);
 
-        write_code(SERF_USB_PORT, CODE_ID_MAC_RECV, size, code_recv);
+        write_code_usb(SERF_USB_PORT, CODE_ID_MAC_RECV, size, code_recv);
 
         vPortFree(code_recv);
     }
@@ -450,7 +450,7 @@ void write_code_recv(net_path_t path, net_addr_t dest, size_t size, u8 data[])
 
         size += sizeof(code_recv_t);
 
-        write_code(SERF_USB_PORT, CODE_ID_RECV, size, code_recv);
+        write_code_usb(SERF_USB_PORT, CODE_ID_RECV, size, code_recv);
 
         vPortFree(code_recv);
     }
@@ -459,37 +459,37 @@ void write_code_recv(net_path_t path, net_addr_t dest, size_t size, u8 data[])
 
 void write_code_evnt(net_size_t size, u8 data[])
 {
-    return write_code(SERF_USB_PORT, CODE_ID_EVNT, size, data);
+    return write_code_usb(SERF_USB_PORT, CODE_ID_EVNT, size, data);
 }
 
 
 void write_code_peer(u8 port, size_t size, code_peer_t *code_peer)
 {
-    return write_code(port, CODE_ID_PEER, size + sizeof(code_peer_t), code_peer);
+    return write_code_usb(port, CODE_ID_PEER, size + sizeof(code_peer_t), code_peer);
 }
 
 
 void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat)
 {
-    return write_code(port, CODE_ID_MAC_SEND, sizeof(code_mac_send_stat_t), code_send_stat);
+    return write_code_usb(port, CODE_ID_MAC_SEND, sizeof(code_mac_send_stat_t), code_send_stat);
 }
 
 
 void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat)
 {
-    return write_code(port, CODE_ID_TRXN, size + sizeof(code_trxn_stat_t), code_trxn_stat);
+    return write_code_usb(port, CODE_ID_TRXN, size + sizeof(code_trxn_stat_t), code_trxn_stat);
 }
 
 
 void write_code_send_done(u8 port, net_size_t size)
 {
-    return write_code(port, CODE_ID_SEND_DONE, sizeof(net_size_t), &size);
+    return write_code_usb(port, CODE_ID_SEND_DONE, sizeof(net_size_t), &size);
 }
 
 
 void write_code_uart(size_t size, u8 *data)
 {
-    write_code(SERF_USB_PORT, CODE_ID_UART, size, data);
+    write_code_usb(SERF_USB_PORT, CODE_ID_UART, size, data);
 
     if (usb_attached(UART_USB_PORT))
         usb_write_raw(UART_USB_PORT, data, size);
