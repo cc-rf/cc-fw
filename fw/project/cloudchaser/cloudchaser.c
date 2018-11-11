@@ -1,5 +1,6 @@
 #include "cloudchaser.h"
 #include <board/led.h>
+#include <board/trace.h>
 #include "console.h"
 #include "rf_uart.h"
 #include "ccio.h"
@@ -313,7 +314,7 @@ void usb_recv(u8 port, size_t size, u8 *data)
     usb_read_t *read = &usb_read[port];
 
     if ((read->used + size) > read->size) {
-        read->size = (read->used + size) * 3 / 2;
+        read->size = (read->used + size) * 2;
         u8 *new = pvPortMalloc(read->size);
         if (read->used) memcpy(new, read->data, read->used);
         memcpy(&new[read->used], data, size);
@@ -328,14 +329,11 @@ void usb_recv(u8 port, size_t size, u8 *data)
     switch (port) {
         default:
             read->used = 0;
+            break;
 
         case SERF_USB_PORT: {
-            serf_t *frame = pvPortMalloc(sizeof(serf_t) + read->used + 1);
-            size_t frame_size = serf_decode(read->data, &read->used, frame);
-
-            if (frame_size) ccio_recv(port, frame, frame_size);
-
-            vPortFree(frame);
+            size_t frame_size = serf_decode(read->data, &read->used, (serf_t *) read->data);
+            if (frame_size) ccio_recv(port, (serf_t *) read->data, frame_size);
             break;
         }
 
