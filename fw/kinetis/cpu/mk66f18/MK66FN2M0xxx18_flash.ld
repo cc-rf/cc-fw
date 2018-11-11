@@ -81,6 +81,7 @@ SECTIONS
     . = ALIGN(4);
   } > m_interrupts
 
+
   .flash_config :
   {
     . = ALIGN(4);
@@ -88,11 +89,14 @@ SECTIONS
     . = ALIGN(4);
   } > m_flash_config
 
-  __flash_header_begin = ORIGIN(m_interrupts);
-  __flash_header_end = __flash_header_begin + LENGTH(m_interrupts) + LENGTH(m_flash_config);
+    __flash_header_begin = ORIGIN(m_interrupts);
+    __flash_header_end = __flash_header_begin + LENGTH(m_interrupts) + LENGTH(m_flash_config);
+
+  __user_flash_base = ORIGIN(m_user);
 
   __user_flash_init_base = ORIGIN(m_user_init);
-  __user_flash_base = ORIGIN(m_user);
+  __all_rom_begin = __user_flash_init_base;
+  __all_rom_end = ORIGIN(m_text) + LENGTH(m_text);
 
   .user_rom : AT(__user_flash_init_base)
   {
