@@ -14,7 +14,6 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
-#include <assert.h>
 
 
 #define phy_trace_info      ccrf_trace_info
@@ -22,6 +21,7 @@
 #define phy_trace_error     ccrf_trace_error
 #define phy_trace_debug     ccrf_trace_debug
 #define phy_trace_verbose   ccrf_trace_verbose
+#define phy_assert          ccrf_assert
 
 #if PHY_CHAN_COUNT == 25
     #define FREQ_BASE       902000000u
@@ -395,7 +395,7 @@ bool phy_diag_cw(phy_t phy, bool cw)
 
 bool phy_diag_pwr(phy_t phy, u8 pwr)
 {
-    assert(pwr <= PHY_PWR_MAX);
+    phy_assert(pwr <= PHY_PWR_MAX, "pwr too high");
     // This works directly when SPI is polling or locking
     pwr += 3;
     u8 prev = pwr;
@@ -694,7 +694,7 @@ static void phy_task(phy_t phy)
                 if (phy->stay && !phy->boss) {
                     if ((ts - phy->sync_time) >= PHY_SYNC_DROP_TIME)
                         if (!--phy->cycle) {
-                            phy_trace_verbose("sync loss: lead c=%u", phy_chan(phy));
+                            phy_trace_info("sync loss: lead c=%u", phy_chan(phy));
 
                             phy->boss = true;
                             phy->stay = PHY_CHAN_COUNT; // TODO: Line up by staying only remaining channels. Need to add this to the sync packet.
@@ -707,43 +707,43 @@ static void phy_task(phy_t phy)
                 }
 
                 if (!phy->stay) {
+                    rssi_needed = true;
 
                     if (!phy->boss && !phy->chan.cur) {
 
                         if ((ts - phy->sync_time) >= PHY_SYNC_DROP_TIME) {
                             phy->stay = PHY_CHAN_COUNT;
                             phy->cycle = (u8) (1 + RNGA_ReadEntropy(RNG) % (PHY_CHAN_COUNT - 1));
-                            phy_trace_verbose("sync loss: stay to %u", phy->cycle);
+                            phy_trace_info("sync loss: stay to %u", phy->cycle);
 
                         } else if ((ts - phy->sync_time) >= PHY_SYNC_CYCLE_TIME) {
-                            phy_trace_verbose("sync: miss last=%lu", CCRF_CLOCK_MSEC(ts) - CCRF_CLOCK_MSEC(phy->sync_time));
+                            phy_trace_info("sync: miss last=%lu", CCRF_CLOCK_MSEC(ts) - CCRF_CLOCK_MSEC(phy->sync_time));
                         }
                     }
+                }
 
-                    rssi_needed = !phy->stay;
+                if ((!phy->stay || sync_needed) && pkt) {
+                    rdio_strobe_txfl(phy->rdio);
 
-                    if (pkt) {
-                        rdio_strobe_txfl(phy->rdio);
-
-                        if (pkt == (rf_pkt_t *) &sq.pkt && sq.task) {
-                            xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);
-                        } else {
-                            // Packet disappears (pkt_ack or pkt_sync).
-                        }
-
-                        // TODO: Need common post-tx handler
-
-                        if ((void *) pkt == &phy->pkt_ack) {
-                            phy->pkt_ack.hdr.flag = 0;
-                            phy->pkt_ack.hdr.size = 0;
-                        }
-
-                        ++phy->stat.tx.errors;
-
-                        if (phy->diag.cw) rdio_cw_set(phy->rdio, false);
-
-                        pkt = NULL;
+                    if (pkt == (rf_pkt_t *) &sq.pkt && sq.task) {
+                        xTaskNotify(sq.task, CALLER_NOTIFY_TX_FAIL, eSetBits);
+                    } else {
+                        phy_trace_warn("tx fail on pkt_ack, pkt_sync, or non-waited pkt");
+                        // Packet disappears (pkt_ack or pkt_sync).
                     }
+
+                    // TODO: Need common post-tx handler
+
+                    if ((void *) pkt == &phy->pkt_ack) {
+                        phy->pkt_ack.hdr.flag = 0;
+                        phy->pkt_ack.hdr.size = 0;
+                    }
+
+                    ++phy->stat.tx.errors;
+
+                    if (phy->diag.cw) rdio_cw_set(phy->rdio, false);
+
+                    pkt = NULL;
                 }
             }
 
@@ -759,7 +759,7 @@ static void phy_task(phy_t phy)
         if (sync_needed) {
             sync_needed = false;
 
-            assert(!pkt);
+            phy_assert(!pkt, "sync with pending pkt");
             pkt = (rf_pkt_t *) &pkt_sync;
 
             pkt_sync.hdr.cell = phy->cell;
@@ -793,7 +793,7 @@ static void phy_task(phy_t phy)
 
                 u32 lead_time = (phy->stay ? 0 : 200) + (
                         (!phy->boss && !phy->chan.cur && !phy->stay)
-                        ? 500 + phy->tx_times[pkt_sync.hdr.size] : 0
+                        ? 200 + phy->tx_times[pkt_sync.hdr.size] : 0
                 );
 
                 if (chan_elapsed < lead_time) {
@@ -802,7 +802,7 @@ static void phy_task(phy_t phy)
                     goto _restart_rx;
                 }
 
-                if (remaining < (750 + phy->tx_times[pkt->size])) {
+                if (remaining < (600 + phy->tx_times[pkt->size])) {
                     tx_next = 0;
                     pkt = NULL;
                     goto _restart_rx;
