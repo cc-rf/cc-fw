@@ -11,8 +11,8 @@
 
 //#define CC_SPI_DMA
 //#define CC_SPI_LOCK
-//#define CC_SPI_NOTIFY   (1u<<29)
-#define CC_SPI_POLL
+#define CC_SPI_NOTIFY   (1u<<29)
+//#define CC_SPI_POLL
 
 // TODO: see if CC1200 will accept 8-bit addresses with leading zeroes in upper 8 bits
 
@@ -128,7 +128,7 @@ ccrf_spi_t ccrf_spi_init(u8 rdio_id)
 
         #ifdef CC_SPI_NOTIFY
             DSPI_MasterTransferCreateHandleEDMA(
-                    cfg->spi, &spi->edma_handle, spi_dma_callback, (void *) NULL,
+                    cfg->spi, &spi->edma_handle, spi_dma_callback, NULL,
                     &spi->rx_handle, &spi->im_handle, &spi->tx_handle
             );
         #else
@@ -277,7 +277,7 @@ u8 ccrf_spi_io(ccrf_spi_t spi, u8 flag, u16 addr, u8 *tx, u8 *rx, size_t size)
                 if (!xTaskNotifyWait(CC_SPI_NOTIFY, CC_SPI_NOTIFY, &notify, pdMS_TO_TICKS(100)))
                     notify = 0;
 
-            } while (!(notify & CC_SPI_NOTIFY));
+            } while ((notify & CC_SPI_NOTIFY) != CC_SPI_NOTIFY);
 
         #elif !defined(CC_SPI_POLL)
             xSemaphoreTake(spi->sem, portMAX_DELAY);
@@ -320,7 +320,7 @@ static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, statu
     #ifndef CC_SPI_NOTIFY
         xSemaphoreGiveFromISR((xSemaphoreHandle)userData, &xHigherPriorityTaskWoken);
     #else
-        xTaskNotifyFromISR((xTaskHandle)userData, CC_SPI_NOTIFY, eSetBits, &xHigherPriorityTaskWoken);
+        xTaskNotifyFromISR((TaskHandle_t)userData, CC_SPI_NOTIFY, eSetBits, &xHigherPriorityTaskWoken);
     #endif
 
     portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
