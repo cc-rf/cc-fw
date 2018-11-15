@@ -264,6 +264,8 @@ void net_sync(net_t net)
 
 net_size_t net_send(net_t net, net_path_t path, mbuf_t *mbuf)
 {
+    path.info.mode = 0;
+
     return net_send_base(net, true, path, mbuf);
 }
 
@@ -273,6 +275,8 @@ net_size_t net_mesg(net_t net, net_path_t path, mbuf_t *mbuf)
     if (!path.addr) {
         return net_send(net, path, mbuf);
     }
+
+    path.info.mode = 0;
 
     return net_send_base(net, false, path, mbuf);
 }
@@ -302,8 +306,6 @@ net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, mbuf_t *mbuf)
         net_trace_warn("send size too big: %u > %u", (*mbuf)->used, NET_SEND_MAX);
         return 0;
     }
-
-    path.info.mode = 0;
 
     net_mesg_init(path, mbuf);
 
