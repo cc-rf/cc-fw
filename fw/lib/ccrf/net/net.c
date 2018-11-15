@@ -86,7 +86,7 @@ static void net_send_base_dgrm(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_
 static inline void net_send_base_bcst(net_t net, net_info_t info, mbuf_t *mbuf);
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
 static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta) __ccrf_code;
-static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *mbuf) __ccrf_code;
+static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *mbuf, pkt_meta_t meta) __ccrf_code;
 static void net_peer_bcast(net_t net);
 static void net_peer_bcast_leave(net_t net, net_addr_t addr);
 static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add) __ccrf_code;
@@ -302,12 +302,17 @@ static void stat_tx_add(net_t net, net_size_t size, mac_size_t rslt)
 
 net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, mbuf_t *mbuf)
 {
-    if ((*mbuf)->used > NET_SEND_MAX) {
+    if (*mbuf && (*mbuf)->used > NET_SEND_MAX) {
         net_trace_warn("send size too big: %u > %u", (*mbuf)->used, NET_SEND_MAX);
         return 0;
     }
 
     net_mesg_init(path, mbuf);
+
+    if (((*mbuf)->used - sizeof(net_mesg_t)) > NET_SEND_MAX) {
+        net_trace_warn("send size too big: %u > %u", (*mbuf)->used, NET_SEND_MAX);
+        return 0;
+    }
 
     if (path.addr == MAC_ADDR_BCST)
         dgrm = true;
@@ -467,10 +472,10 @@ static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t
         );
     }
 
-    net_peer_update(net, peer, meta);
-
     if (mesg.info.mode & NET_MODE_FLAG_CORE)
-        return net_core_recv(net, peer, &mesg, mbuf);
+        return net_core_recv(net, peer, &mesg, mbuf, meta);
+
+    net_peer_update(net, peer, meta);
 
     net->stat.rx.count++;
     net->stat.rx.bytes += (*mbuf)->used;
@@ -494,7 +499,7 @@ static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t
 }
 
 
-static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *mbuf)
+static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *mbuf, pkt_meta_t meta)
 {
     switch (mesg->info.port) {
 
@@ -505,9 +510,8 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
                 case NET_CORE_PEER_TYPE: {
 
                     net_size_t count = (net_size_t) (*mbuf)->used / sizeof(net_peer_info_t);
-                    if (count) net_peer_update_list(net, addr,  count, (net_peer_info_t *) (*mbuf)->data);
-
-                    //net_peer_bcast(net);
+                    net_peer_update_list(net, addr,  count, (net_peer_info_t *) (*mbuf)->data);
+                    net_peer_update(net, addr, meta);
                 }
 
                 break;
@@ -554,8 +558,10 @@ static void net_peer_bcast(net_t net)
 
     if (count) {
         mbuf = mbuf_wrap(count * sizeof(net_peer_info_t), (u8 **) &peers);
-        net_send_base_bcst(net, bcst_info, &mbuf);
     }
+
+    net_send_base_bcst(net, bcst_info, &mbuf);
+
 
     mbuf_free(&mbuf);
 }
@@ -622,7 +628,11 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
     net_peer_t *peeri;
     bool found;
 
-    peer->info.last = now = net_time();
+    now = net_time();
+
+    bool new = (now - peer->info.last) < (NET_TIMER_INTERVAL / 2);
+
+    peer->info.last = now;
 
     for (net_size_t pi = 0; pi < count; ++pi) {
         found = false;
@@ -648,7 +658,7 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
         peeri->info.meta = peers[pi].meta;
     }
 
-    net_evnt_peer(net, peer->info.peer, NET_EVENT_PEER_UPD);
+    if (!new) net_evnt_peer(net, peer->info.peer, NET_EVENT_PEER_UPD);
 }
 
 
