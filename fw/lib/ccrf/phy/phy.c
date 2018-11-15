@@ -781,7 +781,7 @@ static void phy_task(phy_t phy)
             if (!imm && tx_next) {
                 ts = xTaskGetTickCount();
 
-                if (tx_next > (ts + pdUS_TO_TICKS(100))) {
+                if (tx_next > (ts + pdUS_TO_TICKS(10))) {
                     pkt = NULL;
                     goto _restart_rx;
                 }
@@ -791,9 +791,9 @@ static void phy_task(phy_t phy)
                 remaining = ccrf_timer_remaining(phy->hop_timer);
                 chan_elapsed = CHAN_TIME - remaining;
 
-                u32 lead_time = (phy->stay ? 0 : 200) + (
+                u32 lead_time = (phy->stay ? 0 : 100) + (
                         (!phy->boss && !phy->chan.cur && !phy->stay)
-                        ? 200 + phy->tx_times[pkt_sync.hdr.size] : 0
+                        ? 400 + phy->tx_times[pkt_sync.hdr.size] : 0
                 );
 
                 if (chan_elapsed < lead_time) {
@@ -802,10 +802,10 @@ static void phy_task(phy_t phy)
                     goto _restart_rx;
                 }
 
-                if (remaining < (750 + phy->tx_times[pkt->size])) {
+                if (remaining < (800 + phy->tx_times[pkt->size])) {
                     tx_next = 0;
                     pkt = NULL;
-                    goto _restart_rx;
+                    goto _loop_end;
                 }
             }
 
