@@ -802,7 +802,7 @@ static void phy_task(phy_t phy)
                     goto _restart_rx;
                 }
 
-                if (remaining < (600 + phy->tx_times[pkt->size])) {
+                if (remaining < (750 + phy->tx_times[pkt->size])) {
                     tx_next = 0;
                     pkt = NULL;
                     goto _restart_rx;
