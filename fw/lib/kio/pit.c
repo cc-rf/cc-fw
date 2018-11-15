@@ -16,14 +16,6 @@
 
 // TODO: Check out xTimer FreeRTOS port stuff for reference
 
-typedef struct pit {
-    pit_chnl_t chnl;
-    pit_handler_t handler;
-    void *param;
-    bool used;
-
-} *pit_t;
-
 static inline void pit_setup(pit_t pit, const pit_cfg_t *cfg, bool chain);
 static inline void pit_clear(pit_t pit);
 
@@ -177,20 +169,6 @@ void pit_set_period(pit_t pit, pit_tick_t period)
 pit_tick_t pit_get_period(pit_t pit)
 {
     return PIT->CHANNEL[pit->chnl].LDVAL;
-}
-
-
-pit_tick_t pit_get_current(pit_t pit)
-{
-    // NOTE: Documentation says not to read this value if the timer is disabled
-    return PIT_GetCurrentTimerCount(PIT, pit->chnl);
-}
-
-
-pit_tick_t pit_get_elapsed(pit_t pit)
-{
-    // NOTE: This may be inaccurate if a new period is set during operation?
-    return pit_get_period(pit) - pit_get_current(pit);
 }
 
 
