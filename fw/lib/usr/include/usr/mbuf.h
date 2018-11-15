@@ -4,9 +4,7 @@
 #include <board/trace.h>
 
 
-#define MBUF_TRACE 0
-
-#if MBUF_TRACE
+#if CONFIG_MBUF_TRACE == 1
     #define mbuf_trace board_trace_f
 #else
     #define mbuf_trace(...)
@@ -18,9 +16,17 @@
 
 #define mbuf_assert(cond, ...)     if (!(cond)) { board_trace_f( "<mbuf fail '" #cond "'> " # __VA_ARGS__ ); mbuf_die(NULL); }
 
-#define mbuf_validate(mbuf, ...)    \
-            if (!(mbuf) || !mbuf_good(*(mbuf))) \
-                { mbuf_die(mbuf, "<mbuf bad> " # __VA_ARGS__ ); }
+#if CONFIG_MBUF_VALIDATE == 1
+
+    #define mbuf_validate(mbuf, ...) \
+        if (!(mbuf) || !mbuf_good(*(mbuf))) \
+            { mbuf_die(mbuf, "<mbuf bad> " # __VA_ARGS__ ); }
+
+#else
+
+    #define mbuf_validate(...)
+
+#endif
 
 #if DEBUG
 
