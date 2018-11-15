@@ -37,6 +37,14 @@ void board_boot(void)
     boot_pins_init();
 }
 
+
+void board_reboot(void)
+{
+    NVIC_SystemReset();
+    while (1) asm("");
+}
+
+
 void board_init(void)
 {
     boot_clock_run();
@@ -82,14 +90,14 @@ void board_rtos_init(void)
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, const char *pcTaskName)
 {
-    board_trace_f("stack overflow in task %p '%s'", xTask, pcTaskName);
-    while (1) asm("nop");
+    portDISABLE_INTERRUPTS();
+    board_die("stack overflow in task %p '%s'", xTask, pcTaskName);
 }
 
 void vApplicationMallocFailedHook(void)
 {
-    board_trace("malloc failed!");
-    while (1) asm("nop");
+    portDISABLE_INTERRUPTS();
+    board_die("malloc failed!");
 }
 
 StaticTask_t xIdleTaskTCB;

@@ -20,7 +20,7 @@ typedef struct {
 void pit_init(void);
 pit_t pit_alloc(const pit_cfg_t *cfg) __nonnull_all;
 pit_t pit_chain(pit_t pit, pit_cfg_t *cfg) __nonnull_all;
-void pit_free(pit_t pit) __nonnull_all;
+void pit_free(pit_t pit);
 
 pit_tick_t pit_nsec_tick(pit_nsec_t nsec) __fast_code;
 pit_nsec_t pit_tick_nsec(pit_tick_t tick) __fast_code;

@@ -24,5 +24,6 @@
 
 
 void board_boot(void);
+void board_reboot(void) __attribute__((noreturn));
 void board_init(void);
 void board_rtos_init(void);

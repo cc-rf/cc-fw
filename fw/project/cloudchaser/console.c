@@ -3,7 +3,6 @@
 #include <usr/type.h>
 #include <string.h>
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <ccrf/ccrf.h>
 #include <stdarg.h>
@@ -130,7 +129,7 @@ void console_printf(char *format, ...)
 
 void console_input(char *data)
 {
-    assert(data);
+    board_assert(data);
 
     char *cmd;
     char *saveptr;

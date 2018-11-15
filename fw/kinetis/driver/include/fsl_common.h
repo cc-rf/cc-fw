@@ -32,14 +32,15 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _FSL_COMMON_H_
-#define _FSL_COMMON_H_
+#pragma once
 
-#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+
+// phillip: replace assert()
+#include <board/trace.h>
 
 // phillip: for __fast_code/__fast_data
 #include <usr/type.h>
@@ -557,5 +558,3 @@ _Pragma("diag_suppress=Pm120")
 #endif
 
 /*! @} */
-
-#endif /* _FSL_COMMON_H_ */

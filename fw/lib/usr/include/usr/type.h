@@ -23,7 +23,7 @@ typedef int64_t     s64;
 typedef uint64_t    u64;
 
 
-static inline void wcpy(u32 *restrict src, u32 *restrict end, u32 *restrict dst)
+static inline void wcpy(volatile u32 *restrict src, volatile u32 *restrict end, volatile u32 *restrict dst)
 {
     while (src < end) {
         *dst++ = *src++;
@@ -31,7 +31,7 @@ static inline void wcpy(u32 *restrict src, u32 *restrict end, u32 *restrict dst)
 }
 
 
-static inline void wset(u32 val, u32 *restrict dst, u32 *restrict end)
+static inline void wset(u32 val, volatile u32 *restrict dst, volatile u32 *restrict end)
 {
     while (dst < end) {
         *dst++ = val;

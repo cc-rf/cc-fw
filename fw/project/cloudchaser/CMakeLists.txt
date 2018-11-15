@@ -3,7 +3,7 @@ set(NAME fw_project_cloudchaser)
 add_library(
         ${NAME} STATIC EXCLUDE_FROM_ALL
         cloudchaser.c
-        console.c
+        # console.c
         rf_uart.c
         ccio.c
 )

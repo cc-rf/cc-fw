@@ -14,4 +14,4 @@ typedef enum __packed {
 
 
 iic_t iic_init(u8 bus, u32 baud);
-status_t iic_io(iic_t iic, iic_rw_t rw, u8 addr, u8 cmd, void *data, size_t size);
+status_t iic_io(iic_t iic, iic_rw_t rw, u8 addr, u8 cmd, void *data, size_t size) __nonnull((1));

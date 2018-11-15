@@ -30,6 +30,9 @@
 #ifndef _USB_CDC_VCOM_H_
 #define _USB_CDC_VCOM_H_ 1
 
+#include <usr/type.h>
+#include <usr/mbuf.h>
+
 #include "usb_device_config.h"
 #include "usb.h"
 #include "usb_device.h"
@@ -41,15 +44,14 @@
 #include "semphr.h"
 #include "event_groups.h"
 
-#include <usr/type.h>
 
-typedef void (* vcom_rx_t)(u8 port, size_t size, u8 *data);
+typedef void (* vcom_rx_t)(u8 port, mbuf_t *mbuf);
 
 bool vcom_init(vcom_rx_t rx_cb);
 
 void usb_write(u8 port, u8 *buf, size_t len) __fast_code;
 void usb_write_raw(u8 port, u8 *buf, size_t len) __fast_code;
-void usb_write_direct(u8 port, u8 *buf, size_t len) __fast_code;
+void usb_write_direct(u8 port, mbuf_t *mbuf) __nonnull_all __fast_code;
 bool usb_attached(u8 port) __fast_code;
 
 /*******************************************************************************

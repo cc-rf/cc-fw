@@ -8,6 +8,7 @@ add_library(
         ${NAME} STATIC EXCLUDE_FROM_ALL
         flsh.c
         iic.c
+        itm.c
         pit.c
         sclk.c
         uart.c

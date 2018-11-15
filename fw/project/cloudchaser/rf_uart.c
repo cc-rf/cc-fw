@@ -19,8 +19,6 @@ struct rf_uart {
     TaskHandle_t task;
     StaticTask_t task_static;
     StackType_t task_stack[RF_UART_TASK_STACK_SIZE];
-
-    u8 buf[RF_UART_BUF_SIZE];
 };
 
 
@@ -45,30 +43,35 @@ void rf_uart_init(rf_uart_config_t *config)
 }
 
 
-void rf_uart_write(size_t size, u8 *data)
+void rf_uart_write(mbuf_t mbuf)
 {
-    return uart_write(rf_uart.uart, size, data);
+    uart_write(rf_uart.uart, mbuf->used, mbuf->data);
 }
 
 
-void rf_uart_send(net_size_t size, u8 *data)
+size_t rf_uart_send(mbuf_t *mbuf)
 {
-    net_send(rf_uart.net, rf_uart.path, size, data);
+    return net_send(rf_uart.net, rf_uart.path, mbuf);
 }
 
 
 static void rf_uart_task(void *p __unused)
 {
-    net_size_t size;
+    mbuf_t mbuf = NULL;
 
     while (1) {
-        size = (net_size_t) uart_read(rf_uart.uart, RF_UART_BUF_SIZE, rf_uart.buf);
-        //rf_uart.buf[size] = 0;
-        //board_trace_f("uart-recv %lu [%s]\n", size, rf_uart.buf);
+        if (!mbuf) mbuf = mbuf_alloc(RF_UART_BUF_SIZE, NULL);
+        else if (!mbuf_good(mbuf)) {
+            mbuf_free(&mbuf);
+            continue;
+        }
 
-        if (size) {
-            rf_uart_send(size, rf_uart.buf);
-            if (rf_uart.recv) rf_uart.recv(size, rf_uart.buf);
+        mbuf_used(&mbuf, uart_read(rf_uart.uart, RF_UART_BUF_SIZE, mbuf->data));
+
+        if (mbuf->used) {
+            rf_uart_send(&mbuf);
+            if (rf_uart.recv) rf_uart.recv(&mbuf);
+            mbuf_done(&mbuf);
         }
     }
 }

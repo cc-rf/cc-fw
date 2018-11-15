@@ -2,17 +2,20 @@
 
 #include <ccrf/ccrf.h>
 #include <ccrf/phy.h>
+#include <usr/mbuf.h>
+
 
 #define MAC_PKT_OVERHEAD    8
 #define MAC_PKT_SIZE_MAX    ((mac_size_t)(PHY_FRAME_SIZE_MAX - MAC_PKT_OVERHEAD))
 
-#define MAC_ADDR_BCST       ((mac_addr_t) 0u)
+#define MAC_ADDR_BCST       ((mac_addr_t) 0x00)
 
-#define MAC_FLAG_0          ((mac_flag_t) 0x20u)
-#define MAC_FLAG_1          ((mac_flag_t) 0x40u)
-#define MAC_FLAG_2          ((mac_flag_t) 0x80u)
+#define MAC_FLAG_0          ((mac_flag_t) 0x20)
+#define MAC_FLAG_1          ((mac_flag_t) 0x40)
+#define MAC_FLAG_2          ((mac_flag_t) 0x80)
 #define MAC_FLAG_MASK       ((mac_flag_t) (MAC_FLAG_0 | MAC_FLAG_1 | MAC_FLAG_2))
 
+#define MAC_SEND_MAX        ((mac_size_t) 0xFFFA)
 
 typedef struct mac *mac_t;
 
@@ -20,7 +23,7 @@ typedef u16 mac_addr_t;
 typedef u16 mac_size_t;
 typedef u8 mac_flag_t;
 
-typedef void (* mac_recv_t)(void *param, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta);
+typedef void (* mac_recv_t)(void *param, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta);
 
 typedef enum __packed {
     MAC_SEND_DGRM,
@@ -61,4 +64,4 @@ void mac_stat(mac_t mac, mac_stat_t *stat) __nonnull_all;
 u32 mac_task_rx_stack_usage(mac_t mac) __nonnull_all;
 pkt_meta_t mac_meta(mac_t mac) __ccrf_code __nonnull_all;
 
-mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mac_size_t size, u8 data[], bool wait) __ccrf_code __nonnull((1));
+mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mbuf_t mbuf, bool wait) __ccrf_code __nonnull((1));

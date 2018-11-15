@@ -1,4 +1,5 @@
 #include <kio/pit.h>
+#include <board/trace.h>
 #include <fsl_pit.h>
 #include <FreeRTOSConfig.h>
 
@@ -33,6 +34,7 @@ static bool pit_initialized = false;
 
 static struct pit pits[PIT_COUNT] __fast_data;
 
+
 void pit_init(void)
 {
     if (!pit_initialized) {
@@ -48,16 +50,19 @@ void pit_init(void)
     }
 }
 
+
 static inline void pit_auto_init(void)
 {
     const pit_config_t pit_config = { false };
     PIT_Init(PIT, &pit_config);
 }
 
+
 static inline void pit_deinit(void)
 {
     PIT_Deinit(PIT);
 }
+
 
 pit_t pit_alloc(const pit_cfg_t *cfg)
 {
@@ -76,9 +81,10 @@ pit_t pit_alloc(const pit_cfg_t *cfg)
     return pit;
 }
 
+
 pit_t pit_chain(pit_t pit, pit_cfg_t *cfg)
 {
-    assert(pit); assert(pit->used);
+    board_assert(pit->used);
 
     if (PIT_CHNL_IDX(pit->chnl) >= (PIT_COUNT-1)) return NULL;
 
@@ -91,12 +97,15 @@ pit_t pit_chain(pit_t pit, pit_cfg_t *cfg)
     return cpit;
 }
 
+
 void pit_free(pit_t pit)
 {
-    assert(pit); assert(pit->used);
+    board_assert(pit); board_assert(pit->used);
+    __BKPT();
     pit_stop(pit);
     pit_clear(pit);
 }
+
 
 static inline void pit_setup(pit_t pit, const pit_cfg_t *cfg, bool chain)
 {
@@ -119,6 +128,7 @@ static inline void pit_setup(pit_t pit, const pit_cfg_t *cfg, bool chain)
     PIT_ClearStatusFlags(PIT, pit->chnl, kPIT_TimerFlag);
 }
 
+
 static inline void pit_clear(pit_t pit)
 {
     DisableIRQ(PIT_CHNL_IRQN(pit->chnl));
@@ -131,6 +141,7 @@ static inline void pit_clear(pit_t pit)
     pit->used = false;
 }
 
+
 pit_tick_t pit_nsec_tick(pit_nsec_t nsec)
 {
     nsec = (nsec * bus_freq) / NSEC_SEC;
@@ -138,30 +149,36 @@ pit_tick_t pit_nsec_tick(pit_nsec_t nsec)
     return (pit_tick_t)nsec;
 }
 
+
 pit_nsec_t pit_tick_nsec(pit_tick_t tick)
 {
     return (NSEC_SEC * tick) / bus_freq;
 }
+
 
 pit_prio_t pit_get_prio(pit_t pit)
 {
     return (pit_prio_t)NVIC_GetPriority(PIT_CHNL_IRQN(pit->chnl));
 }
 
+
 void pit_set_prio(pit_t pit, pit_prio_t prio)
 {
     NVIC_SetPriority(PIT_CHNL_IRQN(pit->chnl), (u32)prio);
 }
+
 
 void pit_set_period(pit_t pit, pit_tick_t period)
 {
     PIT_SetTimerPeriod(PIT, pit->chnl, period);
 }
 
+
 pit_tick_t pit_get_period(pit_t pit)
 {
     return PIT->CHANNEL[pit->chnl].LDVAL;
 }
+
 
 pit_tick_t pit_get_current(pit_t pit)
 {
@@ -169,26 +186,31 @@ pit_tick_t pit_get_current(pit_t pit)
     return PIT_GetCurrentTimerCount(PIT, pit->chnl);
 }
 
+
 pit_tick_t pit_get_elapsed(pit_t pit)
 {
     // NOTE: This may be inaccurate if a new period is set during operation?
     return pit_get_period(pit) - pit_get_current(pit);
 }
 
+
 bool pit_started(pit_t pit)
 {
     return (PIT->CHANNEL[pit->chnl].TCTRL & PIT_TCTRL_TEN_MASK) != 0;
 }
+
 
 void pit_start(pit_t pit)
 {
     PIT_StartTimer(PIT, pit->chnl);
 }
 
+
 void pit_stop(pit_t pit)
 {
     PIT_StopTimer(PIT, pit->chnl);
 }
+
 
 void pit_restart(pit_t pit)
 {
@@ -196,11 +218,12 @@ void pit_restart(pit_t pit)
     pit_start(pit);
 }
 
+
 static u32 pit_ltt_nsec_div = 1;
 
 void pit_ltt_init(void)
 {
-    assert(!pits[0].used && !pits[1].used);
+    board_assert(!pits[0].used && !pits[1].used);
     pit_ltt_nsec_div = bus_freq;
 
     pit_t pit_0 = pit_alloc(&(pit_cfg_t){
@@ -214,6 +237,7 @@ void pit_ltt_init(void)
     pit_start(pit_1);
     pit_start(pit_0);
 }
+
 
 static u64 ltt_prev = UINT64_MAX;
 
@@ -238,7 +262,7 @@ pit_nsec_t pit_ltt_current(void)
     __used __fast_isr void PIT##N##_IRQHandler(void) \
     { \
         PIT_ClearStatusFlags(PIT, (pit_chnl_t)N, kPIT_TimerFlag); \
-        const static pit_t const pit = &pits[PIT_CHNL_IDX(N)]; \
+        static const pit_t const pit = &pits[PIT_CHNL_IDX(N)]; \
         if (pit->handler) (pit->handler)(pit, pit->param); \
     }
 

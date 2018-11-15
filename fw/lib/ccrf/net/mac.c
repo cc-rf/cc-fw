@@ -5,7 +5,6 @@
 #include <fsl_rnga.h>
 
 #include <FreeRTOS.h>
-#include <assert.h>
 #include <task.h>
 #include <queue.h>
 
@@ -68,14 +67,14 @@ typedef struct __packed {
     mac_addr_t dest;
     mac_size_t size;
     mac_seq_t seq;
-    u8 data[];
 
 } mac_part_t;
 
 typedef struct __packed {
     mac_addr_t addr;
     mac_seq_t seq;
-    mac_part_t *part;
+    mac_part_t part;
+    mbuf_t mbuf;
 
 } mac_peer_t;
 
@@ -233,7 +232,7 @@ static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr)
     if (pp) {
         pp->addr = addr;
         pp->seq = MAC_SEQ_INIT;
-        pp->part = NULL;
+        pp->mbuf = NULL;
         return pp;
     }
 
@@ -241,24 +240,27 @@ static mac_peer_t *mac_peer_get(mac_t mac, mac_addr_t addr)
 }
 
 
-mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mac_size_t size, u8 data[], bool wait)
+mac_size_t mac_send(mac_t mac, mac_send_t type, mac_flag_t flags, mac_addr_t dest, mbuf_t mbuf, bool wait)
 {
     const u8 flag = (flags & MAC_FLAG_MASK) | (wait ? MAC_FLAG_PKT_BLK : (u8) 0);
 
+    if (mbuf->used >= MAC_SEND_MAX)
+        return 0;
+
     switch (type) {
         case MAC_SEND_DGRM:
-            return mac_send_base(mac, dest, flag, size, data);
+            return mac_send_base(mac, dest, flag, (mac_size_t) mbuf->used, mbuf->data);
 
         case MAC_SEND_MESG:
             if (!dest) return false;
-            return mac_send_base(mac, dest, flag | MAC_FLAG_ACK_REQ, size, data);
+            return mac_send_base(mac, dest, flag | MAC_FLAG_ACK_REQ, (mac_size_t) mbuf->used, mbuf->data);
 
         case MAC_SEND_TRXN:
             if (!dest) return false;
-            return mac_send_base(mac, dest, flag | MAC_FLAG_ACK_REQ, size, data);
+            return mac_send_base(mac, dest, flag | MAC_FLAG_ACK_REQ, (mac_size_t) mbuf->used, mbuf->data);
 
         case MAC_SEND_STRM:
-            return mac_send_base(mac, dest, flag | MAC_FLAG_PKT_IMM, size, data);
+            return mac_send_base(mac, dest, flag | MAC_FLAG_PKT_IMM, (mac_size_t) mbuf->used, mbuf->data);
 
         default:
             return false;
@@ -327,7 +329,7 @@ static mac_size_t mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t 
 
 static bool mac_send_packet(mac_t mac, u8 flag, mac_static_pkt_t *pkt)
 {
-    assert((!pkt->seq.msg && pkt->size <= MAC_PKT_SIZE_MAX) || pkt->seq.msg);
+    ccrf_assert((!pkt->seq.msg && pkt->size <= MAC_PKT_SIZE_MAX) || pkt->seq.msg);
 
     const u8 pkt_len = sizeof(mac_pkt_t) + MIN(pkt->size, MAC_PKT_SIZE_MAX);
     const bool imm = flag & (u8)MAC_FLAG_PKT_IMM;
@@ -427,56 +429,82 @@ static void mac_task_recv(mac_t mac)
 
         if (recv.seq.msg) {
 
-            if (!recv.peer->part) {
+            if (!recv.peer->mbuf || !recv.peer->mbuf->used) {
                 if (recv.seq.idx != 0) {
                     mac_trace_warn("(rx) multi-packet stream sync error");
                     // Do not add to error count because this happens on every chunk.
                     continue;
                 }
 
-                recv.peer->part = pvPortMalloc(sizeof(mac_part_t) + recv.size); assert(recv.peer->part);
-                recv.peer->part->dest = recv.dest;
-                recv.peer->part->size = recv.size;
-                recv.peer->part->seq = recv.seq;
-                memcpy(recv.peer->part->data, recv.data, MIN(recv.size, MAC_PKT_SIZE_MAX));
-            } else if (recv.size >= recv.peer->part->size || recv.seq.msg != recv.peer->part->seq.msg || recv.dest != recv.peer->part->dest) {
-                mac_trace_warn("(rx) multi-packet stream error");
-                vPortFree(recv.peer->part);
-                recv.peer->part = NULL;
-                ++mac->stat.rx.errors;
-                continue;
-            } else {
-                if (!++recv.peer->part->seq.idx) recv.peer->part->seq.idx = 1;
+                mac_size_t pkt_size = MIN(recv.size, MAC_PKT_SIZE_MAX);
 
-                if (recv.seq.idx != recv.peer->part->seq.idx) {
+                if (recv.peer->mbuf) {
+
+                    mbuf_fits(&recv.peer->mbuf, recv.size);
+                    recv.peer->mbuf->used = pkt_size;
+                    memcpy(recv.peer->mbuf->data, recv.data, pkt_size);
+
+                } else {
+
+                    recv.peer->mbuf = mbuf_make(recv.size, pkt_size, recv.data);
+
+                }
+
+                recv.peer->part.dest = recv.dest;
+                recv.peer->part.size = recv.size;
+                recv.peer->part.seq = recv.seq;
+
+            } else if (recv.size >= recv.peer->part.size || recv.seq.msg != recv.peer->part.seq.msg || recv.dest != recv.peer->part.dest) {
+
+                mac_trace_warn("(rx) multi-packet stream error");
+
+                mbuf_free(&recv.peer->mbuf);
+
+                ++mac->stat.rx.errors;
+
+                continue;
+
+            } else {
+
+                if (!++recv.peer->part.seq.idx) recv.peer->part.seq.idx = 1;
+
+                if (recv.seq.idx != recv.peer->part.seq.idx) {
+
                     mac_trace_warn("(rx) multi-packet stream lost");
-                    vPortFree(recv.peer->part);
-                    recv.peer->part = NULL;
+
+                    mbuf_free(&recv.peer->mbuf);
+
                     ++mac->stat.rx.errors;
+
                     continue;
                 }
 
                 // TODO: Save running total received bytes so far, compare against total size
                 //   and remaining as indicated by this packet.
 
-                memcpy(&recv.peer->part->data[recv.peer->part->size - recv.size], recv.data, MIN(recv.size, MAC_PKT_SIZE_MAX));
+                mbuf_grow(&recv.peer->mbuf, MIN(recv.size, MAC_PKT_SIZE_MAX), recv.data);
             }
 
             if (recv.seq.end) {
                 ++mac->stat.rx.count;
-                mac->stat.rx.bytes += recv.peer->part->size;
-                mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.peer->part->dest, recv.peer->part->size, recv.peer->part->data, recv.meta);
-                vPortFree(recv.peer->part);
-                recv.peer->part = NULL;
+                mac->stat.rx.bytes += recv.peer->mbuf->used;
+
+                mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.peer->part.dest, &recv.peer->mbuf, recv.meta);
+
+                mbuf_done(&recv.peer->mbuf);
             }
 
             continue;
         }
 
+        mbuf_t mbuf = mbuf_alloc(recv.size, recv.data);
+
         ++mac->stat.rx.count;
         mac->stat.rx.bytes += recv.size;
 
-        mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.dest, recv.size, recv.data, recv.meta);
+        mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.dest, &mbuf, recv.meta);
+
+        mbuf_free(&mbuf);
     }
 }
 

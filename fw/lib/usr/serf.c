@@ -1,63 +1,66 @@
 #include <usr/serf.h>
-
 #include <usr/cobs.h>
+#include <board/trace.h>
 
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
 #include <FreeRTOS.h>
 
 
-size_t serf_encode(u8 code, u8 data[], size_t size, u8 **frame)
+mbuf_t serf_encode(u8 code, mbuf_t *mbuf)
 {
     code = (u8)(SERF_CODE_PROTO_VAL | (code & SERF_CODE_M));
-    *frame = NULL;
 
-    size_t frame_size = sizeof(serf_t) + size;
+    serf_t serf = { .code = code };
 
-    serf_t *raw_frame = pvPortMalloc(frame_size); assert(raw_frame);
-    *frame = pvPortMalloc(sizeof(serf_t) + cobs_encode_size_max(frame_size) + 1); assert(*frame);
+    u8 *data;
+    size_t size;
 
-    raw_frame->code = code;
-    memcpy(raw_frame->data, data, size);
+    if (!mbuf || !*mbuf) {
 
-    frame_size = cobs_encode(frame_size, (u8 *)raw_frame, *frame);
-    vPortFree(raw_frame);
+        data = (u8 *) &serf;
+        size = sizeof(serf_t);
 
-    if (!frame_size) {
-        vPortFree(*frame);
-        return 0;
+    } else {
+        mbuf_push(mbuf, sizeof(serf_t), (u8 *) &serf);
+
+        data = (*mbuf)->data;
+        size = (*mbuf)->used;
     }
 
-    (*frame)[frame_size] = 0;
+    mbuf_t frame = mbuf_new(cobs_encode_size_max(size) + 1);
 
-    return frame_size + 1;
+    frame->used = cobs_encode(size, data, frame->data);
+    frame->data[frame->used++] = 0;
+
+    if (mbuf && *mbuf) {
+        mbuf_popf(mbuf, sizeof(serf_t), NULL);
+    }
+
+    return frame;
 }
 
 
-size_t serf_decode(u8 *data, size_t *size, serf_t *frame)
+size_t serf_decode(mbuf_t mbuf, size_t *size)
 {
-    assert(size);
-    assert(data);
-    assert(frame);
-
     size_t frame_size;
 
+    *size = mbuf->used;
+
     for (frame_size = 0; frame_size < *size; ++frame_size) {
-        if (!data[frame_size]) break;
+        if (!mbuf->data[frame_size])
+            break;
     }
 
-    if (frame_size == *size)
+    if (frame_size == *size) {
         return 0;
+    }
+    
+    size_t decoded_size = cobs_decode(frame_size, mbuf->data, mbuf->data);
 
-    // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
-    // max decode length: size
+    mbuf->data[decoded_size] = 0;
 
-    size_t decoded_size = cobs_decode(frame_size, data, (u8 *) frame);
-    ((u8 *)frame)[decoded_size] = 0;
-
-    if ((*size -= frame_size + 1) && (void *)frame != (void *)data)
-        memcpy(data, &data[frame_size + 1], *size);
+    *size -= frame_size + 1;
 
     return decoded_size;
 }

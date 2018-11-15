@@ -47,7 +47,7 @@
 /* Entry Point */
 ENTRY(Reset_Handler)
 
-HEAP_SIZE  = 0x00001000; /* 4KB   */
+HEAP_SIZE  = 0x00001000; /* 0x0002AC00 - 171kB - when using malloc() else 0x1000 (4kB)  */
 STACK_SIZE = 0x00000500; /* 1280B */
 
 M_VECTOR_RAM_SIZE = 0x0400;
@@ -59,11 +59,11 @@ MEMORY
   m_flash_config        (RX)  : ORIGIN = 0x00000400, LENGTH = 0x00000010
   m_user                (RW)  : ORIGIN = 0x0001F000, LENGTH = 0x00001000
   m_user_init           (RW)  : ORIGIN = 0x00020000, LENGTH = 0x00001000
-  m_fast_text           (RX)  : ORIGIN = 0x00021000, LENGTH = 0x0000BC00
-  m_text                (RX)  : ORIGIN = 0x0002CC00, LENGTH = 0x00040000
+  m_fast_text           (RX)  : ORIGIN = 0x00021000, LENGTH = 0x0000AC00
+  m_text                (RX)  : ORIGIN = 0x0002BC00, LENGTH = 0x00040000
   m_interrupts_ram      (RW)  : ORIGIN = 0x1FFF0000, LENGTH = 0x00000400
-  m_fast_data           (RW)  : ORIGIN = 0x1FFF0400, LENGTH = 0x00006000
-  m_fast_code           (RX)  : ORIGIN = 0x1FFF6400, LENGTH = 0x00009C00
+  m_fast_data           (RW)  : ORIGIN = 0x1FFF0400, LENGTH = 0x00005000
+  m_fast_code           (RX)  : ORIGIN = 0x1FFF5400, LENGTH = 0x0000AC00
   m_user_ram            (RW)  : ORIGIN = 0x20000000, LENGTH = 0x00001000
   m_data                (RW)  : ORIGIN = 0x20001000, LENGTH = 0x0002F000
 }
@@ -123,6 +123,9 @@ SECTIONS
     *freertos.a:*(.text.*)
     *gcc.a:*(.text)
     *gcc.a:*(.text.*)
+
+    *nano.a:*mem*(.text)
+
     . = ALIGN(16);
     __fast_code_end = .;
   } > m_fast_code

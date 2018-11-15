@@ -8,7 +8,6 @@
 #include "sys/clock.h"
 
 #include <FreeRTOS.h>
-#include <assert.h>
 #include <task.h>
 #include <queue.h>
 #include <timers.h>
@@ -36,7 +35,6 @@
 
 typedef struct __packed {
     net_info_t info;
-    u8 data[];
 
 } net_mesg_t;
 
@@ -80,16 +78,15 @@ struct net {
 };
 
 
-static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, void *data) __ccrf_code;
-static void net_mesg_free(net_mesg_t **mesg) __ccrf_code;
-static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, void *data) __ccrf_code;
-static net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, void *data) __ccrf_code;
-static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg) __ccrf_code;
-static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg) __ccrf_code;
-static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg) __ccrf_code;
+static void net_mesg_init(net_path_t path, mbuf_t *mbuf) __ccrf_code __nonnull_all;
+static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, mbuf_t *mbuf) __ccrf_code;
+static net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, mbuf_t *mbuf) __ccrf_code;
+static net_size_t net_send_base_mesg(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code;
+static void net_send_base_dgrm(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code;
+static inline void net_send_base_bcst(net_t net, net_info_t info, mbuf_t *mbuf);
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
-static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta) __ccrf_code;
-static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg) __ccrf_code;
+static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta) __ccrf_code;
+static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *mbuf) __ccrf_code;
 static void net_peer_bcast(net_t net);
 static void net_peer_bcast_leave(net_t net, net_addr_t addr);
 static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add) __ccrf_code;
@@ -209,7 +206,7 @@ void net_peers_wipe(net_t net)
 
 net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list)
 {
-    net_size_t count = 0, next = 0;
+    net_size_t count = 0, next = 0, size_peers;
     net_peer_info_t *peers;
     net_peer_t *peer, *peeri;
 
@@ -223,7 +220,10 @@ net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t
                 count++;
     }
 
-    *list = peers = pvPortMalloc(extra + count * sizeof(net_peer_info_t));
+    if (!(size_peers = extra + count * sizeof(net_peer_info_t)))
+        return count;
+
+    *list = peers = pvPortMalloc(size_peers);
 
     if (extra) peers = (net_peer_info_t *) &((u8 *)peers)[extra];
 
@@ -244,22 +244,14 @@ net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t
 }
 
 
-static net_mesg_t *net_mesg_init(net_t net, net_path_t path, net_size_t size, void *data)
+static void net_mesg_init(net_path_t path, mbuf_t *mbuf)
 {
-    net_mesg_t *mesg = pvPortMalloc(sizeof(*mesg) + size);
+    net_mesg_t mesg = { .info = path.info };
 
-    mesg->info = path.info;
-    if (size) memcpy(mesg->data, data, size);
-
-    return mesg;
-}
-
-
-static void net_mesg_free(net_mesg_t **mesg)
-{
-    if (*mesg) {
-        vPortFree(*mesg);
-        *mesg = NULL;
+    if (!*mbuf)
+        *mbuf = mbuf_alloc(sizeof(net_mesg_t), (u8 *) &mesg);
+    else {
+        mbuf_push(mbuf, sizeof(net_mesg_t), (u8 *) &mesg);
     }
 }
 
@@ -270,56 +262,97 @@ void net_sync(net_t net)
 }
 
 
-net_size_t net_send(net_t net, net_path_t path, net_size_t size, void *data)
+net_size_t net_send(net_t net, net_path_t path, mbuf_t *mbuf)
 {
-    return net_send_base(net, true, path, size, data);
+    return net_send_base(net, true, path, mbuf);
 }
 
 
-net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, void *data)
+net_size_t net_mesg(net_t net, net_path_t path, mbuf_t *mbuf)
 {
     if (!path.addr) {
-        return net_send(net, path, size, data);
+        return net_send(net, path, mbuf);
     }
 
-    return net_send_base(net, false, path, size, data);
+    return net_send_base(net, false, path, mbuf);
 }
 
 
-net_size_t net_resp(net_t net, net_path_t path, net_size_t size, void *data)
+net_size_t net_resp(net_t net, net_path_t path, mbuf_t *mbuf)
 {
-    return net_mesg(net, path, size, data);
+    return net_mesg(net, path, mbuf);
 }
 
 
-net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, net_size_t size, void *data)
+static void stat_tx_add(net_t net, net_size_t size, mac_size_t rslt)
 {
+    if (rslt) {
+        net->stat.tx.count++;
+        net->stat.tx.bytes += size;
+        net->last.send = net_time();
+    } else {
+        net->stat.tx.errors++;
+    }
+}
+
+
+net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, mbuf_t *mbuf)
+{
+    if ((*mbuf)->used > NET_SEND_MAX) {
+        net_trace_warn("send size too big: %u > %u", (*mbuf)->used, NET_SEND_MAX);
+        return 0;
+    }
+
     path.info.mode = 0;
 
-    net_mesg_t *mesg = net_mesg_init(net, path, size, data);
+    net_mesg_init(path, mbuf);
 
-    if (dgrm)
-        size = net_send_base_dgrm(net, path.addr, size, mesg);
-    else
-        size = net_send_base_mesg(net, path.addr, size, mesg);
+    if (path.addr == MAC_ADDR_BCST)
+        dgrm = true;
 
-    net_mesg_free(&mesg);
+    mac_size_t sent = mac_send(net->mac.mac, !dgrm ? MAC_SEND_MESG : MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, path.addr, *mbuf, true);
 
-    return size;
+    if (!(((net_mesg_t *) (*mbuf)->data)->info.mode & NET_MODE_FLAG_CORE))
+        stat_tx_add(net, (net_size_t) (*mbuf)->used - sizeof(net_mesg_t), sent);
+
+    if (!dgrm && sent) {
+        // was acked, add to table
+        net_peer_update(net, path.addr, mac_meta(net->mac.mac));
+    }
+
+    mbuf_popf(mbuf, sizeof(net_mesg_t), NULL);
+
+    return sent;
 }
 
 
-void net_trxn(net_t net, net_path_t path, net_size_t size, void *data, net_time_t expiry, net_trxn_rslt_t *rslt)
+static net_size_t net_send_base_mesg(net_t net, net_path_t path, mbuf_t *mbuf)
 {
-    if (!expiry || expiry >= portMAX_DELAY) return;
+    return net_send_base(net, false, path, mbuf);
+}
+
+static void net_send_base_dgrm(net_t net, net_path_t path, mbuf_t *mbuf)
+{
+    net_send_base(net, true, path, mbuf);
+}
+
+static void net_send_base_bcst(net_t net, net_info_t info, mbuf_t *mbuf)
+{
+   net_path_t path = { .addr = MAC_ADDR_BCST, .info = info };
+
+   net_send_base_dgrm(net, path, mbuf);
+}
+
+
+size_t net_trxn(net_t net, net_path_t path, mbuf_t *mbuf, net_time_t expiry, net_trxn_rslt_t *rslt)
+{
+    if (!expiry || expiry >= portMAX_DELAY) return 0;
 
     INIT_LIST_HEAD(rslt);
 
     // TODO: Check that this is not the RX task. Will deadlock!
 
     path.info.mode = 0;
-
-    net_mesg_t *mesg = net_mesg_init(net, path, size, data);
 
     net_txni_t txni = {
             .path = path,
@@ -330,7 +363,7 @@ void net_trxn(net_t net, net_path_t path, net_size_t size, void *data, net_time_
 
     list_add_tail(&txni.list, &net->txni);
 
-    if (!net_send_base_mesg(net, path.addr, size, mesg)) {
+    if (!net_send_base_mesg(net, path, mbuf)) {
         net_trace_warn("trxn send fail");
         goto _fail;
     }
@@ -356,7 +389,7 @@ void net_trxn(net_t net, net_path_t path, net_size_t size, void *data, net_time_
 
     list_del(&txni.list);
 
-    net_mesg_free(&mesg);
+    return 1;
 }
 
 
@@ -367,94 +400,28 @@ void net_trxn_rslt_free(net_trxn_rslt_t *rslt)
 
         list_for_each_entry_safe(trxn, trxn_t, rslt, __list) {
             list_del(&trxn->__list);
+            mbuf_free(&trxn->mbuf);
             vPortFree(trxn);
         }
     }
 }
 
 
-static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, net_size_t size, void *data)
+static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, mbuf_t *mbuf)
 {
     // TODO: Is a race condition possible here?
 
-    net_trxn_t *trxn = pvPortMalloc(sizeof(*trxn) + size);
-    trxn->addr = addr;
-    trxn->size = size;
+    net_trxn_t *trxn = pvPortMalloc(sizeof(net_trxn_t));
 
-    if (size) {
-        memcpy(trxn->data, data, size);
-    }
+    trxn->addr = addr;
+    trxn->mbuf = *mbuf;
+    *mbuf = NULL;
 
     list_add_tail(&trxn->__list, txni->trxn);
 
     if (txni->path.addr) {
         xTaskNotify(txni->task, NET_NOTIFY_TRXN_DONE, eSetBits);
     }
-}
-
-
-static void stat_tx_add(net_t net, net_size_t size, mac_size_t rslt)
-{
-    if (rslt) {
-        net->stat.tx.count++;
-        net->stat.tx.bytes += size;
-        net->last.send = net_time();
-    } else {
-        net->stat.tx.errors++;
-    }
-}
-
-
-static net_size_t net_send_base_mesg(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg)
-{
-    if (dest == MAC_ADDR_BCST)
-        return net_send_base_bcst(net, size, mesg);
-
-    size += sizeof(net_mesg_t);
-    mesg->info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
-
-    mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_MESG, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, true);
-
-    if (!(mesg->info.mode & NET_MODE_FLAG_CORE))
-        stat_tx_add(net, size - sizeof(net_mesg_t), sent);
-
-    if (sent) {
-        // was acked, add to table
-        net_peer_update(net, dest, mac_meta(net->mac.mac));
-    }
-
-    return sent;
-}
-
-
-static net_size_t net_send_base_dgrm(net_t net, mac_addr_t dest, net_size_t size, net_mesg_t *mesg)
-{
-    if (dest == MAC_ADDR_BCST)
-        return net_send_base_bcst(net, size, mesg);
-
-    size += sizeof(net_mesg_t);
-    mesg->info.mode &= (net_mode_t)~NET_MODE_FLAG_BCST;
-
-    mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, dest, size, (u8 *) mesg, false);
-
-    if (!(mesg->info.mode & NET_MODE_FLAG_CORE))
-        stat_tx_add(net, size - sizeof(net_mesg_t), sent);
-
-    return sent;
-}
-
-
-static net_size_t net_send_base_bcst(net_t net, net_size_t size, net_mesg_t *mesg)
-{
-    size += sizeof(net_mesg_t);
-    mesg->info.mode |= NET_MODE_FLAG_BCST;
-
-    mac_size_t sent = mac_send(net->mac.mac, MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, MAC_ADDR_BCST, size, (u8 *) mesg, false);
-
-    if (!(mesg->info.mode & NET_MODE_FLAG_CORE))
-        stat_tx_add(net, size - sizeof(net_mesg_t), sent);
-
-    return sent;
 }
 
 
@@ -469,14 +436,16 @@ static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t ac
 }
 
 
-static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 data[], pkt_meta_t meta)
+static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta)
 {
     if (flag != NET_MAC_FLAG_NETLAYER) {
         // passthrough
-        return net->mac.recv(net->mac.mac, flag, peer, dest, size, data, meta);
+        return net->mac.recv(net->mac.mac, flag, peer, dest, mbuf, meta);
     }
 
-    net_mesg_t *mesg = (net_mesg_t *)data;
+    net_mesg_t mesg;
+
+    mbuf_popf(mbuf, sizeof(net_mesg_t), (u8 *) &mesg);
 
     if (!peer) {
         net_trace_warn("peer=0");
@@ -487,7 +456,7 @@ static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t
     if (dest && (dest != net->mac.addr))
         return;
 
-    if (!(mesg->info.mode & NET_MODE_FLAG_CORE)) {
+    if (!(mesg.info.mode & NET_MODE_FLAG_CORE)) {
         net_trace_verbose(
                 "net: %04X: %04X->%04X %u:%u:%u #%u",
                 net->mac.addr, peer, dest,
@@ -496,37 +465,34 @@ static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t
         );
     }
 
-    if (!dest)
-        mesg->info.mode |= NET_MODE_FLAG_BCST;
-
     net_peer_update(net, peer, meta);
 
-    if (mesg->info.mode & NET_MODE_FLAG_CORE)
-        return net_core_recv(net, peer, size - sizeof(net_mesg_t), mesg);
+    if (mesg.info.mode & NET_MODE_FLAG_CORE)
+        return net_core_recv(net, peer, &mesg, mbuf);
 
     net->stat.rx.count++;
-    net->stat.rx.bytes += size - sizeof(net_mesg_t);
+    net->stat.rx.bytes += (*mbuf)->used;
     net->last.recv = net_time();
 
     net_txni_t *txni;
 
     list_for_each_entry(txni, &net->txni, list) {
-        const bool match = net_path_info_match(&txni->path.info, &mesg->info);
+        const bool match = net_path_info_match(&txni->path.info, &mesg.info);
 
         if (match)
-            return net_trxn_resp(net, peer, txni, size - sizeof(net_mesg_t), mesg->data);
+            return net_trxn_resp(net, peer, txni, mbuf);
     }
 
     net_path_t path = {
             .addr = peer,
-            .info = mesg->info
+            .info = mesg.info
     };
 
-    return net->recv(net, path, dest, size - sizeof(net_mesg_t), mesg->data);
+    return net->recv(net, path, dest, mbuf);
 }
 
 
-static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_t *mesg)
+static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *mbuf)
 {
     switch (mesg->info.port) {
 
@@ -536,19 +502,18 @@ static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_
 
                 case NET_CORE_PEER_TYPE: {
 
-                    net_size_t count = size / sizeof(net_peer_info_t);
-                    if (count) net_peer_update_list(net, addr,  count, (net_peer_info_t *) mesg->data);
+                    net_size_t count = (net_size_t) (*mbuf)->used / sizeof(net_peer_info_t);
+                    if (count) net_peer_update_list(net, addr,  count, (net_peer_info_t *) (*mbuf)->data);
 
                     //net_peer_bcast(net);
                 }
 
                 break;
 
-
                 case NET_CORE_PEER_LEAVE_TYPE:
-                    if (size == sizeof(net_addr_t)) {
+                    if ((*mbuf)->used == sizeof(net_addr_t)) {
 
-                        net_addr_t left = *(net_addr_t *)mesg->data;
+                        net_addr_t left = *(net_addr_t *)(*mbuf)->data;
 
                         if (net_peer_delete(net, left)) {
                             net_evnt_peer(net, left, NET_EVENT_PEER_OUT);
@@ -559,11 +524,19 @@ static void net_core_recv(net_t net, net_addr_t addr, net_size_t size, net_mesg_
 
             }
     }
+
+    return;
 }
 
 
 static void net_peer_bcast(net_t net)
 {
+    const static net_info_t bcst_info = {
+            .mode = NET_MODE_FLAG_CORE,
+            .port = NET_CORE_PEER_PORT,
+            .type = NET_CORE_PEER_TYPE
+    };
+
     net_time_t now = net_time();
 
     if ((now - net->peer_bcast_last) <= 5) return;
@@ -572,36 +545,33 @@ static void net_peer_bcast(net_t net)
 
     net->peer_bcast_last = now;
 
-    net_mesg_t *send;
     net_peer_info_t *peers;
-    net_size_t count = net_peers_flat(net, sizeof(net_mesg_t), false, &peers);
+    net_size_t count = net_peers_flat(net, 0, false, &peers);
 
-    send = (net_mesg_t *) peers;
-    send->info.mode = NET_MODE_FLAG_CORE;
-    send->info.port = NET_CORE_PEER_PORT;
-    send->info.type = NET_CORE_PEER_TYPE;
-    net_send_base_bcst(net, sizeof(net_mesg_t) + count * sizeof(net_peer_info_t), send);
+    mbuf_t mbuf = NULL;
 
-    vPortFree(peers);
+    if (count) {
+        mbuf = mbuf_wrap(count * sizeof(net_peer_info_t), (u8 **) &peers);
+        net_send_base_bcst(net, bcst_info, &mbuf);
+    }
+
+    mbuf_free(&mbuf);
 }
 
 
 static void net_peer_bcast_leave(net_t net, net_addr_t addr)
 {
-    const static net_path_t path = {
-        .addr = NET_ADDR_BCST,
-        .info = {
-            .mode = NET_MODE_FLAG_CORE,
-            .port = NET_CORE_PEER_PORT,
-            .type = NET_CORE_PEER_LEAVE_TYPE
-        }
+    const static net_info_t info = {
+        .mode = NET_MODE_FLAG_CORE,
+        .port = NET_CORE_PEER_PORT,
+        .type = NET_CORE_PEER_LEAVE_TYPE
     };
 
-    net_mesg_t *mesg = net_mesg_init(net, path, sizeof(net_addr_t), &addr);
+    mbuf_t mbuf = mbuf_alloc(sizeof(net_addr_t), (u8 *) &addr);
 
-    net_send_base_bcst(net, sizeof(net_addr_t), mesg);
+    net_send_base_bcst(net, info, &mbuf);
 
-    net_mesg_free(&mesg);
+    mbuf_free(&mbuf);
 }
 
 
@@ -735,7 +705,7 @@ static void net_peer_remove(net_t net, net_peer_t *peer, net_event_peer_action_t
         peer->info.last = NET_ADDR_NONE;
 
         list_for_each_entry_safe(peeri, tempi, &peer->peer, item) {
-            assert(list_empty(&peeri->peer));
+            ccrf_assert(list_empty(&peeri->peer));
             list_del(&peeri->item);
             vPortFree(peeri);
         }

@@ -8,7 +8,7 @@
 
 /* Phillip: specific task stack sizes and priorities */
 
-#define configMINIMAL_STACK_SIZE    ((unsigned short) (512u >> 2u))
+#define configMINIMAL_STACK_SIZE    ((unsigned short) (768u >> 2u))
 #define TASK_STACK_SIZE_SMALL       configMINIMAL_STACK_SIZE
 #define TASK_STACK_SIZE_HUGE        (TASK_STACK_SIZE_SMALL * 3)
 #define TASK_STACK_SIZE_LARGE       (TASK_STACK_SIZE_SMALL * 2)

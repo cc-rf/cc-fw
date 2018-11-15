@@ -166,6 +166,18 @@ status_t flsh_init(void)
 }
 
 
+status_t flsh_updt_init(void)
+{
+    status_t status;
+
+    if ((status = flsh_erase(SWAP(__flash_header_begin), SWAP(__flash_header_end)))) return status;
+    if ((status = flsh_erase(SWAP(__user_flash_base),  SWAP(__user_flash_end)))) return status;
+    if ((status = flsh_erase(SWAP(__all_rom_begin),  SWAP(__all_rom_end)))) return status;
+
+    return status;
+}
+
+
 static status_t flsh_scpy(const char name[], u32 begin[], u32 end[])
 {
     board_trace_fr("copy %s %u ... ", name, (u32) end - (u32) begin);
@@ -233,19 +245,17 @@ status_t flsh_user_cmit(void)
 {
     status_t status;
 
-    taskENTER_CRITICAL();
-    //portDISABLE_INTERRUPTS();
+    vTaskSuspendAll();
+    {
+        boot_clock_run();
+        itm_init();
 
-    boot_clock_run();
-    itm_init();
+        status = flsh_ewrite(__user_ram_base, __user_ram_end, __user_flash_base);
 
-    status = flsh_ewrite(__user_ram_base, __user_ram_end, __user_flash_base);
-
-    boot_clock_run_hs_oc();
-    itm_init();
-
-    //portENABLE_INTERRUPTS();
-    taskEXIT_CRITICAL();
+        boot_clock_run_hs_oc();
+        itm_init();
+    }
+    (void) xTaskResumeAll();
 
     return status;
 }

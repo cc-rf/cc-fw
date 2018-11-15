@@ -38,6 +38,8 @@
 #define _FSL_FTFX_FEATURES_H_
 
 #if (defined(BL_TARGET_FLASH) || defined(BL_TARGET_ROM) || defined(BL_TARGET_RAM))
+// phillip: replace assert()
+//#include <board/trace.h>
 #include <assert.h>
 #include <string.h>
 #include "fsl_device_registers.h"

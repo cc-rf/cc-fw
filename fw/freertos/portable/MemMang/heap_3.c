@@ -53,45 +53,101 @@ task.h is included from an application file. */
 	#error This file must not be used if configSUPPORT_DYNAMIC_ALLOCATION is 0
 #endif
 
-/*-----------------------------------------------------------*/
+static size_t xFreeBytesRemaining = configTOTAL_HEAP_SIZE;
+static size_t xMinimumEverFreeBytesRemaining = configTOTAL_HEAP_SIZE;
+
+typedef struct {
+    u32 size;
+    u8 data[];
+
+} mbuf_t;
 
 void *pvPortMalloc( size_t xWantedSize )
 {
-void *pvReturn;
+    mbuf_t *mbuf = NULL;
 
 	vTaskSuspendAll();
 	{
-		pvReturn = malloc( xWantedSize );
-		traceMALLOC( pvReturn, xWantedSize );
+	    mbuf = malloc(xWantedSize + sizeof(mbuf_t));
+
+		if (mbuf) {
+
+            mbuf->size = xWantedSize /*+ sizeof(mbuf_t)*/;
+            xFreeBytesRemaining -= mbuf->size;
+		    xMinimumEverFreeBytesRemaining = xFreeBytesRemaining < xMinimumEverFreeBytesRemaining ? xFreeBytesRemaining : xMinimumEverFreeBytesRemaining;
+
+		}
+
+		traceMALLOC( mbuf, xWantedSize + sizeof(mbuf_t) );
 	}
 	( void ) xTaskResumeAll();
 
 	#if( configUSE_MALLOC_FAILED_HOOK == 1 )
 	{
-		if( pvReturn == NULL )
-		{
+		if (!mbuf) {
+
 			extern void vApplicationMallocFailedHook( void );
 			vApplicationMallocFailedHook();
 		}
 	}
 	#endif
 
-	return pvReturn;
+	return mbuf->data;
 }
-/*-----------------------------------------------------------*/
+
 
 void vPortFree( void *pv )
 {
 	if( pv )
 	{
+	    mbuf_t *mbuf = (mbuf_t *) ((u8 *)pv - sizeof(mbuf_t));
+	    xFreeBytesRemaining += mbuf->size;
+
 		vTaskSuspendAll();
 		{
-			free( pv );
-			traceFREE( pv, 0 );
+			free( mbuf );
+			traceFREE( mbuf, mbuf->size );
 		}
 		( void ) xTaskResumeAll();
 	}
 }
 
 
+void *pvPortRealloc( void *pv, size_t xCurrentSize, size_t xWantedSize )
+{
+    if( pv )
+    {
+        mbuf_t *mbuf = (mbuf_t *) ((u8 *)pv - sizeof(mbuf_t));
 
+        vTaskSuspendAll();
+        {
+            mbuf = realloc( mbuf, xWantedSize + sizeof(mbuf_t) );
+
+            if (mbuf) {
+                // TODO: Check xCurrentSize vs mbuf->size
+                pv = mbuf->data;
+                xFreeBytesRemaining += mbuf->size;
+                traceFREE( mbuf, mbuf->size );
+                mbuf->size = xWantedSize;
+                xFreeBytesRemaining -= mbuf->size;
+                traceMALLOC( mbuf, xWantedSize + sizeof(mbuf_t) );
+                xMinimumEverFreeBytesRemaining = xFreeBytesRemaining < xMinimumEverFreeBytesRemaining ? xFreeBytesRemaining : xMinimumEverFreeBytesRemaining;
+            }
+        }
+        ( void ) xTaskResumeAll();
+    }
+
+    return pv;
+}
+
+
+size_t xPortGetFreeHeapSize( void )
+{
+	return xFreeBytesRemaining;
+}
+
+
+size_t xPortGetMinimumEverFreeHeapSize( void )
+{
+	return xMinimumEverFreeBytesRemaining;
+}

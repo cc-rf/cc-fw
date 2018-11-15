@@ -9,6 +9,7 @@
 #include <virtual_com.h>
 
 #include <usr/serf.h>
+#include <usr/cobs.h>
 #include <kio/sclk.h>
 #include <kio/itm.h>
 #include <kio/uid.h>
@@ -21,22 +22,14 @@
 #endif
 
 
-typedef struct {
-    size_t used;
-    size_t size;
-    u8 *data;
-
-} usb_read_t;
-
-
 extern bool pflag_set(void);
 extern bool uflag1_set(void);
 extern bool uflag2_set(void);
 
-static void net_recv(net_t net, net_path_t path, net_addr_t dest, size_t size, u8 data[]);
+static void net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf);
 static void net_evnt(net_t net, net_event_t event, void *info);
 
-static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data, pkt_meta_t meta);
+static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta);
 static void sync_hook(chan_id_t chan) __fast_code;
 
 
@@ -48,7 +41,7 @@ code_status_t status;
 net_addr_t ccrf_addr_flsh __section(".user") = NET_ADDR_NONE;
 phy_cell_t ccrf_cell_flsh __section(".user") = 0xA1;
 
-static usb_read_t usb_read[USB_CDC_INSTANCE_COUNT] = {{0}};
+static mbuf_t usb_read[USB_CDC_INSTANCE_COUNT] = {NULL};
 
 static const net_path_t rf_uart_path = {
         .addr = NET_ADDR_BCST,
@@ -207,7 +200,7 @@ void cloudchaser_main(void)
 }
 
 
-static void net_recv(net_t net __unused, net_path_t path, net_addr_t dest, size_t size, u8 data[])
+static void net_recv(net_t net __unused, net_path_t path, net_addr_t dest, mbuf_t *mbuf)
 {
     switch (path.info.port) {
         case CCIO_PORT:
@@ -215,18 +208,19 @@ static void net_recv(net_t net __unused, net_path_t path, net_addr_t dest, size_
                 #if FABI
                 case CCIO_LED: {
                     fabi_msg_t *msg = (fabi_msg_t *)data;
-                    return fabi_write(msg->mask, (fabi_rgb_t *)msg->data, size - sizeof(msg->mask));
+                    fabi_write(msg->mask, (fabi_rgb_t *)msg->data, size - sizeof(msg->mask));
+                    return;
                 }
                 #endif
                 case CCIO_UART:
-                    rf_uart_write(size, data);
-                    write_code_uart(size, data);
-                    break;
+                    rf_uart_write(*mbuf);
+                    write_code_uart(mbuf);
+                    return;
             }
             break;
     }
 
-    return write_code_recv(path, dest, size, data);
+    write_code_recv(path, dest, mbuf);
 }
 
 
@@ -236,22 +230,26 @@ static void net_evnt(net_t net __unused, net_event_t event, void *info)
         case NET_EVENT_PEER: {
             net_event_peer_t *peer = info;
 
-            code_evnt_peer_t code_evnt_peer = {
-                    .event = event,
-                    .addr = peer->addr,
-                    .action = peer->action
-            };
+            mbuf_t mbuf = mbuf_new(sizeof(code_evnt_peer_t));
 
-            return write_code_evnt(sizeof(code_evnt_peer), (u8 *) &code_evnt_peer);
+            code_evnt_peer_t *code_evnt_peer = (code_evnt_peer_t *) mbuf->data;
+
+            code_evnt_peer->event = event;
+            code_evnt_peer->addr = peer->addr;
+            code_evnt_peer->action = peer->action;
+
+            write_code_evnt(&mbuf);
+
+            mbuf_free(&mbuf);
         }
     }
 }
 
 
-static void mac_recv(mac_t mac, mac_flag_t flag __unused, mac_addr_t peer, mac_addr_t dest, mac_size_t size, u8 *data,
-                     pkt_meta_t meta)
+static void mac_recv(mac_t mac, mac_flag_t flag __unused, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta)
 {
-    return write_code_mac_recv(mac_addr(mac), peer, dest, size, data, meta);
+    write_code_mac_recv(mac_addr(mac), peer, dest, mbuf, meta);
+    return;
 }
 
 
@@ -306,92 +304,120 @@ static void sync_hook(chan_id_t chan)
 }
 
 
-void usb_recv(u8 port, size_t size, u8 *data)
+void usb_recv(u8 port, mbuf_t *mbuf)
 {
+    if (!mbuf) {
+        board_trace("cc-usb: mbuf == NULL !!")
+        return;
+    }
+
     if (port >= USB_CDC_INSTANCE_COUNT)
         return;
 
-    usb_read_t *read = &usb_read[port];
+    mbuf_t *pmbuf = &usb_read[port];
 
-    if ((read->used + size) > read->size) {
-        read->size = (read->used + size) * 2;
-        u8 *new = pvPortMalloc(read->size);
-        if (read->used) memcpy(new, read->data, read->used);
-        memcpy(&new[read->used], data, size);
-        read->used += size;
-        if (read->data) vPortFree(read->data);
-        read->data = new;
-    } else {
-        memcpy(&read->data[read->used], data, size);
-        read->used += size;
-    }
+    if (*pmbuf)
+        mbuf_extd(pmbuf, mbuf);
+    else
+        *pmbuf = mbuf_copy(*mbuf);
 
     switch (port) {
         default:
-            read->used = 0;
+            mbuf_done(pmbuf);
+            mbuf_free(pmbuf);
             break;
 
         case SERF_USB_PORT: {
-            serf_t *const frame = (serf_t *) read->data;
-            size_t frame_size;
-            size_t read_used = read->used;
+            size_t decoded_size;
+            size_t rem_size;
 
-            while (read->used && (frame_size = serf_decode(read->data, &read->used, frame))) {
+            if ((*mbuf)->used == 2 && !(*mbuf)->data[0] && !(*mbuf)->data[1]) {
+                board_trace("serf-usb: flush");
 
-                if (frame->code == 0xFF && frame_size == sizeof(u32) + 1) {
+                if ((*pmbuf)->size > 0x200)
+                    mbuf_free(pmbuf);
+                else
+                    mbuf_done(pmbuf);
 
-                    u32 newsize = *(u32 *)frame->data;
+                break;
+            }
 
-                    board_trace_f("usb: resizing buffer to %u", newsize);
+            _dec_next:
 
-                    if (newsize > read->size) {
-                        read->size = newsize;
-                        u8 *new = pvPortMalloc(read->size);
-                        if (read->used) memcpy(new, read->data, read->used);
-                        if (read->data) vPortFree(read->data);
-                        read->data = new;
+            if ((decoded_size = serf_decode(*pmbuf, &rem_size))) {
+
+                if (rem_size) {
+
+                    serf_t *serf = (serf_t *) (*pmbuf)->data;
+
+                    if (serf->code == 0xFF) {
+
+                        u32 new_size = *(u32 *)serf->data;
+
+                        new_size = cobs_encode_size_max(new_size) + 2/*trailing zeroes for size frame and then data frame(or not if it continues)*/;
+
+                        if (new_size < 200000) {
+
+                            if (new_size > (*pmbuf)->size) {
+                                mbuf_fits(pmbuf, new_size);
+                            } else if ((new_size >= (*pmbuf)->used) && ((*pmbuf)->size - new_size) > 0x200) {
+                                mbuf_size(pmbuf, new_size);
+                            }
+                        }
+
+                    } else {
+
+                        mbuf_used(mbuf, decoded_size);
+                        memcpy((*mbuf)->data, (*pmbuf)->data, decoded_size);
+                        ccio_recv(port, mbuf);
                     }
 
-                } else {
-                    ccio_recv(port, frame, frame_size);
-                }
+                    mbuf_popf(pmbuf, (*pmbuf)->used - rem_size, NULL);
 
-                if (read->used) {
-                    read_used = read->used;
-                    memcpy(read->data, &read->data[read_used - read->used], read->used);
+                    if (rem_size)
+                        goto _dec_next;
+
+                } else {
+                    mbuf_used(pmbuf, decoded_size);
+                    ccio_recv(port, pmbuf);
+                    mbuf_done(pmbuf);
                 }
+            } else {
+                // corner case here would be leading zeroes if the first byte(s) are zero?
             }
 
             break;
         }
 
         case UART_USB_PORT:
-            rf_uart_write(read->used, read->data);
-            rf_uart_send((net_size_t) read->used, read->data);
-            read->used = 0;
+            rf_uart_write(*pmbuf);
+            rf_uart_send(pmbuf);
+            mbuf_done(pmbuf);
             break;
+
+        #if CONSOLE_ENABLED
 
         case CONSOLE_USB_PORT: {
             const static char nl[] = "\r\n\0";
             static volatile u8 esc = 0;
             static volatile u8 escb = 0;
-            size_t scan_size = read->used - size;
+            size_t scan_size = (*pmbuf)->used - size;
 
-            for (size_t i = scan_size; i < read->used; ++i) {
-                if (read->data[i] == '\x1B' || read->data[i] == '\x08' || read->data[i] == '\x7E') {
-                    if (read->data[i] == '\x1B') esc = 1;
-                    --read->used;
-                    if (i >= read->used) continue;
-                    memcpy(&read->data[i], &read->data[i+1], read->used - i);
+            for (size_t i = scan_size; i < (*pmbuf)->used; ++i) {
+                if ((*pmbuf)->data[i] == '\x1B' || (*pmbuf)->data[i] == '\x08' || (*pmbuf)->data[i] == '\x7E') {
+                    if ((*pmbuf)->data[i] == '\x1B') esc = 1;
+                    --(*pmbuf)->used;
+                    if (i >= (*pmbuf)->used) continue;
+                    memcpy(&(*pmbuf)->data[i], &(*pmbuf)->data[i+1], (*pmbuf)->used - i);
                     --i;
                     continue;
                 }
 
-                if (esc && (read->data[i] == '[')) {
+                if (esc && ((*pmbuf)->data[i] == '[')) {
                     ++escb;
-                    --read->used;
-                    if (i >= read->used) continue;
-                    memcpy(&read->data[i], &read->data[i+1], read->used - i);
+                    --(*pmbuf)->used;
+                    if (i >= (*pmbuf)->used) continue;
+                    memcpy(&(*pmbuf)->data[i], &(*pmbuf)->data[i+1], (*pmbuf)->used - i);
                     --i;
                     continue;
                 } else {
@@ -400,41 +426,31 @@ void usb_recv(u8 port, size_t size, u8 *data)
 
                 if (escb && esc) {
                     if (!--escb) esc = 0;
-                    --read->used;
-                    if (i >= read->used) continue;
-                    memcpy(&read->data[i], &read->data[i+1], read->used - i);
+                    --(*pmbuf)->used;
+                    if (i >= (*pmbuf)->used) continue;
+                    memcpy(&(*pmbuf)->data[i], &(*pmbuf)->data[i+1], (*pmbuf)->used - i);
                     --i;
                     continue;
                 }
 
-                if (read->data[i] == '\r' || read->data[i] == '\n') {
+                if ((*pmbuf)->data[i] == '\r' || (*pmbuf)->data[i] == '\n') {
                     usb_write_raw(port, (u8 *) nl, 2);
-                    read->data[i] = '\0';
-                    console_input((char *) read->data);
-                    read->used -= i + 1;
+                    (*pmbuf)->data[i] = '\0';
+                    console_input((char *) (*pmbuf)->data);
+                    (*pmbuf)->used -= i + 1;
 
-                    if (read->used)
-                        memcpy(read->data, &read->data[i+1], read->used);
+                    if ((*pmbuf)->used)
+                        memcpy((*pmbuf)->data, &(*pmbuf)->data[i+1], (*pmbuf)->used);
                 } else {
-                    usb_write_raw(port, &read->data[i], 1);
+                    usb_write_raw(port, &(*pmbuf)->data[i], 1);
                 }
             }
 
+            mbuf_done(pmbuf);
+
             break;
         }
-    }
+        #endif
 
-    if ((read->size - read->used) > 4096) {
-        if (read->used) {
-            u8 *new = pvPortMalloc(read->used);
-            memcpy(new, read->data, read->used);
-            vPortFree(read->data);
-            read->size = read->used;
-            read->data = new;
-        } else {
-            read->size = 0;
-            vPortFree(read->data);
-            read->data = NULL;
-        }
     }
 }

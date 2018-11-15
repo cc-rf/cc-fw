@@ -52,7 +52,7 @@ iic_t iic_init(u8 bus, u32 baud)
         iic->dmam_handle = DMAMGR_Handle();
 
         status = DMAMGR_RequestChannel(iic->dmam_handle, dreq, DMAMGR_DYNAMIC_ALLOCATE, &iic->dma_handle);
-        assert(status == kStatus_Success);
+        board_assert(status == kStatus_Success);
 
         NVIC_SetPriority(((IRQn_Type [][FSL_FEATURE_EDMA_MODULE_CHANNEL])DMA_CHN_IRQS)[0][iic->dma_handle.channel], configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
@@ -96,8 +96,7 @@ iic_t iic_init(u8 bus, u32 baud)
 
 status_t iic_io(iic_t iic, iic_rw_t rw, u8 addr, u8 cmd, void *data, size_t size)
 {
-    status_t status = kStatus_Success;
-    assert(iic);
+    status_t status;
 
     i2c_master_transfer_t xfer = {
             .flags = kI2C_TransferDefaultFlag,

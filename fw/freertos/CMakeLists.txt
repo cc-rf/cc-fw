@@ -11,7 +11,9 @@ add_library(
         # stream_buffer.c
         portable/GCC/ARM_CM4F/fsl_tickless_systick.c
         portable/GCC/ARM_CM4F/port.c
-        portable/MemMang/heap_4.c
+        #portable/MemMang/heap_4.c
+        portable/MemMang/umm.c
+        portable/MemMang/umm/umm_malloc.c
 )
 
 target_include_directories(

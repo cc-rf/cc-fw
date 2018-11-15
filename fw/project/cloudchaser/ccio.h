@@ -215,14 +215,9 @@ extern phy_cell_t ccrf_cell_flsh;
 
 
 void ccio_init(net_t nets[], mac_t macs[]) __nonnull_all;
-void ccio_recv(u8 port, serf_t *frame, size_t size) __nonnull_all;
+void ccio_recv(u8 port, mbuf_t *mbuf) __nonnull_all;
 
-void write_code_mac_recv(u16 addr, u16 peer, u16 dest, size_t size, u8 data[], pkt_meta_t meta) __nonnull_all;
-void write_code_recv(net_path_t path, net_addr_t dest, size_t size, u8 data[]) __nonnull_all;
-void write_code_evnt(net_size_t size, u8 data[]) __nonnull_all;
-void write_code_status(u8 port, code_status_t *code_status) __nonnull_all;
-void write_code_peer(u8 port, size_t size, code_peer_t *code_peer) __nonnull_all;
-void write_code_mac_send_stat(u8 port, code_mac_send_stat_t *code_send_stat) __nonnull_all;
-void write_code_trxn_stat(u8 port, net_size_t size, code_trxn_stat_t *code_trxn_stat) __nonnull_all;
-void write_code_send_done(u8 port, net_size_t size) __nonnull_all;
-void write_code_uart(size_t size, u8 *data) __nonnull_all;
+void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mbuf_t *mbuf, pkt_meta_t meta);
+void write_code_recv(net_path_t path, net_addr_t dest, mbuf_t *mbuf);
+void write_code_evnt(mbuf_t *mbuf) __nonnull_all;
+void write_code_uart(mbuf_t *mbuf) __nonnull_all;

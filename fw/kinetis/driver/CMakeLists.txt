@@ -170,6 +170,7 @@ if(KINETIS_SDK_DRIVER_FLASH)
 
     target_link_libraries(
             ${NAME}
+            PUBLIC fw_board # for trace/assert
             PUBLIC usr # needed for __fast_code
     )
 endif()

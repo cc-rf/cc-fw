@@ -5,6 +5,8 @@
 
 __fast_code static inline size_t cobs_encode_size_max(size_t sz)
 {
+    // max encode length: size + 1 + (size/254) + 1/*trailing zero*/
+    // max decode length: size
     return sz + sz / 254 + 1;
 }
 

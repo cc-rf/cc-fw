@@ -1,6 +1,5 @@
 #include "phy/chan.h"
 
-#include <assert.h>
 #include <fsl_rnga.h>
 #include <stdlib.h>
 #include <sys/trace.h>
@@ -12,7 +11,7 @@ static void chan_set(chan_group_t *group, chan_info_t *chan);
 
 void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
 {
-    assert(group); assert(group->size); assert(group->rdio);
+    ccrf_assert(group); ccrf_assert(group->size); ccrf_assert(group->rdio);
 
     const freq_t step = group->freq.bw;
 

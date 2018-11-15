@@ -62,7 +62,7 @@
 
 static void main_task(void *param);
 static void pin_flag_init(void);
-extern void usb_recv(u8 port, size_t size, u8 *data) __fast_code;
+extern void usb_recv(u8 port, mbuf_t *mbuf) __fast_code;
 
 
 StackType_t main_task_stack[MAIN_TASK_STACK_SIZE] __fast_data;

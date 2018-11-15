@@ -23,6 +23,8 @@
 #define NET_ADDR_MASK           ((net_addr_t) 0xFFFFu)
 #define NET_ADDR_BITS           16
 
+#define NET_SEND_MAX            MAC_SEND_MAX
+
 
 typedef struct net *net_t;
 
@@ -67,7 +69,7 @@ typedef struct {
 typedef struct {
     struct list_head __list;
     net_addr_t addr;
-    net_size_t size;
+    mbuf_t mbuf;
     u8 data[];
 
 } net_trxn_t;
@@ -93,7 +95,7 @@ typedef struct __packed {
 
 } net_event_peer_t;
 
-typedef void (* net_recv_t)(net_t net, net_path_t path, net_addr_t dest, size_t size, u8 data[]);
+typedef void (* net_recv_t)(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf);
 typedef void (* net_evnt_t)(net_t net, net_event_t event, void *info);
 
 typedef struct {
@@ -144,23 +146,21 @@ void net_peers_wipe(net_t net) __nonnull_all;
 net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list) __ccrf_code __nonnull_all;
 void net_sync(net_t net) __ccrf_code __nonnull_all;
 
-net_size_t net_send(net_t net, net_path_t path, net_size_t size, void *data) __ccrf_code __nonnull((1));
-net_size_t net_mesg(net_t net, net_path_t path, net_size_t size, void *data) __ccrf_code __nonnull((1));
-net_size_t net_resp(net_t net, net_path_t path, net_size_t size, void *data) __ccrf_code __nonnull((1));
-void net_trxn(net_t net, net_path_t path, net_size_t size, void *data, net_time_t expiry, net_trxn_rslt_t *rslt) __ccrf_code  __nonnull((1,6));
+net_size_t net_send(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code __nonnull((1));
+net_size_t net_mesg(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code __nonnull((1));
+net_size_t net_resp(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code __nonnull((1));
+size_t net_trxn(net_t net, net_path_t path, mbuf_t *mbuf, net_time_t expiry, net_trxn_rslt_t *rslt) __ccrf_code  __nonnull((1,5));
 void net_trxn_rslt_free(net_trxn_rslt_t *rslt) __ccrf_code;
 
 
-static inline bool net_path_info_match(const net_info_t *const info_a, const net_info_t *const info_b) __nonnull_all;
-static inline bool net_path_info_match(const net_info_t *const info_a, const net_info_t *const info_b)
+static inline __nonnull_all bool net_path_info_match(const net_info_t *const info_a, const net_info_t *const info_b)
 {
     return info_a->port == info_b->port &&
            info_a->type == info_b->type &&
            (info_a->mode & NET_MODE_FLAG_CORE) == (info_b->mode & NET_MODE_FLAG_CORE);
 }
 
-static inline bool net_path_match(const net_path_t *const path_a, const net_path_t *const path_b) __nonnull_all;
-static inline bool net_path_match(const net_path_t *const path_a, const net_path_t *const path_b)
+static inline __nonnull_all bool net_path_match(const net_path_t *const path_a, const net_path_t *const path_b)
 {
     return path_a->addr == path_b->addr && net_path_info_match(&path_a->info, &path_b->info);
 }

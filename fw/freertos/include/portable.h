@@ -128,6 +128,17 @@ void vPortDefineHeapRegions( const HeapRegion_t * const pxHeapRegions ) PRIVILEG
  */
 void *pvPortMalloc( size_t xSize ) PRIVILEGED_FUNCTION;
 void vPortFree( void *pv ) PRIVILEGED_FUNCTION;
+void vPortFree_T( void *pv ) PRIVILEGED_FUNCTION;
+void *pvPortRealloc( void *pv, size_t xSize ) PRIVILEGED_FUNCTION;
+
+static inline bool bPortIsHeapPointer(void *pv)
+{
+    extern u32 __HeapBase[];
+    extern u32 __HeapLimit[];
+
+    return (u32 *)pv >= __HeapBase && (u32 *)pv < __HeapLimit;
+}
+
 void vPortInitialiseBlocks( void ) PRIVILEGED_FUNCTION;
 size_t xPortGetFreeHeapSize( void ) PRIVILEGED_FUNCTION;
 size_t xPortGetMinimumEverFreeHeapSize( void ) PRIVILEGED_FUNCTION;

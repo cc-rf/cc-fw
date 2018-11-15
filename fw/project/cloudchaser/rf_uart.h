@@ -1,11 +1,12 @@
 #pragma once
 
 #include <usr/type.h>
+#include <usr/mbuf.h>
 #include <ccrf/net.h>
 #include <kio/uart.h>
 
 
-typedef void (* rf_uart_recv_t)(size_t size, u8 *data);
+typedef void (* rf_uart_recv_t)(mbuf_t *mbuf);
 
 typedef struct __packed {
     net_t net;
@@ -19,5 +20,5 @@ typedef struct __packed {
 
 
 void rf_uart_init(rf_uart_config_t *config);
-void rf_uart_write(size_t size, u8 *data);
-void rf_uart_send(net_size_t size, u8 *data);
+void rf_uart_write(mbuf_t mbuf);
+size_t rf_uart_send(mbuf_t *mbuf);
