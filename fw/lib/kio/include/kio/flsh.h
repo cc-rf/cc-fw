@@ -1,6 +1,7 @@
 #pragma once
 
 #include <usr/type.h>
+#include <usr/mbuf.h>
 #include <fsl_common.h>
 
 
@@ -18,7 +19,8 @@ typedef struct {
 
 
 status_t flsh_init(void) __fast_code;
-status_t flsh_erase(u32 begin[], u32 end[]) __fast_code;
-status_t flsh_ewrite(u32 *begin, u32 *end, u32 dest[]) __fast_code;
-status_t flsh_write(u32 *begin, u32 *end, u32 dest[])__fast_code;
 status_t flsh_user_cmit(void) __fast_code;
+status_t flsh_updt_init(void);
+status_t flsh_updt_part_1(mbuf_t header, mbuf_t user_rom);
+status_t flsh_updt_part_2(mbuf_t fast_code, mbuf_t text, mbuf_t data);
+status_t flsh_updt_done(u32 sanity);

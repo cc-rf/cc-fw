@@ -112,7 +112,8 @@ add_custom_target(
         #COMMAND cat "${PROJECT_NAME}.bin.header.gz" "${PROJECT_NAME}.bin.user.gz" "${PROJECT_NAME}.bin.code.gz" "${PROJECT_NAME}.bin.text.gz" "${PROJECT_NAME}.bin.data.gz" > "${PROJECT_NAME}.bin"
         
         COMMAND cat "${PROJECT_NAME}.bin.header" "${PROJECT_NAME}.bin.user" "${PROJECT_NAME}.bin.code" "${PROJECT_NAME}.bin.text" "${PROJECT_NAME}.bin.data" > "${PROJECT_NAME}.bin"
-        
+
+        BYPRODUCTS "${PROJECT_NAME}.bin"
         DEPENDS fw_bin
         WORKING_DIRECTORY "${BUILD_ROOT}"
 )

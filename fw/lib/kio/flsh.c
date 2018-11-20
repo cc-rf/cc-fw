@@ -1,6 +1,7 @@
 #include <kio/flsh.h>
 #include <board/clock.h>
 #include <board/trace.h>
+
 #include <fsl_flash.h>
 #include <fsl_flash.h>
 #include <FreeRTOS.h>
@@ -59,9 +60,14 @@ static user_flash_t user_flsh_ram __section(".user.base") = {
 static flash_config_t flash_config;
 static ftfx_config_t *ftfx_config;
 
-static status_t get_swap_state_config(ftfx_swap_state_config_t *swap_state_config)__used;
+
+static inline status_t flsh_erase(u32 begin[], u32 end[]) __fast_code;
+static inline status_t flsh_ewrite(u32 *begin, u32 *end, u32 dest[]) __fast_code;
+static inline status_t flsh_write(u32 *begin, u32 *end, u32 dest[])__fast_code;
 
 static status_t flsh_scpy(const char name[], u32 begin[], u32 end[]);
+
+static status_t get_swap_state_config(ftfx_swap_state_config_t *swap_state_config)__used;
 
 static void delay()
 {
@@ -166,23 +172,11 @@ status_t flsh_init(void)
 }
 
 
-status_t flsh_updt_init(void)
-{
-    status_t status;
-
-    if ((status = flsh_erase(SWAP(__flash_header_begin), SWAP(__flash_header_end)))) return status;
-    if ((status = flsh_erase(SWAP(__user_flash_base),  SWAP(__user_flash_end)))) return status;
-    if ((status = flsh_erase(SWAP(__all_rom_begin),  SWAP(__all_rom_end)))) return status;
-
-    return status;
-}
-
-
 static status_t flsh_scpy(const char name[], u32 begin[], u32 end[])
 {
     board_trace_fr("copy %s %u ... ", name, (u32) end - (u32) begin);
 
-    status_t status = flsh_write(begin, end, (u32 *) SWAP(begin));
+    status_t status = flsh_write(begin, end, SWAP(begin));
 
     if (status) {
         return status;
@@ -246,15 +240,143 @@ status_t flsh_user_cmit(void)
     status_t status;
 
     vTaskSuspendAll();
+    boot_clock_run();
     {
-        boot_clock_run();
-        itm_init();
-
         status = flsh_ewrite(__user_ram_base, __user_ram_end, __user_flash_base);
-
-        boot_clock_run_hs_oc();
-        itm_init();
     }
+    boot_clock_run_hs_oc();
+    (void) xTaskResumeAll();
+
+    return status;
+}
+
+
+status_t flsh_updt_init(void)
+{
+    status_t status = 0;
+
+    delay();
+
+    vTaskSuspendAll();
+    boot_clock_run();
+    {
+        if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP(__flash_header_end));
+        if (!status) status = flsh_erase(SWAP(__user_flash_base),  SWAP(__user_flash_end));
+        if (!status) status = flsh_erase(SWAP(__all_rom_begin),  SWAP(__all_rom_end));
+    }
+    boot_clock_run_hs_oc();
+    (void) xTaskResumeAll();
+
+    return status;
+}
+
+status_t flsh_updt_part_1(mbuf_t header, mbuf_t user_rom)
+{
+    status_t status;
+
+    delay();
+
+    vTaskSuspendAll();
+    boot_clock_run();
+    {
+        if (header->used == (u32)__flash_header_end - (u32)__flash_header_begin) {
+
+            status = flsh_write(
+                    (u32 *) header->data,
+                    (u32 *) (header->data + header->used),
+                    SWAP(__flash_header_begin)
+            );
+
+        } else {
+            board_trace_f("updt: header size mismatch %u != %u", header->used, (u32)__flash_header_end - (u32)__flash_header_begin);
+            status = -101;
+        }
+
+        if (status) goto _done;
+
+        if (user_rom->used >= sizeof(user_flash_t)) {
+
+            if (user_rom->used == (u32)__user_flash_end - (u32)__user_flash_base) {
+
+                user_flash_t *user_flash_rom = (user_flash_t *) user_rom->data;
+
+                if (user_flash_rom->sanity == user_flsh->sanity && user_flash_rom->version == user_flsh->version) {
+                    // compatible, copy current user data over
+                    if ((status = flsh_write(__user_flash_base, __user_flash_end, SWAP(__user_flash_base))))
+                        goto _done;
+                } else {
+                    // incompatible, init to rom values
+                    if ((status = flsh_write((u32 *) user_rom->data, (u32 *) (user_rom->data + user_rom->used), SWAP(__user_flash_base))))
+                        goto _done;
+                }
+            }
+
+            status = flsh_write(
+                    (u32 *) user_rom->data,
+                    (u32 *) (user_rom->data + user_rom->used),
+                    SWAP(__user_flash_init_base)
+            );
+
+        } else {
+            board_trace_f("updt: user_rom size too small %u < %u", user_rom->used, sizeof(user_flash_t));
+            status = -102;
+        }
+
+    }
+    _done:
+    boot_clock_run_hs_oc();
+    (void) xTaskResumeAll();
+
+    return status;
+}
+
+
+status_t flsh_updt_part_2(mbuf_t fast_code, mbuf_t text, mbuf_t data)
+{
+    status_t status;
+
+    delay();
+
+    vTaskSuspendAll();
+    boot_clock_run();
+    {
+        status = flsh_write((u32 *) fast_code->data, (u32 *) (fast_code->data + fast_code->used), SWAP(__fast_text_begin));
+        
+        if (!status)
+            status = flsh_write((u32 *) text->data, (u32 *) (text->data + text->used), SWAP(__text_begin));
+
+        if (!status)
+            status = flsh_write((u32 *) data->data, (u32 *) (data->data + data->used), SWAP(__DATA_ROM));
+
+    }
+    boot_clock_run_hs_oc();
+    (void) xTaskResumeAll();
+
+    return status;
+}
+
+
+status_t flsh_updt_done(u32 sanity)
+{
+    status_t status;
+
+    delay();
+
+    vTaskSuspendAll();
+    boot_clock_run();
+    {
+        if (user_flsh_othr->sanity == sanity) {
+            if ((status = FLASH_Swap(&flash_config, FLASH_SWAP_ADDR, true))) {
+                board_trace_f("swap fail: s=%u", status);
+            } else {
+                delay();
+            }
+        } else {
+            board_trace("error: mark not set!");
+            status = -1001;
+        }
+    }
+    boot_clock_run_hs_oc();
     (void) xTaskResumeAll();
 
     return status;

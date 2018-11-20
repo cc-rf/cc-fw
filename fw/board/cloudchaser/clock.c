@@ -1,5 +1,6 @@
 #include <board/board.h>
 #include <board/clock.h>
+#include <kio/itm.h>
 #include <fsl_common.h>
 #include <fsl_smc.h>
 
@@ -53,6 +54,8 @@ void boot_clock_vlpr(void)
     while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateVlpr)
     {
     }
+
+    itm_init();
 }
 
 void boot_clock_lprun(void)
@@ -101,6 +104,8 @@ void boot_clock_lprun(void)
     while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateRun)
     {
     }
+
+    itm_init();
 }
 
 void boot_clock_run(void)
@@ -128,6 +133,8 @@ void boot_clock_run(void)
     while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateRun)
     {
     }
+
+    itm_init();
 }
 
 void boot_clock_run_hs(void)
@@ -154,6 +161,8 @@ void boot_clock_run_hs(void)
     CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0U);
 
     CLOCK_SetSimConfig(&simConfig);
+
+    itm_init();
 }
 
 void boot_clock_run_hs_oc(void)
@@ -180,6 +189,8 @@ void boot_clock_run_hs_oc(void)
     CLOCK_SetInternalRefClkConfig(kMCG_IrclkEnable, kMCG_IrcSlow, 0U);
 
     CLOCK_SetSimConfig(&simConfig);
+
+    itm_init();
 }
 
 void BOARD_InitOsc0(void)

@@ -24,10 +24,6 @@ static void load_code(void)
     wcpy(__fast_data_rom_begin, __fast_data_rom_end, __fast_data_begin);*/
 
     InstallIRQHandler(0, 0);
-
-    itm_init();
-    board_trace("board: boot");
-
 }
 
 
@@ -48,12 +44,10 @@ void board_reboot(void)
 void board_init(void)
 {
     boot_clock_run();
-    itm_init();
 
     flsh_init();
 
     boot_clock_run_hs_oc();
-    itm_init();
 
 
     /*board_trace_f("\nclocks:\n  core\t\t\t= %lu\n  bus\t\t\t= %lu\n  flexbus\t\t= %lu\n  flash\t\t\t= %lu\n  pllfllsel\t\t= %lu\n  osc0er\t\t= %lu\n  osc0erundiv\t\t= %lu\n  mcgfixedfreq\t\t= %lu\n  mcginternalref\t= %lu\n  mcgfll\t\t= %lu\n  mcgpll0\t\t= %lu\n  mcgirc48m\t\t= %lu\n  lpo\t\t\t= %lu\n\n",

@@ -44,6 +44,8 @@
 #define CODE_ID_EVNT            9
 #define CODE_ID_PEER            10
 #define CODE_ID_RESET           17
+#define CODE_ID_FLASH           21
+#define CODE_ID_FLASH_STAT      21
 #define CODE_ID_UART            26
 #define CODE_ID_LED             27
 #define CODE_ID_RAINBOW         29
@@ -122,6 +124,25 @@ typedef struct __packed {
     u32 magic;
 
 } code_reset_t;
+
+typedef struct __packed {
+    struct {
+        u32 header;
+        u32 user_rom;
+        u32 fast_code;
+        u32 text;
+        u32 data;
+
+    } size;
+
+    u8 data[];
+
+} code_flash_t;
+
+typedef struct __packed {
+    s32 status;
+
+} code_flash_stat_t;
 
 typedef struct __packed {
     u16 addr;

@@ -50,6 +50,8 @@ typedef struct mbuf {
 
 void mbuf_trace_data(mbuf_t mbuf);
 
+static inline struct mbuf mbuf_view(mbuf_t mbuf, size_t offset, size_t used) __fast_code;
+
 void mbuf_init(mbuf_t mbuf, size_t size, u8 *data) __fast_code;
 
 mbuf_t mbuf_new(size_t size) __fast_code;
@@ -88,6 +90,19 @@ void mbuf_popf(mbuf_t *mbuf, size_t size, u8 *data) __fast_code;
 
 void mbuf_popb(mbuf_t *mbuf, size_t size, u8 *data) __fast_code;
 
+
+
+
+static inline struct mbuf mbuf_view(mbuf_t mbuf, size_t offset, size_t used)
+{
+    struct mbuf new;
+
+    mbuf_init(&new, used, mbuf->data + offset);
+
+    new.used = used;
+
+    return new;
+}
 
 
 

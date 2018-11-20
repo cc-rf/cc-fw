@@ -15,6 +15,7 @@ static void handle_code_send(u8 port, mbuf_t *mbuf);
 static void handle_code_trxn(u8 port, mbuf_t *mbuf);
 static void handle_code_resp(u8 port, mbuf_t *mbuf);
 static void handle_code_reset(u8 port, mbuf_t *mbuf);
+static void handle_code_flash(u8 port, mbuf_t *mbuf);
 static void handle_code_peer(u8 port, mbuf_t *mbuf);
 static void handle_code_uart(mbuf_t *mbuf);
 static void handle_code_rainbow(mbuf_t *mbuf);
@@ -24,6 +25,7 @@ static mbuf_t handle_code_led(mbuf_t mbuf);
 #endif
 
 static void write_code_usb(u8 port, u8 code, mbuf_t *mbuf);
+
 
 static bool code_data_check(mbuf_t *mbuf, size_t size)
 {
@@ -81,6 +83,9 @@ void ccio_recv(u8 port, mbuf_t *mbuf)
 
         case CODE_ID_RESET:
             return handle_code_reset(port, mbuf);
+
+        case CODE_ID_FLASH:
+            return handle_code_flash(port, mbuf);
 
         case CODE_ID_UART:
             return handle_code_uart(mbuf);
@@ -360,6 +365,107 @@ static void handle_code_reset(u8 port __unused, mbuf_t *mbuf)
         NVIC_SystemReset();
     } else {
         printf("reset: malformed magic code\r\n");
+    }
+}
+
+
+static void handle_code_flash(u8 port, mbuf_t *mbuf)
+{
+    if (!code_data_check(mbuf, sizeof(code_flash_t))) return;
+
+    code_flash_t *const code_flash = (code_flash_t *) (*mbuf)->data;
+
+    size_t total =
+            code_flash->size.header +
+            code_flash->size.user_rom +
+            code_flash->size.fast_code +
+            code_flash->size.text +
+            code_flash->size.data;
+
+    if (!code_data_check(mbuf, sizeof(code_flash_t) + total)) return;
+
+    struct mbuf mbuf_flash = mbuf_view(
+            *mbuf,
+            sizeof(code_flash_t),
+            total
+    );
+
+    struct mbuf mbuf_flash_header = mbuf_view(
+            &mbuf_flash,
+            0,
+            code_flash->size.header
+    );
+
+    struct mbuf mbuf_flash_user = mbuf_view(
+            &mbuf_flash,
+            code_flash->size.header,
+            code_flash->size.user_rom
+    );
+
+    struct mbuf mbuf_flash_code = mbuf_view(
+            &mbuf_flash,
+            code_flash->size.header + code_flash->size.user_rom,
+            code_flash->size.fast_code
+    );
+
+    struct mbuf mbuf_flash_text = mbuf_view(
+            &mbuf_flash,
+            code_flash->size.header + code_flash->size.user_rom + code_flash->size.fast_code,
+            code_flash->size.text
+    );
+
+    struct mbuf mbuf_flash_data = mbuf_view(
+            &mbuf_flash,
+            code_flash->size.header + code_flash->size.user_rom + code_flash->size.fast_code + code_flash->size.text,
+            code_flash->size.data
+    );
+
+    u32 sanity = ((user_flash_t *) mbuf_flash_user.data)->sanity;
+
+    board_trace_r("flash: init update... ");
+
+    status_t status;
+
+    if (!(status = flsh_updt_init())) {
+        board_trace("done.");
+    }
+
+    if (!status) {
+        board_trace_r("flash: update part 1... ");
+
+        if (!(status = flsh_updt_part_1(&mbuf_flash_header, &mbuf_flash_user))) {
+            board_trace("done.");
+        }
+    }
+
+    if (!status) {
+        board_trace_r("flash: update part 2... ");
+
+        if (!(status = flsh_updt_part_2(&mbuf_flash_code, &mbuf_flash_text, &mbuf_flash_data))) {
+            board_trace("done.");
+        }
+    }
+
+    if (!status) {
+        board_trace_r("flash: update finish... ");
+
+        if (!(status = flsh_updt_done(sanity))) {
+            board_trace("done.");
+        }
+    }
+
+    mbuf_used(mbuf, sizeof(code_flash_stat_t));
+
+    ((code_flash_stat_t *) (*mbuf)->data)->status = status;
+
+    write_code_usb(port, CODE_ID_FLASH_STAT, mbuf);
+
+    if (!status) {
+        board_trace("flash: resetting...");
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+
+        NVIC_SystemReset();
     }
 }
 
