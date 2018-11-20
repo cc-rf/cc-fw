@@ -5,8 +5,8 @@
 #include <sys/trace.h>
 
 
-static void chan_calibrate(chan_group_t *group, chan_info_t *chan);
-static void chan_set(chan_group_t *group, chan_info_t *chan);
+static inline void chan_calibrate(chan_group_t *group, chan_info_t *chan);
+static inline void chan_set(chan_group_t *group, chan_info_t *chan);
 
 
 void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
@@ -69,7 +69,7 @@ void chan_table_reset(chan_group_t *group, chan_id_t hop_table[])
 }
 
 
-static void chan_calibrate(chan_group_t *group, chan_info_t *chan)
+static inline void chan_calibrate(chan_group_t *group, chan_info_t *chan)
 {
     /* TODO: Check/wait for idle first? */
     rdio_util_set_freq_reg(group->rdio, chan->cal.reg.freq);
@@ -90,7 +90,7 @@ void chan_group_calibrate(chan_group_t *group)
         chan_calibrate(group, &group->chan[c]);
 }
 
-static void chan_set(chan_group_t *group, chan_info_t *chan)
+static inline void chan_set(chan_group_t *group, chan_info_t *chan)
 {
     rdio_util_set_freq_reg(group->rdio, chan->cal.reg.freq);
 

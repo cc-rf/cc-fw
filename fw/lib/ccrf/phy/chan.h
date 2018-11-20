@@ -53,5 +53,5 @@ void chan_group_calibrate(chan_group_t *group);
 void chan_table_reset(chan_group_t *group, chan_id_t hop_table[]);
 void chan_table_reorder(chan_group_t *group, u_int seed, chan_id_t hop_table[]);
 
-void chan_select(chan_group_t *group, chan_id_t id);
-void chan_recalibrate(chan_group_t *group, chan_id_t id);
+void chan_select(chan_group_t *group, chan_id_t id) __ccrf_code;
+void chan_recalibrate(chan_group_t *group, chan_id_t id) __ccrf_code;
