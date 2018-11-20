@@ -22,6 +22,7 @@
 #define NET_ADDR_BCST           NET_ADDR_NONE
 #define NET_ADDR_MASK           ((net_addr_t) 0xFFFFu)
 #define NET_ADDR_BITS           16
+#define NET_ADDR_INVL           NET_ADDR_MASK
 
 #define NET_SEND_MAX            MAC_SEND_MAX
 

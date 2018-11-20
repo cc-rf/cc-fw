@@ -205,6 +205,10 @@ static void net_recv(net_t net __unused, net_path_t path, net_addr_t dest, mbuf_
     switch (path.info.port) {
         case CCIO_PORT:
             switch (path.info.type) {
+                case CCIO_RBOW:
+                    rainbow();
+                    return;
+
                 #if FABI
                 case CCIO_LED: {
                     fabi_msg_t *msg = (fabi_msg_t *)data;
@@ -212,6 +216,7 @@ static void net_recv(net_t net __unused, net_path_t path, net_addr_t dest, mbuf_
                     return;
                 }
                 #endif
+
                 case CCIO_UART:
                     rf_uart_write(*mbuf);
                     write_code_uart(mbuf);

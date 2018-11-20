@@ -426,11 +426,17 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
 
     status_t status;
 
-    if (!(status = flsh_updt_init())) {
-        board_trace("done.");
-    }
+    status = flsh_updt_init(
+            mbuf_flash_header.used,
+            mbuf_flash_user.used,
+            mbuf_flash_code.used,
+            mbuf_flash_text.used,
+            mbuf_flash_data.used
+    );
 
     if (!status) {
+        board_trace("done.");
+
         board_trace_r("flash: update part 1... ");
 
         if (!(status = flsh_updt_part_1(&mbuf_flash_header, &mbuf_flash_user))) {
@@ -446,26 +452,21 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
         }
     }
 
-    if (!status) {
-        board_trace_r("flash: update finish... ");
-
-        if (!(status = flsh_updt_done(sanity))) {
-            board_trace("done.");
-        }
-    }
-
     mbuf_used(mbuf, sizeof(code_flash_stat_t));
 
     ((code_flash_stat_t *) (*mbuf)->data)->status = status;
 
     write_code_usb(port, CODE_ID_FLASH_STAT, mbuf);
 
+    vTaskDelay(pdMS_TO_TICKS(100));
+
     if (!status) {
-        board_trace("flash: resetting...");
+        board_trace_r("flash: update finish... ");
 
-        vTaskDelay(pdMS_TO_TICKS(100));
-
-        NVIC_SystemReset();
+        if (!flsh_updt_done(sanity)) {
+            board_trace("done. resetting...\n\n\n");
+            NVIC_SystemReset();
+        }
     }
 }
 
@@ -496,7 +497,29 @@ static void handle_code_uart(mbuf_t *mbuf)
 
 static void handle_code_rainbow(mbuf_t *mbuf)
 {
-    rainbow();
+    if (!code_data_check(mbuf, sizeof(code_rbow_t))) return;
+
+    net_t net = nets[0];
+
+    code_rbow_t *code_rbow = (code_rbow_t *) (**mbuf).data;
+
+    net_path_t path = {
+            .addr = code_rbow->addr,
+            .info = { .port = CCIO_PORT, .type = CCIO_RBOW }
+    };
+
+    if (path.addr == NET_ADDR_INVL || path.addr == net_addr(net)) {
+
+        rainbow();
+
+    } else {
+
+        mbuf_done(mbuf);
+        net_send(net, path, mbuf);
+    }
+
+    if (path.addr == NET_ADDR_BCST)
+        rainbow();
 }
 
 

@@ -10,6 +10,7 @@
 
 
 #define CCIO_PORT               0x01E0
+#define CCIO_RBOW               0x0A
 #define CCIO_LED                0x0B
 #define CCIO_UART               0x0D
 
@@ -218,6 +219,11 @@ typedef struct __packed {
     net_peer_info_t peer[];
 
 } code_peer_t;
+
+typedef struct __packed {
+    net_addr_t addr;
+
+} code_rbow_t;
 
 #if FABI
 

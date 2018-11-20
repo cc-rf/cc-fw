@@ -10,7 +10,7 @@
 static_assert(FSL_FEATURE_SIM_FCFG_HAS_PFLSH_SWAP, "FSL_FEATURE_SIM_FCFG_HAS_PFLSH_SWAP");
 
 #define SIZE(begin, end)    ((u32)(end) - (u32)(begin))
-#define OFFSET(addr, amt)   ((u32 *)((amt) + (u8 *)(addr)))
+#define OFFSET(addr, amt)   ((u32 *)((u32)(amt) + (u8 *)(addr)))
 #define SWAP(x)             OFFSET(x, 0x100000)
 #define USER_FLASH_SIZE     FSL_FEATURE_FLASH_PFLASH_BLOCK_SECTOR_SIZE
 #define BLOCK_SIZE          FSL_FEATURE_FLASH_PFLASH_BLOCK_SECTOR_SIZE
@@ -251,7 +251,7 @@ status_t flsh_user_cmit(void)
 }
 
 
-status_t flsh_updt_init(void)
+status_t flsh_updt_init(size_t size_header, size_t size_user_rom, size_t size_fast_code, size_t size_text, size_t size_data)
 {
     status_t status = 0;
 
@@ -260,10 +260,15 @@ status_t flsh_updt_init(void)
     vTaskSuspendAll();
     boot_clock_run();
     {
-        if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP(__flash_header_end));
-        if (!status) status = flsh_erase(SWAP(__user_flash_base),  SWAP(__user_flash_end));
-        if (!status) status = flsh_erase(SWAP(__all_rom_begin),  SWAP(__all_rom_end));
+        if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP((u8 *)__flash_header_begin + size_header));
+        if (!status) status = flsh_erase(SWAP(__user_flash_base),  SWAP((u8 *)__user_flash_base + size_user_rom));
+        if (!status) status = flsh_erase(SWAP(__fast_text_begin),  SWAP((u8 *)__fast_text_begin + size_fast_code));
+        if (!status) status = flsh_erase(SWAP(__text_begin),  SWAP((u8 *)__text_begin + size_text));
+        if (!status) status = flsh_erase(SWAP(__DATA_ROM),  SWAP((u8 *)__DATA_ROM + size_data));
+
+        //if (!status) status = flsh_erase(SWAP(__all_rom_begin),  SWAP(__all_rom_end));
     }
+    delay();
     boot_clock_run_hs_oc();
     (void) xTaskResumeAll();
 
@@ -324,6 +329,7 @@ status_t flsh_updt_part_1(mbuf_t header, mbuf_t user_rom)
 
     }
     _done:
+    delay();
     boot_clock_run_hs_oc();
     (void) xTaskResumeAll();
 
@@ -349,6 +355,7 @@ status_t flsh_updt_part_2(mbuf_t fast_code, mbuf_t text, mbuf_t data)
             status = flsh_write((u32 *) data->data, (u32 *) (data->data + data->used), SWAP(__DATA_ROM));
 
     }
+    delay();
     boot_clock_run_hs_oc();
     (void) xTaskResumeAll();
 
