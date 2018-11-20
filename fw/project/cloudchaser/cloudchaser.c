@@ -249,7 +249,6 @@ static void net_evnt(net_t net __unused, net_event_t event, void *info)
 static void mac_recv(mac_t mac, mac_flag_t flag __unused, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta)
 {
     write_code_mac_recv(mac_addr(mac), peer, dest, mbuf, meta);
-    return;
 }
 
 
