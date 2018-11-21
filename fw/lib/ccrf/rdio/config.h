@@ -199,81 +199,9 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT[] = {
 
 
 /**
- * Standard medium-fast medium range configuration.
- *
- * Deviation        150 kHz
- * Modulation       4-GFSK
- * Symbol Rate      250 ksps
- *
- * Notes:
- *
- * 2017-05-20: Copied above config using old notes to revive a 4GFSK setup.
- * DEVIATION_M/DEV_E: 0xEB/0x2D->0x0A/0x2E->0x0A/0x26. dev 150kHz->162.5kHz, 4-GFSK->FSK
- * DEVIATION_M/DEV_E: ->0x9A/0x25. dev ->125kHz.
- *
- * Currently this still sucks.
- */
-static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_1[] = {
-        {CC1200_SYNC3,             0x5A},
-        {CC1200_SYNC2,             0x0F},
-        {CC1200_SYNC1,             0xBE},
-        {CC1200_SYNC0,             0x66},
-        {CC1200_SYNC_CFG1,         0xAA},
-        {CC1200_SYNC_CFG0,         0x33},
-        {CC1200_DEVIATION_M,       0x9A},
-        {CC1200_MODCFG_DEV_E,      0x25},
-        {CC1200_DCFILT_CFG,        0x5D},
-        {CC1200_PREAMBLE_CFG1,     0x20},
-        {CC1200_PREAMBLE_CFG0,     0x8F},
-        {CC1200_IQIC,              0x80},
-        {CC1200_CHAN_BW,           0x03},
-        {CC1200_MDMCFG1,           0x42},
-        {CC1200_MDMCFG0,           0x05},
-        {CC1200_SYMBOL_RATE2,      0xB9},
-        {CC1200_SYMBOL_RATE1,      0x99},
-        {CC1200_SYMBOL_RATE0,      0x9A},
-        {CC1200_AGC_REF,           0x35},
-        {CC1200_AGC_CFG3,          0x31},
-        {CC1200_AGC_CFG2,          0x00},
-        {CC1200_AGC_CFG1,          0x27},
-        {CC1200_AGC_CFG0,          0x4F},
-        {CC1200_FIFO_CFG,          0x00},
-        {CC1200_FS_CFG,            0x12},
-        {CC1200_PA_CFG1,           0x77}, // w/pa: 0x55 == 17dBm 0x5A == 20dBm 0x77 == 26+dBm other: 0x63 == 0dBm 0x43 == min
-        {CC1200_PA_CFG0,           0x51},
-        {CC1200_IF_MIX_CFG,        0x18},
-        {CC1200_FREQOFF_CFG,       0x2C},
-        {CC1200_MDMCFG2,           0x02},
-        {CC1200_FREQ2,             0x5C},
-        {CC1200_FREQ1,             0x0F},
-        {CC1200_FREQ0,             0x5C},
-        {CC1200_IF_ADC1,           0xEE},
-        {CC1200_IF_ADC0,           0x10},
-        {CC1200_FS_DIG1,           0x07},
-        {CC1200_FS_DIG0,           0xA0},
-        {CC1200_FS_CAL3,           0x40},
-        {CC1200_FS_CAL1,           0x40},
-        {CC1200_FS_CAL0,           0x0E},
-        {CC1200_FS_DIVTWO,         0x03},
-        {CC1200_FS_DSM0,           0x33},
-        {CC1200_FS_DVC0,           0x17},
-        {CC1200_FS_PFD,            0x00},
-        {CC1200_FS_PRE,            0x6E},
-        {CC1200_FS_REG_DIV_CML,    0x1C},
-        {CC1200_FS_SPARE,          0xAC},
-        {CC1200_FS_VCO0,           0xB5},
-        {CC1200_IFAMP,             0x09},
-        {CC1200_XOSC5,             0x0E},
-        {CC1200_XOSC1,             0x03},
-};
-
-
-
-
-/**
  * New max rate configuration.
  *
- * Deviation        600 kHz
+ * Deviation        1600 kHz
  * Modulation       4-GFSK
  * Symbol Rate      600 ksps
  *
@@ -299,6 +227,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_1[] = {
  * DEVIATION_M/DEV_E: 0xFF/0x2F->0x55/0x2F->back. dev 600kHz->400kHz->600kHz. Necessary.
  * FS_DIG0: 0xA3->0xAB. FS Loop BW 200kHz->400kHz. https://e2e.ti.com/support/wireless_connectivity/low_power_rf_tools/f/155/t/330911?CC1200-maximum-symbol-rate
  * AGC_CFG2: 0x60->0x20. Gain table mode Normal -> Zero-IF. ^
+ * PA_CFG1: 0x47->0x7F. Max power.
  *
  */
 static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_MAXRATE[] = {
@@ -306,7 +235,7 @@ static const rdio_reg_config_t RDIO_REG_CONFIG_DEFAULT_MAXRATE[] = {
         {CC1200_SYNC2,             0x0F},
         {CC1200_SYNC1,             0xBE},
         {CC1200_SYNC0,             0x66},
-        {CC1200_PA_CFG1,           0x47},
+        {CC1200_PA_CFG1,           0x7f},
 
         {CC1200_SYNC_CFG1,         0xA9},
         {CC1200_SYNC_CFG0,         0x03},

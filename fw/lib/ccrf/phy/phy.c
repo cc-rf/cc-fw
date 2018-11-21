@@ -24,8 +24,8 @@
 #define phy_assert          ccrf_assert
 
 #if PHY_CHAN_COUNT == 25
-    #define FREQ_BASE       902000000u
-    #define FREQ_BW         1001000u
+    #define FREQ_BASE       902437000u
+    #define FREQ_BW         1010000u
     #define CHAN_TIME       40000u
 #elif PHY_CHAN_COUNT == 50
     #define FREQ_BASE       902456000u
