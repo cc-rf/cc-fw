@@ -38,7 +38,7 @@ void rf_uart_init(rf_uart_config_t *config)
 
     rf_uart.task = xTaskCreateStatic(
             (TaskFunction_t) rf_uart_task, "rf_uart", RF_UART_TASK_STACK_SIZE,
-            NULL, TASK_PRIO_HIGHEST, rf_uart.task_stack, &rf_uart.task_static
+            NULL, TASK_PRIO_HIGH - 1, rf_uart.task_stack, &rf_uart.task_static
     );
 }
 
