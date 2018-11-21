@@ -449,6 +449,8 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
 
         if (!(status = flsh_updt_part_2(&mbuf_flash_code, &mbuf_flash_text, &mbuf_flash_data))) {
             board_trace("done.");
+
+            status = flsh_updt_done(sanity);
         }
     }
 
@@ -458,15 +460,10 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
 
     write_code_usb(port, CODE_ID_FLASH_STAT, mbuf);
 
-    vTaskDelay(pdMS_TO_TICKS(100));
-
     if (!status) {
-        board_trace_r("flash: update finish... ");
-
-        if (!flsh_updt_done(sanity)) {
-            board_trace("done. resetting...\n\n\n");
-            NVIC_SystemReset();
-        }
+        board_trace_r("flash: update finished, reboot!\r\n\r\n");
+        vTaskDelay(pdMS_TO_TICKS(100));
+        NVIC_SystemReset();
     }
 }
 

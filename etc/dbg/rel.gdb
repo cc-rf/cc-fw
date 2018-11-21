@@ -31,6 +31,7 @@ monitor speed auto
 
 monitor halt
 
+file release/fw.elf
 symbol-file release/fw.elf
 load release/fw.elf
 

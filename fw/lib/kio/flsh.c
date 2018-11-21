@@ -3,7 +3,6 @@
 #include <board/trace.h>
 
 #include <fsl_flash.h>
-#include <fsl_flash.h>
 #include <FreeRTOS.h>
 #include <task.h>
 
@@ -71,7 +70,7 @@ static status_t get_swap_state_config(ftfx_swap_state_config_t *swap_state_confi
 
 static void delay()
 {
-    #if DEBUG
+    #if DEBUG || CONFIG_DISABLE_BOARD_TRACE != 1
     for (u32 i = 0; i < 1000000; ++i) asm("");
     #endif
 }
@@ -216,7 +215,11 @@ status_t flsh_ewrite(u32 *begin, u32 *end, u32 dest[])
 
 status_t flsh_write(u32 *begin, u32 *end, u32 dest[])
 {
-    status_t status = FLASH_Program(&flash_config, (u32) dest, (u8 *) begin, SIZE(begin, end));
+    size_t size = SIZE(begin, end);
+
+    //board_trace_fr("\nwrite %u tp 0x%08X ... ", size, dest);
+
+    status_t status = FLASH_Program(&flash_config, (u32) dest, (u8 *) begin, size);
 
     if (status != kStatus_FLASH_Success) {
         board_trace_f("write fail: %li", status);
@@ -260,13 +263,18 @@ status_t flsh_updt_init(size_t size_header, size_t size_user_rom, size_t size_fa
     vTaskSuspendAll();
     boot_clock_run();
     {
-        if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP((u8 *)__flash_header_begin + size_header));
-        if (!status) status = flsh_erase(SWAP(__user_flash_base),  SWAP((u8 *)__user_flash_base + size_user_rom));
-        if (!status) status = flsh_erase(SWAP(__fast_text_begin),  SWAP((u8 *)__fast_text_begin + size_fast_code));
-        if (!status) status = flsh_erase(SWAP(__text_begin),  SWAP((u8 *)__text_begin + size_text));
-        if (!status) status = flsh_erase(SWAP(__DATA_ROM),  SWAP((u8 *)__DATA_ROM + size_data));
+        //if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP(__all_rom_end));
 
-        //if (!status) status = flsh_erase(SWAP(__all_rom_begin),  SWAP(__all_rom_end));
+        if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP(OFFSET(__flash_header_begin, size_header)));
+        if (!status) status = flsh_erase(SWAP(__user_flash_base), SWAP(OFFSET(__user_flash_base, size_user_rom)));
+        if (!status) status = flsh_erase(SWAP(__user_flash_init_base), SWAP(OFFSET(__user_flash_init_base, size_user_rom)));
+        if (!status) status = flsh_erase(SWAP(__fast_text_begin), SWAP(OFFSET(__fast_text_begin, size_fast_code)));
+
+        u32 text_end = (u32)OFFSET(__text_begin, size_text);
+        u32 *data_begin = (u32 *) (text_end % 16 ? text_end + 16 - (text_end % 16) : text_end);
+
+        if (!status) status = flsh_erase(SWAP(__text_begin), SWAP(text_end));
+        if (!status) status = flsh_erase(SWAP(data_begin), SWAP(OFFSET(data_begin, size_data)));
     }
     delay();
     boot_clock_run_hs_oc();
@@ -274,6 +282,7 @@ status_t flsh_updt_init(size_t size_header, size_t size_user_rom, size_t size_fa
 
     return status;
 }
+
 
 status_t flsh_updt_part_1(mbuf_t header, mbuf_t user_rom)
 {
@@ -284,7 +293,7 @@ status_t flsh_updt_part_1(mbuf_t header, mbuf_t user_rom)
     vTaskSuspendAll();
     boot_clock_run();
     {
-        if (header->used == (u32)__flash_header_end - (u32)__flash_header_begin) {
+        if (header->used == SIZE(__flash_header_begin, __flash_header_end)) {
 
             status = flsh_write(
                     (u32 *) header->data,
@@ -293,7 +302,7 @@ status_t flsh_updt_part_1(mbuf_t header, mbuf_t user_rom)
             );
 
         } else {
-            board_trace_f("updt: header size mismatch %u != %u", header->used, (u32)__flash_header_end - (u32)__flash_header_begin);
+            board_trace_f("header size mismatch %u != %u", header->used, (u32)__flash_header_end - (u32)__flash_header_begin);
             status = -101;
         }
 
@@ -301,19 +310,22 @@ status_t flsh_updt_part_1(mbuf_t header, mbuf_t user_rom)
 
         if (user_rom->used >= sizeof(user_flash_t)) {
 
-            if (user_rom->used == (u32)__user_flash_end - (u32)__user_flash_base) {
+            if (user_rom->used == SIZE(__user_flash_base, __user_flash_end)) {
 
                 user_flash_t *user_flash_rom = (user_flash_t *) user_rom->data;
 
                 if (user_flash_rom->sanity == user_flsh->sanity && user_flash_rom->version == user_flsh->version) {
+
                     // compatible, copy current user data over
                     if ((status = flsh_write(__user_flash_base, __user_flash_end, SWAP(__user_flash_base))))
                         goto _done;
                 } else {
+
                     // incompatible, init to rom values
                     if ((status = flsh_write((u32 *) user_rom->data, (u32 *) (user_rom->data + user_rom->used), SWAP(__user_flash_base))))
                         goto _done;
                 }
+
             }
 
             status = flsh_write(
@@ -323,7 +335,7 @@ status_t flsh_updt_part_1(mbuf_t header, mbuf_t user_rom)
             );
 
         } else {
-            board_trace_f("updt: user_rom size too small %u < %u", user_rom->used, sizeof(user_flash_t));
+            board_trace_f("user_rom size too small %u < %u", user_rom->used, sizeof(user_flash_t));
             status = -102;
         }
 
@@ -347,12 +359,15 @@ status_t flsh_updt_part_2(mbuf_t fast_code, mbuf_t text, mbuf_t data)
     boot_clock_run();
     {
         status = flsh_write((u32 *) fast_code->data, (u32 *) (fast_code->data + fast_code->used), SWAP(__fast_text_begin));
-        
+
+        u32 text_end = (u32)OFFSET(__text_begin, text->used);
+        u32 *data_begin = (u32 *) (text_end % 16 ? text_end + 16 - (text_end % 16) : text_end);
+
         if (!status)
             status = flsh_write((u32 *) text->data, (u32 *) (text->data + text->used), SWAP(__text_begin));
 
         if (!status)
-            status = flsh_write((u32 *) data->data, (u32 *) (data->data + data->used), SWAP(__DATA_ROM));
+            status = flsh_write((u32 *) data->data, (u32 *) (data->data + data->used), SWAP(data_begin));
 
     }
     delay();
@@ -375,8 +390,6 @@ status_t flsh_updt_done(u32 sanity)
         if (user_flsh_othr->sanity == sanity) {
             if ((status = FLASH_Swap(&flash_config, FLASH_SWAP_ADDR, true))) {
                 board_trace_f("swap fail: s=%u", status);
-            } else {
-                delay();
             }
         } else {
             board_trace("error: mark not set!");
