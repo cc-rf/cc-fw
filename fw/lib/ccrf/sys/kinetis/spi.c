@@ -19,7 +19,7 @@
 #ifdef CC_SPI_DMA
 static void spi_dma_callback(SPI_Type *base, dspi_master_edma_handle_t *handle, status_t status, void *userData);
 #elif !defined(CC_SPI_POLL)
-static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData);
+static void spi_irq_callback(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData) __ccrf_code;
 #endif
 
 #if (defined(CC_SPI_DMA) && defined(CC_SPI_POLL)) || (defined(CC_SPI_NOTIFY) && defined(CC_SPI_POLL))
