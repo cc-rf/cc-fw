@@ -5,8 +5,8 @@
 #include <fsl_common.h>
 
 
-#define FLASH_SANITY        0xFE0BAEB0
-#define FLASH_VERSION       0xBEDFECE5
+#define FLASH_SANITY        0x13370000  // No need to change this one.
+#define FLASH_VERSION       0xFECE5000  // Increment this when adding variables to the .user section.
 
 
 typedef struct {
@@ -16,6 +16,10 @@ typedef struct {
     u8 data[];
 
 } user_flash_t;
+
+
+extern const u32 __flsh_date;       // Compile timestamp.
+extern const u32 __flsh_version;    // Git commit id.
 
 
 status_t flsh_init(void);

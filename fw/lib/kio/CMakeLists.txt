@@ -4,6 +4,16 @@ if(NOT DEFINED CONFIG_KIO_UART_COUNT)
     set(CONFIG_KIO_UART_COUNT 1 CACHE STRING "Number of UARTs that can be managed (-1: MAX, 0: INFINITE/ON-DEMAND)")
 endif()
 
+add_custom_target(
+        ${NAME}-date
+        COMMAND echo -n "\\#define CONFIG_FLASH_TIMESTAMP   " > "${CMAKE_CURRENT_LIST_DIR}/info.h"
+        COMMAND date "+%s" >> "${CMAKE_CURRENT_LIST_DIR}/info.h"
+        COMMAND echo -n "\\#define CONFIG_FLASH_VERSION   0x" >> "${CMAKE_CURRENT_LIST_DIR}/info.h"
+        COMMAND git log --oneline --max-count=1 --abbrev=8 | cut -d' ' -f 1 >> "${CMAKE_CURRENT_LIST_DIR}/info.h"
+        COMMAND touch  "${CMAKE_CURRENT_LIST_DIR}/flsh.c"
+        BYPRODUCTS "${CMAKE_CURRENT_LIST_DIR}/info.h"
+)
+
 add_library(
         ${NAME} STATIC EXCLUDE_FROM_ALL
         flsh.c
@@ -19,6 +29,8 @@ add_library(
         usb/usb_device_descriptor.c
         usb/virtual_com.c
 )
+
+add_dependencies(${NAME} ${NAME}-date)
 
 target_include_directories(
         ${NAME}
@@ -46,4 +58,3 @@ target_link_libraries(
 
 add_library(kinetis_middleware_usb_config INTERFACE)
 target_include_directories(kinetis_middleware_usb_config INTERFACE usb/include)
-

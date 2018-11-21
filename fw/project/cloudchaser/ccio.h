@@ -69,6 +69,7 @@
 
 typedef struct __packed {
     u32 version;
+    u32 date;
     u64 serial;
     u32 uptime;
     u16 macid;

@@ -6,6 +6,8 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
+#include "./info.h"
+
 static_assert(FSL_FEATURE_SIM_FCFG_HAS_PFLSH_SWAP, "FSL_FEATURE_SIM_FCFG_HAS_PFLSH_SWAP");
 
 #define SIZE(begin, end)    ((u32)(end) - (u32)(begin))
@@ -58,6 +60,9 @@ static user_flash_t user_flsh_ram __section(".user.base") = {
 
 static flash_config_t flash_config;
 static ftfx_config_t *ftfx_config;
+
+const u32 __flsh_date __used = CONFIG_FLASH_TIMESTAMP;
+const u32 __flsh_version __used = CONFIG_FLASH_VERSION;
 
 
 static inline status_t flsh_erase(u32 begin[], u32 end[]) __fast_code;

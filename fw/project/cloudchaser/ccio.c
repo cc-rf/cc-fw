@@ -115,7 +115,10 @@ static void handle_code_status(u8 port, mbuf_t *mbuf)
     mbuf_used(mbuf, sizeof(status));
 
     code_status_t *stat = (code_status_t *) (*mbuf)->data;
-        
+
+    status.version = __flsh_version;
+    status.date = __flsh_date;
+
     status.macid = mac_addr(macs[0]);
     status.cell = phy_cell(mac_phy(macs[0]));
 
@@ -135,11 +138,9 @@ static void handle_code_status(u8 port, mbuf_t *mbuf)
 
     phy_chan_all(mac_phy(macs[0]), status.chan);
 
-    //*stat = status;
-    memcpy(stat, &status, sizeof(status));
+    *stat = status;
 
     write_code_usb(port, CODE_ID_STATUS, mbuf);
-    return;
 }
 
 
