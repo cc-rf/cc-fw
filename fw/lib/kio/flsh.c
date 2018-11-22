@@ -65,9 +65,9 @@ const u32 __flsh_date __used = CONFIG_FLASH_TIMESTAMP;
 const u32 __flsh_version __used = CONFIG_FLASH_VERSION;
 
 
-static inline status_t flsh_erase(u32 begin[], u32 end[]) __fast_code;
-static inline status_t flsh_ewrite(u32 *begin, u32 *end, u32 dest[]) __fast_code;
-static inline status_t flsh_write(u32 *begin, u32 *end, u32 dest[])__fast_code;
+static inline status_t flsh_erase(u32 begin[], u32 end[]);
+static inline status_t flsh_ewrite(u32 *begin, u32 *end, u32 dest[]);
+static inline status_t flsh_write(u32 *begin, u32 *end, u32 dest[]);
 
 static status_t flsh_scpy(const char name[], u32 begin[], u32 end[]);
 

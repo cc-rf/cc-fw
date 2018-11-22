@@ -117,7 +117,7 @@ static void ftfx_copy_run_command_to_ram(uint32_t *ftfxRunCommand);
 #endif /* FTFx_DRIVER_IS_FLASH_RESIDENT */
 
 /*! @brief Internal function Flash command sequence. Called by driver APIs only*/
-static status_t ftfx_command_sequence(ftfx_config_t *config) __fast_code;
+static status_t ftfx_command_sequence(ftfx_config_t *config);
 
 /*! @brief Validates the range and alignment of the given address range.*/
 static status_t ftfx_check_mem_range(ftfx_config_t *config,

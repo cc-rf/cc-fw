@@ -366,7 +366,7 @@ void USB_DeviceApplicationInit(void)
  * @return None.
  */
 #if USB_DEVICE_CONFIG_USE_TASK
-static void USB_DeviceTask(void *handle) __fast_code;
+static void USB_DeviceTask(void *handle);
 static void USB_DeviceTask(void *handle)
 {
     while (1U)
