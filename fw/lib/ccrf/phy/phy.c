@@ -781,7 +781,7 @@ static void phy_task(phy_t phy)
             if (!imm && tx_next) {
                 ts = xTaskGetTickCount();
 
-                if (tx_next > (ts + pdUS_TO_TICKS(10))) {
+                if (tx_next > (ts + pdUS_TO_TICKS(100))) {
                     pkt = NULL;
                     goto _restart_rx;
                 }
