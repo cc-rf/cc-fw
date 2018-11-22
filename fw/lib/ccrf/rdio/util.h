@@ -86,7 +86,7 @@ void rdio_util_set_freq_reg(rdio_t rdio, freq_reg_t reg);
  *
  * @return nearest actual frequency in Hz.
  */
-u32 rdio_util_map_freq(rdio_t rdio, u32 freq, freq_reg_t *reg);
+freq_t rdio_util_map_freq(rdio_t rdio, u32 freq, freq_reg_t *reg);
 
 /**
  * Get the frequency deviation, the basis for channel TX bandwidth.

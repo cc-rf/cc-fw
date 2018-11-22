@@ -142,7 +142,7 @@ void rdio_util_set_freq_reg(rdio_t rdio, freq_reg_t fr)
     rdio_reg_write(rdio, CC1200_FREQ2, (u8 *)&sreg, sizeof(sreg));
 }
 
-u32 rdio_util_map_freq(rdio_t rdio, u32 freq, freq_reg_t *reg)
+freq_t rdio_util_map_freq(rdio_t rdio, freq_t freq, freq_reg_t *reg)
 {
     const u32 div = rdio_util_get_lo_div(rdio) << 16;
 
@@ -153,9 +153,6 @@ u32 rdio_util_map_freq(rdio_t rdio, u32 freq, freq_reg_t *reg)
 
     /* Convert to register format */
     fq.val *= div;
-    /* NOTE: This rounds .5 to the next integer away from zero. However,
-     * IEEE754 arithmetic rounds .5 towards the nearest even integer. */
-    fq.val += CC_XOSC_FREQ >> 1;
     fq.val /= CC_XOSC_FREQ;
 
     if (reg) *reg = fq.reg;
@@ -163,12 +160,12 @@ u32 rdio_util_map_freq(rdio_t rdio, u32 freq, freq_reg_t *reg)
     /* Convert back */
     fq.val &= 0xFFFFFF;
     fq.val *= CC_XOSC_FREQ;
-    /* NOTE: This rounds .5 to the next integer away from zero. However,
-     * IEEE754 arithmetic rounds .5 towards the nearest even integer. */
-    fq.val += div >> 1;
     fq.val /= div;
 
-    return (u32)fq.val;
+    // can calculate FREQOFF register to adjust closer to target here
+    //u32 diff = freq > fq.val ? freq - fq.val : fq.val - freq;
+
+    return (freq_t) fq.val;
 }
 
 u32 rdio_util_get_freq_dev(rdio_t rdio)

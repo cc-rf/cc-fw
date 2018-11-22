@@ -34,7 +34,7 @@ void chan_group_init(chan_group_t *group, chan_id_t hop_table[])
             freq += BAD_FREQ_ADJ;
         }
 
-        /*freq = */rdio_util_map_freq(group->rdio, freq, &group->chan[c].cal.reg.freq);
+        freq = rdio_util_map_freq(group->rdio, freq, &group->chan[c].cal.reg.freq);
         group->chan[c].freq = freq;
         if (hop_table) hop_table[c] = c;
     }
