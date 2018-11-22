@@ -17,6 +17,7 @@ static void handle_code_resp(u8 port, mbuf_t *mbuf);
 static void handle_code_reset(u8 port, mbuf_t *mbuf);
 static void handle_code_flash(u8 port, mbuf_t *mbuf);
 static void handle_code_peer(u8 port, mbuf_t *mbuf);
+static void handle_code_ping(u8 port, mbuf_t *mbuf);
 static void handle_code_uart(mbuf_t *mbuf);
 static void handle_code_rainbow(mbuf_t *mbuf);
 
@@ -80,6 +81,9 @@ void ccio_recv(u8 port, mbuf_t *mbuf)
 
         case CODE_ID_PEER:
             return handle_code_peer(port, mbuf);
+
+        case CODE_ID_PING:
+            return handle_code_ping(port, mbuf);
 
         case CODE_ID_RESET:
             return handle_code_reset(port, mbuf);
@@ -484,6 +488,30 @@ static void handle_code_peer(u8 port, mbuf_t *mbuf)
     mbuf_conv(mbuf, sizeof(code_peer_t) + count * sizeof(net_peer_info_t), (u8 **) &code_peer);
 
     write_code_usb(port, CODE_ID_PEER, mbuf);
+}
+
+
+static void handle_code_ping(u8 port, mbuf_t *mbuf)
+{
+    if (!code_data_check(mbuf, sizeof(code_ping_t))) return;
+
+    code_ping_t *code_ping = (code_ping_t *) (*mbuf)->data;
+
+    net_ping_t ping = {0};
+
+    net_ping(nets[0], code_ping->addr, code_ping->strm, code_ping->size, code_ping->size_resp, code_ping->timeout, &ping);
+
+    mbuf_used(mbuf, sizeof(code_ping_rslt_t));
+
+    code_ping_rslt_t *ping_rslt = (code_ping_rslt_t *) (*mbuf)->data;
+
+    ping_rslt->addr = ping.addr;
+    ping_rslt->tx_count = ping.tx_count;
+    ping_rslt->rtt_usec = (net_time_t) ping.rtt_usec;
+    ping_rslt->meta_locl = ping.meta_locl;
+    ping_rslt->meta_peer = ping.meta_peer;
+
+    write_code_usb(port, CODE_ID_PING_RSLT, mbuf);
 }
 
 

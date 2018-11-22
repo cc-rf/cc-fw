@@ -24,13 +24,17 @@
 #define NET_PEER_EXPIRE_TIME    30u
 #define NET_TIMER_INTERVAL      10u
 
-#define NET_NOTIFY_TRXN_DONE    (1u << 18u)
+#define NET_NOTIFY_TRXN_DONE    (1u<<18u)
+#define NET_NOTIFY_PING_DONE    (1u<<20u)
 
 #define NET_MAC_FLAG_NETLAYER   MAC_FLAG_0
 
 #define NET_CORE_PEER_PORT          1
 #define NET_CORE_PEER_TYPE          2
 #define NET_CORE_PEER_LEAVE_TYPE    3
+#define NET_CORE_PING_PORT          2
+#define NET_CORE_PING_REQ_TYPE      1
+#define NET_CORE_PING_RSP_TYPE      2
 
 
 typedef struct __packed {
@@ -45,6 +49,19 @@ typedef struct txni {
     struct list_head list;
 
 } net_txni_t;
+
+typedef struct __packed {
+    net_size_t size_rsp;
+    bool strm;
+    u8 data[];
+
+} net_ping_req_mesg_t;
+
+typedef struct __packed {
+    pkt_meta_t meta;
+    u8 data[];
+
+} net_ping_rsp_mesg_t;
 
 
 struct net {
@@ -75,14 +92,17 @@ struct net {
     struct list_head txni;
 
     net_stat_t stat;
+    net_ping_t *ping;
+    TaskHandle_t ping_task;
 };
 
 
 static void net_mesg_init(net_path_t path, mbuf_t *mbuf) __ccrf_code __nonnull_all;
 static void net_trxn_resp(net_t net, net_addr_t addr, net_txni_t *txni, mbuf_t *mbuf) __ccrf_code;
-static net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, mbuf_t *mbuf) __ccrf_code;
-static net_size_t net_send_base_mesg(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code;
-static void net_send_base_dgrm(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code;
+static net_size_t net_send_base(net_t net, mac_send_t type, net_path_t path, mbuf_t *mbuf) __ccrf_code;
+static inline net_size_t net_send_base_mesg(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code;
+static inline void net_send_base_dgrm(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code;
+static inline void net_send_base_strm(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code;
 static inline void net_send_base_bcst(net_t net, net_info_t info, mbuf_t *mbuf);
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
 static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta) __ccrf_code;
@@ -266,19 +286,15 @@ net_size_t net_send(net_t net, net_path_t path, mbuf_t *mbuf)
 {
     path.info.mode = 0;
 
-    return net_send_base(net, true, path, mbuf);
+    return net_send_base(net, MAC_SEND_DGRM, path, mbuf);
 }
 
 
 net_size_t net_mesg(net_t net, net_path_t path, mbuf_t *mbuf)
 {
-    if (!path.addr) {
-        return net_send(net, path, mbuf);
-    }
-
     path.info.mode = 0;
 
-    return net_send_base(net, false, path, mbuf);
+    return net_send_base(net, MAC_SEND_MESG, path, mbuf);
 }
 
 
@@ -300,7 +316,7 @@ static void stat_tx_add(net_t net, net_size_t size, mac_size_t rslt)
 }
 
 
-net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, mbuf_t *mbuf)
+net_size_t net_send_base(net_t net, mac_send_t type, net_path_t path, mbuf_t *mbuf)
 {
     if (*mbuf && (*mbuf)->used > NET_SEND_MAX) {
         net_trace_warn("send size too big: %u > %u", (*mbuf)->used, NET_SEND_MAX);
@@ -311,18 +327,19 @@ net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, mbuf_t *mbuf)
 
     if (((*mbuf)->used - sizeof(net_mesg_t)) > NET_SEND_MAX) {
         net_trace_warn("send size too big: %u > %u", (*mbuf)->used, NET_SEND_MAX);
+        mbuf_popf(mbuf, sizeof(net_mesg_t), NULL);
         return 0;
     }
 
     if (path.addr == MAC_ADDR_BCST)
-        dgrm = true;
+        type = MAC_SEND_DGRM;
 
-    mac_size_t sent = mac_send(net->mac.mac, !dgrm ? MAC_SEND_MESG : MAC_SEND_DGRM, NET_MAC_FLAG_NETLAYER, path.addr, *mbuf, true);
+    mac_size_t sent = mac_send(net->mac.mac, type, NET_MAC_FLAG_NETLAYER, path.addr, *mbuf, type != MAC_SEND_STRM);
 
     if (!(((net_mesg_t *) (*mbuf)->data)->info.mode & NET_MODE_FLAG_CORE))
         stat_tx_add(net, (net_size_t) (*mbuf)->used - sizeof(net_mesg_t), sent);
 
-    if (!dgrm && sent) {
+    if (type == MAC_SEND_MESG && sent) {
         // was acked, add to table
         net_peer_update(net, path.addr, mac_meta(net->mac.mac));
     }
@@ -335,13 +352,21 @@ net_size_t net_send_base(net_t net, bool dgrm, net_path_t path, mbuf_t *mbuf)
 
 static net_size_t net_send_base_mesg(net_t net, net_path_t path, mbuf_t *mbuf)
 {
-    return net_send_base(net, false, path, mbuf);
+    return net_send_base(net, MAC_SEND_MESG, path, mbuf);
 }
+
 
 static void net_send_base_dgrm(net_t net, net_path_t path, mbuf_t *mbuf)
 {
-    net_send_base(net, true, path, mbuf);
+    net_send_base(net, MAC_SEND_DGRM, path, mbuf);
 }
+
+
+static void net_send_base_strm(net_t net, net_path_t path, mbuf_t *mbuf)
+{
+    net_send_base(net, MAC_SEND_STRM, path, mbuf);
+}
+
 
 static void net_send_base_bcst(net_t net, net_info_t info, mbuf_t *mbuf)
 {
@@ -443,6 +468,73 @@ static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t ac
 }
 
 
+bool net_ping(net_t net, net_addr_t addr, bool strm, net_size_t size, net_size_t size_resp, net_time_t timeout, net_ping_t *rslt)
+{
+    rslt->addr = addr;
+
+    if (addr == NET_ADDR_BCST) return false;
+    if ((size + sizeof(net_mesg_t) + sizeof(net_ping_req_mesg_t)) > NET_SEND_MAX) return false;
+    if ((size_resp + sizeof(net_mesg_t) + sizeof(net_ping_req_mesg_t)) > NET_SEND_MAX) return false;
+    if (!timeout || (timeout >= portMAX_DELAY)) return false;
+
+    u32 notify;
+
+    const net_path_t path = {
+            .addr = addr,
+            .info = {
+                    .mode = NET_MODE_FLAG_CORE,
+                    .port = NET_CORE_PING_PORT,
+                    .type = NET_CORE_PING_REQ_TYPE
+            }
+    };
+
+    net->ping = rslt;
+
+    mbuf_t mbuf = mbuf_make(
+            sizeof(net_mesg_t) + sizeof(net_ping_req_mesg_t) + size,
+            sizeof(net_ping_req_mesg_t) + size,
+            NULL
+    );
+
+    net_ping_req_mesg_t *ping_req = (net_ping_req_mesg_t *) mbuf->data;
+
+    ping_req->size_rsp = size_resp;
+    ping_req->strm = strm;
+
+    if (size) memset(ping_req->data, 0xA5, size);
+
+    net->ping_task = xTaskGetCurrentTaskHandle();
+
+    net_time_t tx_time = rdio_util_get_tx_time(
+            phy_rdio(mac_phy(net_mac(net))),
+            sizeof(net_mesg_t) + sizeof(net_ping_req_mesg_t) + size + MAC_PKT_OVERHEAD + 2/*phy: cell, flag*/
+    );
+
+    rslt->rtt_usec = ccrf_clock() + tx_time;
+
+    rslt->tx_count = net_send_base(net, strm ? MAC_SEND_STRM : MAC_SEND_DGRM, path, &mbuf);
+
+    do {
+        if (!xTaskNotifyWait(NET_NOTIFY_PING_DONE, NET_NOTIFY_PING_DONE, &notify, pdMS_TO_TICKS(timeout))) {
+
+            net->ping = NULL;
+            net->ping_task = NULL;
+
+            notify = 0;
+
+            rslt->rtt_usec = 0;
+
+            break;
+        }
+        
+    } while (!(notify & NET_NOTIFY_PING_DONE));
+    
+    mbuf_free(&mbuf);
+    
+    return notify != 0;
+}
+
+
 static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta)
 {
     if (flag != NET_MAC_FLAG_NETLAYER) {
@@ -529,9 +621,65 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
                 break;
 
             }
-    }
+            
+        break;
+        
+        case NET_CORE_PING_PORT:
+            
+            switch (mesg->info.type) {
+                
+                case NET_CORE_PING_REQ_TYPE: {
+                                        
+                    net_size_t size_rsp = ((net_ping_req_mesg_t *) (*mbuf)->data)->size_rsp;
+                    bool strm = ((net_ping_req_mesg_t *) (*mbuf)->data)->strm;
+                    
+                    mbuf_used(mbuf, sizeof(net_ping_rsp_mesg_t) + size_rsp);
 
-    return;
+                    net_ping_rsp_mesg_t *ping_rsp = (net_ping_rsp_mesg_t *) (*mbuf)->data;
+
+                    ping_rsp->meta = meta;
+
+                    if (size_rsp) memset(ping_rsp->data, 0x5A, size_rsp);
+
+                    const net_path_t path = {
+                            .addr = addr,
+                            .info = {
+                                    .mode = NET_MODE_FLAG_CORE,
+                                    .port = NET_CORE_PING_PORT,
+                                    .type = NET_CORE_PING_RSP_TYPE
+                            }
+                    };
+
+                    net_send_base(net, strm ? MAC_SEND_STRM : MAC_SEND_DGRM, path, mbuf);
+
+                }
+                break;
+                
+                case NET_CORE_PING_RSP_TYPE: {
+
+                    if (net->ping && addr == net->ping->addr) {
+                        net_time_t rx_time = rdio_util_get_tx_time(
+                                phy_rdio(mac_phy(net_mac(net))),
+                                sizeof(net_mesg_t) + (*mbuf)->used + MAC_PKT_OVERHEAD + 2/*phy: cell, flag*/
+                        );
+
+                        net->ping->rtt_usec = (ccrf_clock() - rx_time) - net->ping->rtt_usec;
+                        net->ping->meta_locl = meta;
+                        net->ping->meta_peer = ((net_ping_rsp_mesg_t *) (*mbuf)->data)->meta;
+                        net->ping = NULL;
+
+                        if (net->ping_task) {
+                            xTaskNotify(net->ping_task, NET_NOTIFY_PING_DONE, eSetBits);
+                            net->ping_task = NULL;
+                        }
+                    }
+
+                }
+                break;
+            }
+            
+        break;
+    }
 }
 
 

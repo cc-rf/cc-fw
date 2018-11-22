@@ -44,6 +44,8 @@
 #define CODE_ID_RESP            8
 #define CODE_ID_EVNT            9
 #define CODE_ID_PEER            10
+#define CODE_ID_PING            22
+#define CODE_ID_PING_RSLT       22
 #define CODE_ID_RESET           17
 #define CODE_ID_FLASH           21
 #define CODE_ID_FLASH_STAT      21
@@ -220,6 +222,24 @@ typedef struct __packed {
     net_peer_info_t peer[];
 
 } code_peer_t;
+
+typedef struct __packed {
+    net_addr_t addr;
+    net_time_t timeout;
+    net_size_t size;
+    net_size_t size_resp;
+    bool strm;
+
+} code_ping_t;
+
+typedef struct __packed {
+    net_addr_t addr;
+    net_size_t tx_count;
+    net_time_t rtt_usec;
+    pkt_meta_t meta_locl;
+    pkt_meta_t meta_peer;
+
+} code_ping_rslt_t;
 
 typedef struct __packed {
     net_addr_t addr;
