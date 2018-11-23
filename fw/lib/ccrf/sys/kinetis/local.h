@@ -4,7 +4,7 @@
 
 #if BOARD_CLOUDCHASER
 
-    #define CCRF_CONFIG_RDIO_COUNT      1 //2
+    #define CCRF_CONFIG_RDIO_COUNT      1
 
     #define ISR_KINETIS_HAVE_PORTC
     #define ISR_KINETIS_HAVE_PORTD

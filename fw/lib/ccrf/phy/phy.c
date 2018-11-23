@@ -24,7 +24,7 @@
 #define phy_assert          ccrf_assert
 
 #if PHY_CHAN_COUNT == 25
-    #define FREQ_BASE       902437000u
+    #define FREQ_BASE       902437000u // 902436992u would match the exact resulting register setting
     #define FREQ_BW         1010000u
     #define CHAN_TIME       40000u
 #elif PHY_CHAN_COUNT == 50
