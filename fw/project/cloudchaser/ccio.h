@@ -2,6 +2,7 @@
 
 #include <ccrf/net.h>
 #include <usr/serf.h>
+#include <kio/flsh.h>
 #include "cloudchaser.h"
 
 #if FABI
@@ -10,6 +11,7 @@
 
 
 #define CCIO_PORT               0x01E0
+#define CCIO_FLASH              0x03
 #define CCIO_RBOW               0x0A
 #define CCIO_LED                0x0B
 #define CCIO_UART               0x0D
@@ -49,6 +51,8 @@
 #define CODE_ID_RESET           17
 #define CODE_ID_FLASH           21
 #define CODE_ID_FLASH_STAT      21
+#define CODE_ID_FOTA            23
+#define CODE_ID_FOTA_STAT       23
 #define CODE_ID_UART            26
 #define CODE_ID_LED             27
 #define CODE_ID_RAINBOW         29
@@ -129,15 +133,8 @@ typedef struct __packed {
 
 } code_reset_t;
 
-typedef struct __packed {
-    struct {
-        u32 header;
-        u32 user_rom;
-        u32 fast_code;
-        u32 text;
-        u32 data;
-
-    } size;
+typedef struct {
+    flsh_size_t size;
 
     u8 data[];
 
@@ -147,6 +144,16 @@ typedef struct __packed {
     s32 status;
 
 } code_flash_stat_t;
+
+typedef struct __packed {
+    net_addr_t addr;
+
+} code_fota_t;
+
+typedef struct __packed {
+    bool success;
+
+} code_fota_stat_t;
 
 typedef struct __packed {
     u16 addr;
@@ -264,6 +271,9 @@ extern phy_cell_t ccrf_cell_flsh;
 
 void ccio_init(net_t nets[], mac_t macs[]) __nonnull_all;
 void ccio_recv(u8 port, mbuf_t *mbuf) __nonnull_all;
+
+void ccio_net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf);
+bool ccio_fota(net_t net, net_addr_t addr);
 
 void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mbuf_t *mbuf, pkt_meta_t meta);
 void write_code_recv(net_path_t path, net_addr_t dest, mbuf_t *mbuf);

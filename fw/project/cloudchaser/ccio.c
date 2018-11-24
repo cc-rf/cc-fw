@@ -16,6 +16,7 @@ static void handle_code_trxn(u8 port, mbuf_t *mbuf);
 static void handle_code_resp(u8 port, mbuf_t *mbuf);
 static void handle_code_reset(u8 port, mbuf_t *mbuf);
 static void handle_code_flash(u8 port, mbuf_t *mbuf);
+static void handle_code_fota(u8 port, mbuf_t *mbuf);
 static void handle_code_peer(u8 port, mbuf_t *mbuf);
 static void handle_code_ping(u8 port, mbuf_t *mbuf);
 static void handle_code_uart(mbuf_t *mbuf);
@@ -90,6 +91,9 @@ void ccio_recv(u8 port, mbuf_t *mbuf)
 
         case CODE_ID_FLASH:
             return handle_code_flash(port, mbuf);
+
+        case CODE_ID_FOTA:
+            return handle_code_fota(port, mbuf);
 
         case CODE_ID_UART:
             return handle_code_uart(mbuf);
@@ -389,6 +393,8 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
 
     if (!code_data_check(mbuf, sizeof(code_flash_t) + total)) return;
 
+    if (total != code_flash->size.total) return;
+
     struct mbuf mbuf_flash = mbuf_view(
             *mbuf,
             sizeof(code_flash_t),
@@ -431,13 +437,7 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
 
     status_t status;
 
-    status = flsh_updt_init(
-            mbuf_flash_header.used,
-            mbuf_flash_user.used,
-            mbuf_flash_code.used,
-            mbuf_flash_text.used,
-            mbuf_flash_data.used
-    );
+    status = flsh_updt_init(&code_flash->size);
 
     if (!status) {
         board_trace("done.");
@@ -470,6 +470,22 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
         vTaskDelay(pdMS_TO_TICKS(100));
         NVIC_SystemReset();
     }
+}
+
+
+static void handle_code_fota(u8 port, mbuf_t *mbuf)
+{
+    if (!code_data_check(mbuf, sizeof(code_fota_t))) return;
+
+    net_addr_t addr = ((code_fota_t *) (*mbuf)->data)->addr;
+
+    mbuf_used(mbuf, sizeof(code_fota_stat_t));
+
+    code_fota_stat_t *fota_stat = (code_fota_stat_t *) (*mbuf)->data;
+
+    fota_stat->success = ccio_fota(nets[0], addr);
+
+    write_code_usb(port, CODE_ID_FOTA_STAT, mbuf);
 }
 
 
@@ -575,6 +591,53 @@ static void handle_code_led(mbuf_t *mbuf)
 }
 
 #endif
+
+
+void ccio_net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf)
+{
+    static mbuf_t mbuf_flash = NULL;
+
+    if (path.info.port != CCIO_PORT) return;
+
+    switch (path.info.type) {
+        case CCIO_FLASH:
+            if (!mbuf_flash) {
+                mbuf_flash = *mbuf;
+                *mbuf = NULL;
+
+                // first message, contains header
+                code_flash_t *code_flash = (code_flash_t *) mbuf_flash->data;
+
+                mbuf_fits(&mbuf_flash, sizeof(code_flash_t) + code_flash->size.total);
+
+                board_trace_f("first part: size=%u used=%u", mbuf_flash->size, mbuf_flash->used);
+            } else {
+                mbuf_extd(&mbuf_flash, mbuf);
+                board_trace_f("new part: size=%u used=%u (+%u)", mbuf_flash->size, mbuf_flash->used, (*mbuf)->used);
+
+                if (mbuf_flash->used == mbuf_flash->size) {
+                    handle_code_flash(0xFF, &mbuf_flash);
+                    mbuf_free(&mbuf_flash);
+                }
+            }
+
+            break;
+    }
+}
+
+
+bool ccio_fota(net_t net, net_addr_t addr)
+{
+    const net_path_t path = {
+            .addr = addr,
+            .info = {
+                    .port = CCIO_PORT,
+                    .type = CCIO_FLASH
+            }
+    };
+
+    return flsh_fota(net, path);
+}
 
 
 static void write_code_usb(u8 port, u8 code, mbuf_t *mbuf)

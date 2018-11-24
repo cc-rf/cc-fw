@@ -200,11 +200,15 @@ void cloudchaser_main(void)
 }
 
 
-static void net_recv(net_t net __unused, net_path_t path, net_addr_t dest, mbuf_t *mbuf)
+static void net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf)
 {
     switch (path.info.port) {
         case CCIO_PORT:
             switch (path.info.type) {
+                case CCIO_FLASH:
+                    ccio_net_recv(net, path, dest, mbuf);
+                    return;
+
                 case CCIO_RBOW:
                     rainbow();
                     return;

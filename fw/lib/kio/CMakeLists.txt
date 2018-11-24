@@ -44,6 +44,7 @@ target_compile_definitions(
 
 target_link_libraries(
         ${NAME}
+        PUBLIC ccrf # for FOTA
         PUBLIC usr
         PUBLIC fw_board
         PUBLIC kinetis_sdk

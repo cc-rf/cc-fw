@@ -259,7 +259,74 @@ status_t flsh_user_cmit(void)
 }
 
 
-status_t flsh_updt_init(size_t size_header, size_t size_user_rom, size_t size_fast_code, size_t size_text, size_t size_data)
+bool flsh_fota(net_t net, net_path_t path)
+{
+    const static size_t PART_SIZE = 0x1000;
+
+    if (path.addr == NET_ADDR_BCST || path.addr == NET_ADDR_INVL)
+        return false;
+
+    flsh_size_t size = {
+            .header = SIZE(__flash_header_begin, __flash_header_end),
+            .user_rom = SIZE(__user_flash_init_base, __user_flash_init_end),
+            .fast_code = SIZE(__fast_text_begin, __fast_text_end),
+            .text = SIZE(__text_begin, __text_end),
+            .data = SIZE(__DATA_ROM, __DATA_END)
+    };
+
+    size.total = size.header + size.user_rom + size.fast_code + size.text + size.data;
+
+    mbuf_t mbuf = mbuf_make(size.total + sizeof(flsh_size_t), sizeof(flsh_size_t), (u8 *) &size);
+
+    mbuf_used(&mbuf, mbuf->size);
+
+    u8 *data = mbuf->data + sizeof(flsh_size_t);
+
+    memcpy(data, __flash_header_begin, size.header);
+
+    data += size.header;
+
+    memcpy(data, __user_flash_init_base, size.user_rom);
+
+    data += size.user_rom;
+
+    memcpy(data, __fast_text_begin, size.fast_code);
+
+    data += size.fast_code;
+
+    memcpy(data, __text_begin, size.text);
+
+    data += size.text;
+
+    memcpy(data, __DATA_ROM, size.data);
+
+    mbuf_t mbuf_part = mbuf_alloc(PART_SIZE, NULL);
+
+    size_t size_part;
+
+    do {
+        size_part = MIN(mbuf->used, PART_SIZE);
+
+        mbuf_used(&mbuf_part, size_part);
+        mbuf_popf(&mbuf, size_part, mbuf_part->data);
+
+        if (!net_mesg(net, path, &mbuf_part)) {
+            board_trace("fota: tx failed!");
+            break;
+        }
+
+    } while (mbuf->used);
+
+    bool success = !mbuf->used;
+
+    mbuf_free(&mbuf_part);
+    mbuf_free(&mbuf);
+
+    return success;
+}
+
+
+status_t flsh_updt_init(flsh_size_t *size)
 {
     status_t status = 0;
 
@@ -270,16 +337,16 @@ status_t flsh_updt_init(size_t size_header, size_t size_user_rom, size_t size_fa
     {
         //if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP(__all_rom_end));
 
-        if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP(OFFSET(__flash_header_begin, size_header)));
-        if (!status) status = flsh_erase(SWAP(__user_flash_base), SWAP(OFFSET(__user_flash_base, size_user_rom)));
-        if (!status) status = flsh_erase(SWAP(__user_flash_init_base), SWAP(OFFSET(__user_flash_init_base, size_user_rom)));
-        if (!status) status = flsh_erase(SWAP(__fast_text_begin), SWAP(OFFSET(__fast_text_begin, size_fast_code)));
+        if (!status) status = flsh_erase(SWAP(__flash_header_begin), SWAP(OFFSET(__flash_header_begin, size->header)));
+        if (!status) status = flsh_erase(SWAP(__user_flash_base), SWAP(OFFSET(__user_flash_base, size->user_rom)));
+        if (!status) status = flsh_erase(SWAP(__user_flash_init_base), SWAP(OFFSET(__user_flash_init_base, size->user_rom)));
+        if (!status) status = flsh_erase(SWAP(__fast_text_begin), SWAP(OFFSET(__fast_text_begin, size->fast_code)));
 
-        u32 text_end = (u32)OFFSET(__text_begin, size_text);
+        u32 text_end = (u32)OFFSET(__text_begin, size->text);
         u32 *data_begin = (u32 *) (text_end % 16 ? text_end + 16 - (text_end % 16) : text_end);
 
         if (!status) status = flsh_erase(SWAP(__text_begin), SWAP(text_end));
-        if (!status) status = flsh_erase(SWAP(data_begin), SWAP(OFFSET(data_begin, size_data)));
+        if (!status) status = flsh_erase(SWAP(data_begin), SWAP(OFFSET(data_begin, size->data)));
     }
     delay();
     boot_clock_run_hs_oc();
