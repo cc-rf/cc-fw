@@ -542,6 +542,7 @@ static void phy_task(phy_t phy)
                 switch (ms) {
                     case CC1200_MARC_STATUS1_RX_FINISHED:
                         phy_recv(phy);
+                        tx_next = 0;
                         if (pkt) goto _cca_fail;
                         break;
 
