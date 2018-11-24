@@ -815,10 +815,10 @@ static void net_peer_expire(net_t net, net_time_t time)
     net_peer_t *peer, *temp;
 
     list_for_each_entry_safe(peer, temp, &net->peer, item) {
+
         if (peer->info.peer && (!time || (time - peer->info.last) >= NET_PEER_EXPIRE_TIME)) {
-            net_addr_t peer_addr = peer->info.peer;
             net_peer_remove(net, peer, NET_EVENT_PEER_EXP);
-            net_peer_delete(net, peer_addr);
+            // TODO: recursively expire peers of peers as well?
         }
     }
 }
