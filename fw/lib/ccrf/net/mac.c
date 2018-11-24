@@ -23,7 +23,6 @@
 
 #define MAC_RXQ_SIZE            16
 
-#define MAC_TX_TASK_STACK_SIZE  ((768) / sizeof(StackType_t))
 #define MAC_RX_TASK_STACK_SIZE  ((1400) / sizeof(StackType_t))
 
 #define MAC_NOTIFY_ACK          (1u<<10)

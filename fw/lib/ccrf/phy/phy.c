@@ -37,7 +37,7 @@
 
 #define PHY_PKT_FLAG_SYNC       ((u8) 0x01)   // Is a sync packet. Same value as local block flag, as this is non-local.
 
-#define PHY_TXQ_LEN             16
+#define PHY_TXQ_LEN             8
 
 #define PHY_TASK_STACK_SIZE     ((1200) / sizeof(StackType_t))
 
