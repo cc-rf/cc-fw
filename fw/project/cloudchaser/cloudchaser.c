@@ -143,8 +143,6 @@ void cloudchaser_main(void)
             serial_hi, serial_lo, net_config.phy.cell, status.macid
     );
 
-    rainbow();
-
     led_off(LED_BLUE_0);
     led_off(LED_BLUE_1);
 
@@ -190,6 +188,8 @@ void cloudchaser_main(void)
     #if FABI
     fabi_init();
     #endif
+
+    rainbow();
 
     phy_t phy = mac_phy(macs[0]);
 
@@ -270,10 +270,10 @@ static void sync_hook(chan_id_t chan)
 
         #if PHY_CHAN_COUNT == 50
         // Assumption that makes this equivalent: channel time is halved
-        led_set(LED_0, (chan == 11*2) ? LED_ON : LED_OFF);
-        led_set(LED_2, (chan == 13*2) ? LED_ON : LED_OFF);
-        led_set(LED_1, (chan == 15*2) ? LED_ON : LED_OFF);
-        led_set(LED_3, (chan == 17*2) ? LED_ON : LED_OFF);
+        led_set(LED_0, (u8) ((chan == 11*2) ? 2 : LED_OFF));
+        led_set(LED_2, (u8) ((chan == 13*2) ? 2 : LED_OFF));
+        led_set(LED_1, (u8) ((chan == 15*2) ? 2 : LED_OFF));
+        led_set(LED_3, (u8) ((chan == 17*2) ? 2 : LED_OFF));
         #else
         led_set(LED_0, (u8) ((chan == 11) ? 2 : LED_OFF));
         led_set(LED_2, (u8) ((chan == 13) ? 2 : LED_OFF));
