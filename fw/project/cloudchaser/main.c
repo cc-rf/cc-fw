@@ -78,7 +78,7 @@ int main(void)
     pin_flag_init();
 
     xTaskCreateStatic(
-            main_task, "main", MAIN_TASK_STACK_SIZE, NULL, TASK_PRIO_DEFAULT,
+            main_task, "main", MAIN_TASK_STACK_SIZE, NULL, TASK_PRIO_HIGH - 2,
             main_task_stack, &main_task_static
     );
 
