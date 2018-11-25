@@ -773,7 +773,7 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
 {
     net_peer_t *peer = net_peer_get(net, addr, true);
     net_time_t now;
-    net_peer_t *peeri;
+    net_peer_t *peeri, *temp;
     bool found;
 
     now = net_time();
@@ -781,6 +781,22 @@ static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, n
     bool new = (now - peer->info.last) < (NET_TIMER_INTERVAL / 2);
 
     peer->info.last = now;
+
+    list_for_each_entry_safe(peeri, temp, &peer->peer, item) {
+        found = false;
+
+        for (net_size_t pi = 0; pi < count; ++pi) {
+            if ((peeri->info.node == peers[pi].node) && (peeri->info.peer == peers[pi].peer)) {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            list_del(&peeri->item);
+            vPortFree(peeri);
+        }
+    }
 
     for (net_size_t pi = 0; pi < count; ++pi) {
         found = false;
