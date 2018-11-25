@@ -142,7 +142,7 @@ static void __unused rainbow_step(u16 start, u16 end)
 }
 
 
-static void sync_step(u16 chan)
+static void __unused sync_step(u16 chan)
 {
     const static TickType_t delay = pdMS_TO_TICKS(0);
     const static u16 resolution = PHY_CHAN_COUNT / (ARRAY_SIZE(sync_colors) - 1);

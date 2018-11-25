@@ -669,11 +669,11 @@ static void phy_task(phy_t phy)
                         if (!phy->cycle) {
                             // First time, stay for five rounds, do not send first sync however
                             sync_needed = false;
-                            phy->stay = PHY_CHAN_COUNT * (PHY_SYNC_CYCLE_COUNT / 2);
+                            phy->stay = PHY_CHAN_COUNT * (PHY_SYNC_CYCLE_COUNT / 2) - 1;
                             phy->cycle = PHY_SYNC_CYCLE_COUNT;
 
                         } else if (!--phy->cycle) {
-                            phy->stay = PHY_CHAN_COUNT;
+                            phy->stay = PHY_CHAN_COUNT - 1;
                             phy->cycle = PHY_SYNC_CYCLE_COUNT;
                         } else {
                             phy->stay = 0;
@@ -698,7 +698,7 @@ static void phy_task(phy_t phy)
                             phy_trace_info("sync loss: lead c=%u", phy_chan(phy));
 
                             phy->boss = true;
-                            phy->stay = PHY_CHAN_COUNT; // TODO: Line up by staying only remaining channels. Need to add this to the sync packet.
+                            phy->stay = PHY_CHAN_COUNT - 1; // TODO: Line up by staying only remaining channels. Need to add this to the sync packet.
                             phy->cycle = PHY_SYNC_CYCLE_COUNT;
                             ts = ccrf_clock();
                             phy->sync_time = ts;
@@ -713,7 +713,7 @@ static void phy_task(phy_t phy)
                     if (!phy->boss && !phy->chan.cur) {
 
                         if ((ts - phy->sync_time) >= PHY_SYNC_DROP_TIME) {
-                            phy->stay = PHY_CHAN_COUNT;
+                            phy->stay = PHY_CHAN_COUNT - 1;
                             phy->cycle = (u8) (1 + RNGA_ReadEntropy(RNG) % (PHY_CHAN_COUNT - 1));
                             phy_trace_info("sync loss: stay to %u", phy->cycle);
 
@@ -954,7 +954,7 @@ static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, rssi_t rssi, lqi_t lqi)
         const phy_sync_pkt_t *const spkt = (phy_sync_pkt_t *) pkt;
 
         if (spkt->magic == PHY_SYNC_MAGIC) {
-            phy->stay = spkt->stay ? (chan_id_t)PHY_CHAN_COUNT : (chan_id_t)0u;
+            phy->stay = spkt->stay ? (chan_id_t)PHY_CHAN_COUNT - (chan_id_t)1: (chan_id_t)0;
             phy->sync_time = ccrf_clock();
             ccrf_timer_restart(phy->hop_timer);
 
