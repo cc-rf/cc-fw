@@ -279,7 +279,7 @@ chan_id_t phy_chan_real(phy_t phy, freq_t *freq)
 chan_id_t phy_chan(phy_t phy)
 {
     return phy->stay
-        ? (chan_id_t)(PHY_CHAN_COUNT - (phy->stay % PHY_CHAN_COUNT))
+        ? (chan_id_t)(PHY_CHAN_COUNT - (phy->stay % PHY_CHAN_COUNT) - 1)
         : (chan_id_t)phy->chan.cur
     ;
 }
