@@ -66,14 +66,20 @@ static inline void led_toggle(led_t led)
 }
 
 
-static u8 led_interp(u8 begin, u8 end, u16 resolution, u16 value)
+static u8 led_interp(u8 begin, u8 end, u16 resolution, float scale, u16 value)
 {
-    if (begin > end) return led_interp(end, begin, resolution, resolution - value);
+    if (resolution <= 1) {
+        if (scale && scale != 1.0f) return (u8) (scale * (!value ? begin : end));
+
+        return !value ? begin : end;
+    }
 
     float r = 1.0f / resolution;
-    r *= value * (end - begin) + (resolution >> 1);
+    r *= value * (end - begin) + ((float) resolution / 2);
 
-    return begin + (u8)r;
+    if (scale && scale != 1.0f) return (u8) (scale * (u8) (begin + r));
+
+    return (u8)(begin + r);
 }
 
 
@@ -96,25 +102,34 @@ static inline void led_rgbw_set(u8 chan, led_rgb_t rgb)
 }
 
 
-static inline void led_rgb_interp(u8 chan, u16 resolution, u16 value, led_rgb_t rgb0, led_rgb_t rgb1)
+static inline void led_rgb_interp(u8 chan, u16 resolution, float scale, u16 value, led_rgb_t rgb0, led_rgb_t rgb1)
 {
     led_rgb_set(
             chan,
-            led_interp(rgb0.r, rgb1.r, resolution, value),
-            led_interp(rgb0.g, rgb1.g, resolution, value),
-            led_interp(rgb0.b, rgb1.b, resolution, value),
-            led_interp(rgb0.w, rgb1.w, resolution, value)
+            led_interp(rgb0.r, rgb1.r, resolution, scale, value),
+            led_interp(rgb0.g, rgb1.g, resolution, scale, value),
+            led_interp(rgb0.b, rgb1.b, resolution, scale, value),
+            led_interp(rgb0.w, rgb1.w, resolution, scale, value)
     );
 }
 
-static inline void led_run_program(u16 resolution, TickType_t delay, const led_rgb_t table[][2], u16 size)
+
+static inline void led_step_program(u16 resolution, float scale, TickType_t delay, const led_rgb_t table[][2], u16 pa, u16 pb)
 {
-    for (u16 pc = 0; pc < (size - 1); ++pc) {
+    for (u16 pc = pa; pc < pb; ++pc) {
         for (u16 i = 0; i <= resolution; ++i) {
-            led_rgb_interp(0, resolution, i, table[pc][0], table[pc+1][0]);
-            led_rgb_interp(1, resolution, i, table[pc][1], table[pc+1][1]);
+            led_rgb_interp(1, resolution, scale, i, table[pc][0], table[pc + 1][0]);
+            led_rgb_interp(0, resolution, scale, i, table[pc][1], table[pc + 1][1]);
             vTaskDelay(delay);
         }
+    }
+}
+
+
+static inline void led_run_program(u16 resolution, float scale, TickType_t delay, const led_rgb_t table[][2], u16 size)
+{
+    for (u16 pc = 0; pc < (size - 1); ++pc) {
+        led_step_program(resolution, scale, delay, table, pc, pc + (u16) 1);
     }
 }
 

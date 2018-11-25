@@ -90,16 +90,73 @@ static const led_rgb_t rainbow_colors[][2] = {
         {{  0,   0,   0,   0}, {  0,   0,   0,   0}},
 };
 
+
+static const led_rgb_t sync_colors[][2] = {
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,  20}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   5}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,  20}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   5}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+        {{   0,   0,   0,   0}, {   0,   0,   0,   0}},
+};
+
 static volatile bool sync_blink = true;
 
 
 void rainbow(void)
 {
-    const TickType_t delay = 0;
-    const u16 resolution = 1000;
+    const static TickType_t delay = 0;
+    const static u16 resolution = 1000;
     sync_blink = false;
-    led_run_program(resolution, delay, rainbow_colors, ARRAY_SIZE(rainbow_colors));
+    led_run_program(resolution, 0.0f, delay, rainbow_colors, ARRAY_SIZE(rainbow_colors));
     sync_blink = true;
+}
+
+
+static void __unused rainbow_step(u16 start, u16 end)
+{
+    const TickType_t delay = 100;
+    const u16 resolution = 10;
+
+    led_step_program(resolution, 0.05f, delay, rainbow_colors, start, end);
+}
+
+
+static void sync_step(u16 chan)
+{
+    const static TickType_t delay = pdMS_TO_TICKS(0);
+    const static u16 resolution = PHY_CHAN_COUNT / (ARRAY_SIZE(sync_colors) - 1);
+
+    if (chan == 0 || (++chan != PHY_CHAN_COUNT)) {
+
+        if (chan == 3) led_set(LED_1, LED_ON);
+        else led_set(LED_1, LED_OFF);
+
+        if (chan == 7) led_set(LED_0, LED_ON);
+        else led_set(LED_0, LED_OFF);
+
+        led_step_program(resolution, 0.0f, delay, sync_colors, chan, (u16) 1 + chan);
+    }
 }
 
 
@@ -275,10 +332,23 @@ static void sync_hook(chan_id_t chan)
         led_set(LED_1, (u8) ((chan == 15*2) ? 2 : LED_OFF));
         led_set(LED_3, (u8) ((chan == 17*2) ? 2 : LED_OFF));
         #else
-        led_set(LED_0, (u8) ((chan == 11) ? 2 : LED_OFF));
-        led_set(LED_2, (u8) ((chan == 13) ? 2 : LED_OFF));
-        led_set(LED_1, (u8) ((chan == 15) ? 2 : LED_OFF));
-        led_set(LED_3, (u8) ((chan == 17) ? 2 : LED_OFF));
+
+        //sync_step(chan);
+
+        led_set(LED_2, (u8) ((chan == 0) ? 10 : LED_OFF));
+
+        //led_set(LED_0, (u8) ((chan == 0) ? 10 : LED_OFF));
+        //led_set(LED_2, (u8) ((chan == 3) ? 10 : LED_OFF));
+        //led_set(LED_1, (u8) ((chan == 5) ? 10 : LED_OFF));
+        //led_set(LED_3, (u8) ((chan == 7) ? 10 : LED_OFF));
+
+
+        /*if (chan > 1) {
+            const u16 step = ARRAY_SIZE(rainbow_colors) / PHY_CHAN_COUNT;
+
+            rainbow_step((chan - 1) * step, chan * step);
+        }*/
+
         #endif
 
         net_stat(nets[0], &stat);
