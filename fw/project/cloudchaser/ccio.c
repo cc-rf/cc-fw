@@ -431,6 +431,8 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
             code_flash->size.data
     );
 
+    net_down(nets[0]);
+
     u32 sanity = ((user_flash_t *) mbuf_flash_user.data)->sanity;
 
     board_trace_r("flash: init update... ");
@@ -467,6 +469,10 @@ static void handle_code_flash(u8 port, mbuf_t *mbuf)
 
     if (!status) {
         board_trace_r("flash: update finished, reboot!\r\n\r\n");
+        vTaskDelay(pdMS_TO_TICKS(100));
+        NVIC_SystemReset();
+    } else {
+        board_trace_r("flash: update failed, reboot anyway!\r\n\r\n");
         vTaskDelay(pdMS_TO_TICKS(100));
         NVIC_SystemReset();
     }

@@ -151,6 +151,7 @@ typedef struct {
 
 
 net_t net_init(net_config_t *config, bool *fail) __nonnull_all;
+void net_down(net_t net) __nonnull_all;
 
 net_time_t net_time(void) __ccrf_code;
 mac_t net_mac(net_t net) __ccrf_code __nonnull_all;

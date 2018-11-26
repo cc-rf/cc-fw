@@ -170,6 +170,16 @@ net_t net_init(net_config_t *config, bool *fail)
 }
 
 
+void net_down(net_t net)
+{
+    // For now, just stop the broadcast timer and leave the network.
+
+    xTimerStop(net->timer, 0);
+
+    net_peer_bcast_leave(net, net->mac.addr);
+}
+
+
 net_time_t net_time(void)
 {
     return CCRF_CLOCK_SEC(ccrf_clock());
@@ -691,10 +701,10 @@ static void net_peer_bcast(net_t net)
 
     net_time_t bcst_diff = now - net->peer_bcast_last;
 
-    if (bcst_diff < 20) return;
+    if (bcst_diff < NET_TIMER_INTERVAL / 2) return;
 
-    if ((now - net->last.recv) < 5 && bcst_diff < 60) return;
-    if ((now - net->last.send) < 5 && bcst_diff < 60) return;
+    if ((now - net->last.recv) < 5 && bcst_diff < (NET_PEER_EXPIRE_TIME - NET_TIMER_INTERVAL)) return;
+    if ((now - net->last.send) < 5 && bcst_diff < (NET_PEER_EXPIRE_TIME - NET_TIMER_INTERVAL)) return;
 
     net->peer_bcast_last = now;
 
