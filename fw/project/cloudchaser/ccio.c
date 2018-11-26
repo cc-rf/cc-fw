@@ -494,7 +494,7 @@ static void handle_code_peer(u8 port, mbuf_t *mbuf)
     net_t net = nets[0];
 
     net_peer_info_t *peers;
-    net_size_t count = net_peers_flat(net, sizeof(code_peer_t), true, &peers);
+    net_size_t count = net_peers_flat(net, sizeof(code_peer_t), &peers);
 
     code_peer_t *code_peer = (code_peer_t *)peers;
 

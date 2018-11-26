@@ -53,16 +53,22 @@ typedef struct __packed {
 typedef struct list_head net_peer_list_t;
 
 typedef struct __packed {
-    net_addr_t node;
+    net_time_t vers;
+    net_time_t date;
+    net_time_t time;
+
+} net_bcst_t;
+
+typedef struct __packed {
     net_addr_t peer;
-    net_time_t last;
     pkt_meta_t meta;
+    net_time_t last;
+    net_bcst_t bcst;
 
 } net_peer_info_t;
 
 typedef struct {
     net_peer_info_t info;
-    net_peer_list_t peer;
     net_peer_list_t item;
 
 } net_peer_t;
@@ -153,7 +159,7 @@ net_addr_t net_addr_set(net_t net, net_addr_t orig, net_addr_t addr) __nonnull_a
 void net_stat(net_t net, net_stat_t *stat) __nonnull_all;
 void net_peers(net_t net, net_peer_list_t **peer) __ccrf_code __nonnull_all;
 void net_peers_wipe(net_t net) __nonnull_all;
-net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list) __ccrf_code __nonnull_all;
+net_size_t net_peers_flat(net_t net, net_size_t extra, net_peer_info_t **list) __ccrf_code __nonnull_all;
 void net_sync(net_t net) __ccrf_code __nonnull_all;
 net_size_t net_send(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code __nonnull((1));
 

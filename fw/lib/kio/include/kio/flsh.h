@@ -10,6 +10,9 @@
 #define FLASH_VERSION       0xFECE5000  // Increment this when adding variables to the .user section.
 
 
+typedef u32 flsh_date_t;
+typedef u32 flsh_version_t;
+
 typedef struct {
     u32 sanity;
     u32 version;
@@ -30,8 +33,8 @@ typedef struct {
 } flsh_size_t;
 
 
-extern const u32 __flsh_date;       // Compile timestamp.
-extern const u32 __flsh_version;    // Git commit id.
+extern const flsh_date_t __flsh_date;       // Compile timestamp.
+extern const flsh_version_t __flsh_version;    // Git commit id.
 
 
 status_t flsh_init(void);

@@ -11,6 +11,7 @@
 #include <task.h>
 #include <queue.h>
 #include <timers.h>
+#include <kio/flsh.h>
 
 
 #define net_trace_info          ccrf_trace_info
@@ -110,8 +111,7 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
 static void net_peer_bcast(net_t net);
 static void net_peer_bcast_leave(net_t net, net_addr_t addr);
 static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add) __ccrf_code;
-static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta) __ccrf_code;
-static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, net_peer_info_t *peers);
+static net_peer_t *net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta) __ccrf_code;
 static void net_peer_expire(net_t net, net_time_t time);
 static bool net_peer_delete(net_t net, net_addr_t addr);
 static void net_peer_remove(net_t net, net_peer_t *peer, net_event_peer_action_t action);
@@ -224,20 +224,16 @@ void net_peers_wipe(net_t net)
 }
 
 
-net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t **list)
+net_size_t net_peers_flat(net_t net, net_size_t extra, net_peer_info_t **list)
 {
     net_size_t count = 0, next = 0, size_peers;
     net_peer_info_t *peers;
-    net_peer_t *peer, *peeri;
+    net_peer_t *peer;
 
     *list = NULL;
 
     list_for_each_entry(peer, &net->peer, item) {
         count++;
-
-        if (all)
-            list_for_each_entry(peeri, &peer->peer, item)
-                count++;
     }
 
     if (!(size_peers = extra + count * sizeof(net_peer_info_t)))
@@ -252,12 +248,6 @@ net_size_t net_peers_flat(net_t net, net_size_t extra, bool all, net_peer_info_t
     list_for_each_entry(peer, &net->peer, item) {
         peers[next] = peer->info;
         peers[next++].last = now - peer->info.last;
-
-        if (all)
-            list_for_each_entry(peeri, &peer->peer, item) {
-                peers[next] = peeri->info;
-                peers[next++].last = now - peeri->info.last;
-            }
     }
 
     return count;
@@ -601,9 +591,12 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
 
                 case NET_CORE_PEER_TYPE: {
 
-                    net_size_t count = (net_size_t) (*mbuf)->used / sizeof(net_peer_info_t);
-                    net_peer_update_list(net, addr,  count, (net_peer_info_t *) (*mbuf)->data);
-                    net_peer_update(net, addr, meta);
+                    net_bcst_t *bcst = (net_bcst_t *) (*mbuf)->data;
+                    net_peer_t *peer;
+
+                    if ((peer = net_peer_update(net, addr, meta))) {
+                        peer->info.bcst = *bcst;
+                    }
                 }
 
                 break;
@@ -652,6 +645,7 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
 
                     net_send_base(net, strm ? MAC_SEND_STRM : MAC_SEND_DGRM, path, mbuf);
 
+                    net_peer_update(net, addr, meta);
                 }
                 break;
                 
@@ -672,6 +666,8 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
                             xTaskNotify(net->ping_task, NET_NOTIFY_PING_DONE, eSetBits);
                             net->ping_task = NULL;
                         }
+
+                        net_peer_update(net, addr, meta);
                     }
 
                 }
@@ -693,23 +689,24 @@ static void net_peer_bcast(net_t net)
 
     net_time_t now = net_time();
 
-    if ((now - net->peer_bcast_last) <= 5) return;
-    if ((now - net->last.recv) < 5) return;
-    if ((now - net->last.send) < 5) return;
+    net_time_t bcst_diff = now - net->peer_bcast_last;
+
+    if (bcst_diff < 20) return;
+
+    if ((now - net->last.recv) < 5 && bcst_diff < 60) return;
+    if ((now - net->last.send) < 5 && bcst_diff < 60) return;
 
     net->peer_bcast_last = now;
 
-    net_peer_info_t *peers;
-    net_size_t count = net_peers_flat(net, 0, false, &peers);
+    mbuf_t mbuf = mbuf_make(sizeof(net_bcst_t), sizeof(net_bcst_t), NULL);
 
-    mbuf_t mbuf = NULL;
+    net_bcst_t *bcst = (net_bcst_t *) mbuf->data;
 
-    if (count) {
-        mbuf = mbuf_wrap(count * sizeof(net_peer_info_t), (u8 **) &peers);
-    }
+    bcst->vers = __flsh_version;
+    bcst->date = __flsh_date;
+    bcst->time = now;
 
     net_send_base_bcst(net, bcst_info, &mbuf);
-
 
     mbuf_free(&mbuf);
 }
@@ -747,11 +744,8 @@ static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add)
 
     memset(peer, 0, sizeof(*peer));
 
-    peer->info.node = net_addr(net);
     peer->info.peer = addr;
     peer->info.last = net_time();
-
-    INIT_LIST_HEAD(&peer->peer);
 
     list_add(&peer->item, &net->peer);
 
@@ -761,68 +755,12 @@ static net_peer_t *net_peer_get(net_t net, net_addr_t addr, bool add)
 }
 
 
-static void net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta)
+static net_peer_t *net_peer_update(net_t net, net_addr_t addr, pkt_meta_t meta)
 {
     net_peer_t *peer = net_peer_get(net, addr, true);
     peer->info.last = net_time();
     peer->info.meta = meta;
-}
-
-
-static void net_peer_update_list(net_t net, net_addr_t addr, net_size_t count, net_peer_info_t *peers)
-{
-    net_peer_t *peer = net_peer_get(net, addr, true);
-    net_time_t now;
-    net_peer_t *peeri, *temp;
-    bool found;
-
-    now = net_time();
-
-    bool new = (now - peer->info.last) < (NET_TIMER_INTERVAL / 2);
-
-    peer->info.last = now;
-
-    list_for_each_entry_safe(peeri, temp, &peer->peer, item) {
-        found = false;
-
-        for (net_size_t pi = 0; pi < count; ++pi) {
-            if ((peeri->info.node == peers[pi].node) && (peeri->info.peer == peers[pi].peer)) {
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            list_del(&peeri->item);
-            vPortFree(peeri);
-        }
-    }
-
-    for (net_size_t pi = 0; pi < count; ++pi) {
-        found = false;
-
-        list_for_each_entry(peeri, &peer->peer, item) {
-            if ((peeri->info.node == peers[pi].node) && (peeri->info.peer == peers[pi].peer)) {
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            peeri = pvPortMalloc(sizeof(net_peer_t));
-
-            INIT_LIST_HEAD(&peeri->peer);
-
-            peeri->info = peers[pi];
-
-            list_add(&peeri->item, &peer->peer);
-        }
-
-        peeri->info.last = now - peers[pi].last/*expected relative*/;
-        peeri->info.meta = peers[pi].meta;
-    }
-
-    if (!new) net_evnt_peer(net, peer->info.peer, NET_EVENT_PEER_UPD);
+    return peer;
 }
 
 
@@ -834,57 +772,34 @@ static void net_peer_expire(net_t net, net_time_t time)
 
         if (peer->info.peer && (!time || (time - peer->info.last) >= NET_PEER_EXPIRE_TIME)) {
             net_peer_remove(net, peer, NET_EVENT_PEER_EXP);
-            // TODO: recursively expire peers of peers as well?
         }
     }
 }
 
 static bool net_peer_delete(net_t net, net_addr_t addr)
 {
-    net_peer_t *peer, *temp, *peeri, *tempi;
-    bool known = false, match;
+    net_peer_t *peer, *temp;
 
-    if (!addr) return known;
+    if (addr == NET_ADDR_BCST || addr == NET_ADDR_INVL || addr == net_addr(net)) return false;
 
     list_for_each_entry_safe(peer, temp, &net->peer, item) {
 
-        match = peer->info.node == addr || peer->info.peer == addr;
-        known |= match;
-
-        list_for_each_entry_safe(peeri, tempi, &peer->peer, item) {
-
-            if (match || peeri->info.node == addr || peeri->info.peer == addr) {
-                match = true;
-                list_del(&peeri->item);
-                vPortFree(peeri);
-            }
-        }
-
-        if (match) {
-            known = true;
+        if (peer->info.peer == addr) {
             net_peer_remove(net, peer, 0);
+            return true;
         }
     }
 
-    return known;
+    return false;
 }
 
 static void net_peer_remove(net_t net, net_peer_t *peer, net_event_peer_action_t action)
 {
-    net_peer_t *peeri, *tempi;
-
     if (peer) {
         net_addr_t peer_addr = peer->info.peer;
 
-        peer->info.node = NET_ADDR_NONE;
         peer->info.peer = NET_ADDR_NONE;
         peer->info.last = NET_ADDR_NONE;
-
-        list_for_each_entry_safe(peeri, tempi, &peer->peer, item) {
-            ccrf_assert(list_empty(&peeri->peer));
-            list_del(&peeri->item);
-            vPortFree(peeri);
-        }
 
         list_del(&peer->item);
         vPortFree(peer);
