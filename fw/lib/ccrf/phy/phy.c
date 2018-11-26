@@ -209,7 +209,6 @@ phy_t phy_init(phy_config_t *config, bool *fail)
     chan_table_reorder(&phy->chan.group, phy->cell, phy->chan.hop_table);
     chan_group_calibrate(&phy->chan.group);
 
-    RNGA_Init(RNG);
     RNGA_Seed(RNG, phy->cell ^ RNGA_ReadEntropy(RNG));
 
     if (!(phy->hop_timer = ccrf_timer_init(CHAN_TIME, (ccrf_timer_handler_t) hop_timer_handler, phy))) {
@@ -667,9 +666,14 @@ static void phy_task(phy_t phy)
                         sync_needed = !phy->diag.nosync;
 
                         if (!phy->cycle) {
-                            // First time, stay for five rounds, do not send first sync however
+                            // First time, stay for two to five rounds, do not send first syncs however
                             sync_needed = false;
-                            phy->stay = PHY_CHAN_COUNT * (PHY_SYNC_CYCLE_COUNT / 2) - 1;
+
+                            phy->stay = (chan_id_t) PHY_CHAN_COUNT * (chan_id_t) (
+                                    (RNGA_ReadEntropy(RNG) % ((PHY_SYNC_CYCLE_COUNT / 3) + 1))
+                                    + (PHY_SYNC_CYCLE_COUNT / 5)
+                                ) - (chan_id_t) 1;
+
                             phy->cycle = PHY_SYNC_CYCLE_COUNT;
 
                         } else if (!--phy->cycle) {
@@ -682,10 +686,6 @@ static void phy_task(phy_t phy)
                 } else if (!--phy->stay) {
 
                     goto _stay_end;
-                }
-                else if (phy->boss && !(phy->stay % PHY_CHAN_COUNT)) {
-
-                    sync_needed = !phy->diag.nosync;
                 }
 
                 if (phy->sync) {
@@ -761,6 +761,7 @@ static void phy_task(phy_t phy)
             sync_needed = false;
 
             phy_assert(!pkt, "sync with pending pkt");
+
             pkt = (rf_pkt_t *) &pkt_sync;
 
             pkt_sync.hdr.cell = phy->cell;
@@ -960,7 +961,7 @@ static void phy_recv_packet(phy_t phy, rf_pkt_t *pkt, rssi_t rssi, lqi_t lqi)
 
             if (phy->boss) {
                 phy->boss = false;
-                phy_trace_verbose("sync: follow");
+                phy_trace_info("sync: follow");
             }
         }
 

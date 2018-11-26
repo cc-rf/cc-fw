@@ -149,6 +149,9 @@ mac_t mac_init(mac_config_t *config, bool *fail)
             .recv_param = mac
     };
 
+    RNGA_Init(RNG);
+    RNGA_Seed(RNG, mac->addr ^ RNGA_ReadEntropy(RNG));
+
     mac->phy = phy_init(&phy_config, fail);
 
     if (*fail) goto _fail;

@@ -11,6 +11,7 @@
 #include <task.h>
 #include <queue.h>
 #include <timers.h>
+#include <fsl_rnga.h>
 #include <kio/flsh.h>
 
 
@@ -156,7 +157,7 @@ net_t net_init(net_config_t *config, bool *fail)
             pdTRUE, net, net_timer, &net->timer_static
     );
 
-    xTimerStart(net->timer, 0);
+    xTimerStart(net->timer, portMAX_DELAY);
 
     INIT_LIST_HEAD(&net->txni);
 
@@ -821,8 +822,17 @@ static void net_peer_remove(net_t net, net_peer_t *peer, net_event_peer_action_t
 
 static void net_timer(TimerHandle_t timer)
 {
+    static bool first = true;
+
+    if (first) {
+        first = false;
+        vTaskDelay(pdMS_TO_TICKS(RNGA_ReadEntropy(RNG) % (1000 * NET_TIMER_INTERVAL + 1)));
+        xTimerReset(timer, portMAX_DELAY);
+    }
+
     net_t net = pvTimerGetTimerID(timer);
     net_time_t now = net_time();
+
     net_peer_expire(net, now);
     net_peer_bcast(net);
 }
