@@ -331,7 +331,7 @@ net_size_t net_send_base(net_t net, mac_send_t type, net_path_t path, mbuf_t *mb
         return 0;
     }
 
-    if (path.addr == MAC_ADDR_BCST)
+    if (type == MAC_SEND_MESG && path.addr == MAC_ADDR_BCST)
         type = MAC_SEND_DGRM;
 
     mac_size_t sent = mac_send(net->mac.mac, type, NET_MAC_FLAG_NETLAYER, path.addr, *mbuf, type != MAC_SEND_STRM);

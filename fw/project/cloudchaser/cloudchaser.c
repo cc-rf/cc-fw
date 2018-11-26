@@ -261,29 +261,7 @@ static void net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf)
 {
     switch (path.info.port) {
         case CCIO_PORT:
-            switch (path.info.type) {
-                case CCIO_FLASH:
-                    ccio_net_recv(net, path, dest, mbuf);
-                    return;
-
-                case CCIO_RBOW:
-                    rainbow();
-                    return;
-
-                #if FABI
-                case CCIO_LED: {
-                    fabi_msg_t *msg = (fabi_msg_t *)data;
-                    fabi_write(msg->mask, (fabi_rgb_t *)msg->data, size - sizeof(msg->mask));
-                    return;
-                }
-                #endif
-
-                case CCIO_UART:
-                    rf_uart_write(*mbuf);
-                    write_code_uart(mbuf);
-                    return;
-            }
-            break;
+            return ccio_net_recv(net, path, dest, mbuf);
     }
 
     write_code_recv(path, dest, mbuf);

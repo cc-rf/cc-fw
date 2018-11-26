@@ -4,6 +4,7 @@
 #include "rf_uart.h"
 #include <kio/sclk.h>
 #include <kio/flsh.h>
+#include <fsl_rnga.h>
 #include <umm_malloc_cfg.h>
 
 
@@ -14,7 +15,7 @@ static void handle_code_mac_send(u8 port, mbuf_t *mbuf);
 static void handle_code_send(u8 port, mbuf_t *mbuf);
 static void handle_code_trxn(u8 port, mbuf_t *mbuf);
 static void handle_code_resp(u8 port, mbuf_t *mbuf);
-static void handle_code_reset(u8 port, mbuf_t *mbuf);
+static void handle_code_reboot(u8 port, mbuf_t *mbuf);
 static void handle_code_flash(u8 port, mbuf_t *mbuf);
 static void handle_code_fota(u8 port, mbuf_t *mbuf);
 static void handle_code_peer(u8 port, mbuf_t *mbuf);
@@ -86,8 +87,8 @@ void ccio_recv(u8 port, mbuf_t *mbuf)
         case CODE_ID_PING:
             return handle_code_ping(port, mbuf);
 
-        case CODE_ID_RESET:
-            return handle_code_reset(port, mbuf);
+        case CODE_ID_REBOOT:
+            return handle_code_reboot(port, mbuf);
 
         case CODE_ID_FLASH:
             return handle_code_flash(port, mbuf);
@@ -362,16 +363,41 @@ static void handle_code_resp(u8 port __unused, mbuf_t *mbuf)
 }
 
 
-static void handle_code_reset(u8 port __unused, mbuf_t *mbuf)
+static void handle_code_reboot(u8 port __unused, mbuf_t *mbuf)
 {
-    if (!code_data_check(mbuf, sizeof(code_reset_t))) return;
+    if (!code_data_check(mbuf, sizeof(code_reboot_t))) return;
 
-    code_reset_t *const code_reset = (code_reset_t *) (*mbuf)->data;
+    code_reboot_t *const code_reset = (code_reboot_t *) (*mbuf)->data;
 
     if (code_reset->magic == RESET_MAGIC) {
-        printf("<reset>\r\n");
-        vTaskDelay(pdMS_TO_TICKS(500));
-        NVIC_SystemReset();
+
+        if (code_reset->addr == net_addr(nets[0]) || code_reset->addr == NET_ADDR_INVL) {
+
+            _local_reboot:
+
+            printf("<reset>\r\n");
+            vTaskDelay(pdMS_TO_TICKS(500));
+            NVIC_SystemReset();
+
+        } else {
+
+            const net_path_t path = {
+                    .addr = code_reset->addr,
+                    .info = {
+                            .port = CCIO_PORT,
+                            .type = CCIO_REBOOT
+                    }
+            };
+
+            mbuf_used(mbuf, sizeof(u32));
+
+            *((u32 *) (*mbuf)->data) = RESET_MAGIC;
+
+            net_mesg(nets[0], path, mbuf);
+
+            if (path.addr == NET_ADDR_BCST)
+                goto _local_reboot;
+        }
     } else {
         printf("reset: malformed magic code\r\n");
     }
@@ -606,28 +632,68 @@ void ccio_net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf)
     if (path.info.port != CCIO_PORT) return;
 
     switch (path.info.type) {
+        case CCIO_REBOOT:
+            if (*((u32 *) (*mbuf)->data) == RESET_MAGIC) {
+
+                board_trace("rebooting...\r\n\r\n");
+
+                net_down(nets[0]);
+
+                vTaskDelay(pdMS_TO_TICKS(10 + RNGA_ReadEntropy(RNG) % 100));
+
+                NVIC_SystemReset();
+
+            }
+            break;
+
         case CCIO_FLASH:
             if (!mbuf_flash) {
+
                 mbuf_flash = *mbuf;
                 *mbuf = NULL;
 
-                // first message, contains header
+                // First message, contains header.
+
                 code_flash_t *code_flash = (code_flash_t *) mbuf_flash->data;
 
                 mbuf_fits(&mbuf_flash, sizeof(code_flash_t) + code_flash->size.total);
 
                 board_trace_f("first part: size=%u used=%u", mbuf_flash->size, mbuf_flash->used);
+
             } else {
+
                 mbuf_extd(&mbuf_flash, mbuf);
+
                 board_trace_f("new part: size=%u used=%u (+%u)", mbuf_flash->size, mbuf_flash->used, (*mbuf)->used);
 
                 if (mbuf_flash->used == mbuf_flash->size) {
+
                     handle_code_flash(0xFF, &mbuf_flash);
                     mbuf_free(&mbuf_flash);
+
+                } else {
+                    // TODO: Set up a timeout.
                 }
             }
 
             break;
+
+        case CCIO_RBOW:
+            rainbow();
+            return;
+
+        #if FABI
+        case CCIO_LED: {
+            fabi_msg_t *msg = (fabi_msg_t *)data;
+            fabi_write(msg->mask, (fabi_rgb_t *)msg->data, size - sizeof(msg->mask));
+            return;
+        }
+        #endif
+
+        case CCIO_UART:
+            rf_uart_write(*mbuf);
+            write_code_uart(mbuf);
+            return;
     }
 }
 
