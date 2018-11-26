@@ -373,10 +373,8 @@ static void handle_code_reboot(u8 port __unused, mbuf_t *mbuf)
 
         if (code_reset->addr == net_addr(nets[0]) || code_reset->addr == NET_ADDR_INVL) {
 
-            _local_reboot:
+            net_down(nets[0]);
 
-            printf("<reset>\r\n");
-            vTaskDelay(pdMS_TO_TICKS(500));
             NVIC_SystemReset();
 
         } else {
@@ -396,7 +394,7 @@ static void handle_code_reboot(u8 port __unused, mbuf_t *mbuf)
             net_mesg(nets[0], path, mbuf);
 
             if (path.addr == NET_ADDR_BCST)
-                goto _local_reboot;
+                NVIC_SystemReset(); // Do not leave network first.
         }
     } else {
         printf("reset: malformed magic code\r\n");
@@ -635,11 +633,7 @@ void ccio_net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf)
         case CCIO_REBOOT:
             if (*((u32 *) (*mbuf)->data) == RESET_MAGIC) {
 
-                board_trace("rebooting...\r\n\r\n");
-
                 net_down(nets[0]);
-
-                vTaskDelay(pdMS_TO_TICKS(10 + RNGA_ReadEntropy(RNG) % 100));
 
                 NVIC_SystemReset();
 
