@@ -194,12 +194,15 @@
 #define HS_CDC_VCOM2_BULK_OUT_PACKET_SIZE (512)
 #define FS_CDC_VCOM2_BULK_OUT_PACKET_SIZE (64)
 
-/* String descriptor length. */
+/* String descriptor lengths. */
+
 #define USB_DESCRIPTOR_LENGTH_STRING0 (4)
-#define USB_DESCRIPTOR_LENGTH_STRING1 (20)
-#define USB_DESCRIPTOR_LENGTH_STRING2 (34)
-#define USB_DESCRIPTOR_LENGTH_STRING3 (34)
-#define USB_DESCRIPTOR_LENGTH_STRING4 (36)
+
+#define USB_STRING_DESC_LEN(len)      ((len) * 2 + 2)
+
+#define USB_DESCRIPTOR_LENGTH_STRING1 USB_STRING_DESC_LEN(5)
+#define USB_DESCRIPTOR_LENGTH_STRING2 USB_STRING_DESC_LEN(16)
+#define USB_DESCRIPTOR_LENGTH_STRING3 USB_STRING_DESC_LEN(42)
 
 #define USB_DESCRIPTOR_TYPE_CDC_CS_INTERFACE (0x24)
 #define USB_DESCRIPTOR_TYPE_CDC_CS_ENDPOINT (0x25)
@@ -214,6 +217,11 @@
 /*******************************************************************************
 * API
 ******************************************************************************/
+
+
+// phillip: allow updating of usb serial
+extern void usb_descriptor_serial_update(size_t size, char *serial);
+
 /*!
  * @brief USB device set speed function.
  *

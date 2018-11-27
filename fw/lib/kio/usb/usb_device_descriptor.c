@@ -207,11 +207,11 @@ static uint8_t g_UsbDeviceDescriptor[USB_DESCRIPTOR_LENGTH_DEVICE] = {
         /* Vendor ID (assigned by the USB-IF) */
         //0xC9U, 0x1FU,
         // phillip: mine
-        0x0B, 0xB0,
+        0xCC, 0xCC,
         /* Product ID (assigned by the manufacturer) */
         //0x9E, 0x00,
         // phillip: mine
-        0xCE, 0xFA,
+        0xCC, 0xCC,
         /* Device release number in binary-coded decimal */
         USB_SHORT_GET_LOW(USB_DEVICE_DEMO_BCD_VERSION), USB_SHORT_GET_HIGH(USB_DEVICE_DEMO_BCD_VERSION),
         /* Index of string descriptor describing manufacturer */
@@ -469,24 +469,16 @@ static uint8_t g_UsbDeviceString0[USB_DESCRIPTOR_LENGTH_STRING0] = {
 static uint8_t g_UsbDeviceString1[USB_DESCRIPTOR_LENGTH_STRING1] = {
         sizeof(g_UsbDeviceString1),
         USB_DESCRIPTOR_TYPE_STRING,
-        'I',
-        0x00U,
-        'n',
-        0x00U,
-        't',
-        0x00U,
-        'e',
-        0x00U,
-        'l',
-        0x00U,
-        ' ',
-        0x00U,
-        'N',
-        0x00U,
-        'D',
-        0x00U,
-        'G',
-        0x00U,
+        'C',
+        0,
+        'C',
+        0,
+        '-',
+        0,
+        'R',
+        0,
+        'F',
+        0
 };
 
 static uint8_t g_UsbDeviceString2[USB_DESCRIPTOR_LENGTH_STRING2] = {
@@ -526,92 +518,107 @@ static uint8_t g_UsbDeviceString2[USB_DESCRIPTOR_LENGTH_STRING2] = {
         0
 };
 
+// 784aa48b.5bfc7c40 4E45358230170003:A1:0006
 static uint8_t g_UsbDeviceString3[USB_DESCRIPTOR_LENGTH_STRING3] = {
         sizeof(g_UsbDeviceString3),
         USB_DESCRIPTOR_TYPE_STRING,
         '0',
         0x00U,
-        '1',
+        '0',
         0x00U,
-        '2',
+        '0',
         0x00U,
-        '3',
+        '0',
         0x00U,
-        '4',
+        '0',
         0x00U,
-        '5',
+        '0',
         0x00U,
-        '6',
+        '0',
         0x00U,
-        '7',
+        '0',
         0x00U,
-        '8',
+        '.',
         0x00U,
-        '9',
+        '0',
         0x00U,
-        'A',
+        '0',
         0x00U,
-        'B',
+        '0',
         0x00U,
-        'C',
+        '0',
         0x00U,
-        'D',
+        '0',
         0x00U,
-        'E',
+        '0',
         0x00U,
-        'F',
-        0x00U
-};
+        '0',
+        0x00U,
+        '0',
 
-static uint8_t g_UsbDeviceString4[USB_DESCRIPTOR_LENGTH_STRING4] = {
-        sizeof(g_UsbDeviceString4),
-        USB_DESCRIPTOR_TYPE_STRING,
-        'M',
-        0,
-        'C',
-        0,
-        'U',
-        0,
+        0x00U,
         ' ',
-        0,
-        'R',
-        0,
-        'A',
-        0,
-        'M',
-        0,
-        ' ',
-        0,
-        'D',
-        0,
-        'I',
-        0,
-        'S',
-        0,
-        'K',
-        0,
-        ' ',
-        0,
-        'D',
-        0,
-        'E',
-        0,
-        'M',
-        0,
-        'O',
-        0
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+
+        ':',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        ':',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
+        '0',
+        0x00U,
 };
 
 /* Define string descriptor size */
 static uint32_t g_UsbDeviceStringDescriptorLength[USB_DEVICE_STRING_COUNT] = {
         sizeof(g_UsbDeviceString0), sizeof(g_UsbDeviceString1),
-        sizeof(g_UsbDeviceString2), sizeof(g_UsbDeviceString3),
-        sizeof(g_UsbDeviceString4)
+        sizeof(g_UsbDeviceString2), sizeof(g_UsbDeviceString3)
 };
 
 static uint8_t *g_UsbDeviceStringDescriptorArray[USB_DEVICE_STRING_COUNT] = {
         g_UsbDeviceString0, g_UsbDeviceString1, g_UsbDeviceString2,
-        g_UsbDeviceString3, g_UsbDeviceString4
+        g_UsbDeviceString3
 };
 
 static usb_language_t g_UsbDeviceLanguage[USB_DEVICE_LANGUAGE_COUNT] = {
@@ -705,8 +712,16 @@ usb_status_t USB_DeviceGetStringDescriptor(usb_device_handle handle,
         {
             return kStatus_USB_InvalidRequest;
         }
+
         stringDescriptor->buffer = (uint8_t *)g_UsbDeviceLanguageList.languageList[langId].string[langIndex];
         stringDescriptor->length = g_UsbDeviceLanguageList.languageList[langId].length[langIndex];
+
+
+        if (langIndex == 3) {
+            // phillip: call hook to change serial number
+            usb_descriptor_serial_update(USB_DESCRIPTOR_LENGTH_STRING3 - 2, (char *) &stringDescriptor->buffer[2]);
+        }
+
     }
     return kStatus_USB_Success;
 }

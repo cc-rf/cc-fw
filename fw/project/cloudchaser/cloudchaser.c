@@ -196,7 +196,8 @@ void cloudchaser_main(void)
     const u32 serial_lo = (u32)status.serial;
 
     printf(
-            "\r\nCloud Chaser %08lX%08lX@%02X:%04X\r\n\r\n",
+            "\r\nCloud Chaser %08lx.%08lx %08lX%08lX:%02X:%04X\r\n\r\n",
+            __flsh_version, __flsh_date,
             serial_hi, serial_lo, net_config.phy.cell, status.macid
     );
 
@@ -253,6 +254,33 @@ void cloudchaser_main(void)
     while (1) {
         net_sync(nets[0]);
         sync_hook(phy_chan(phy));
+    }
+}
+
+
+void usb_descriptor_serial_update(size_t size, char *serial)
+{
+    char serial_str[size];
+
+    u64 serno = uid();
+    const u32 serial_hi = (u32)(serno >> 32);
+    const u32 serial_lo = (u32)serno;
+    net_addr_t addr = ccrf_addr_flsh != NET_ADDR_NONE ? ccrf_addr_flsh : uid_short();
+
+    sprintf(serial_str, "%08lx.%08lx %08lX%08lX:%02X:%04X",
+            __flsh_version,
+            __flsh_date,
+            serial_hi,
+            serial_lo,
+            ccrf_cell_flsh,
+            addr
+    );
+
+    size = strlen(serial_str);
+
+    for (size_t c = 0; c < size; ++c) {
+        *serial++ = serial_str[c];
+        *serial++ = 0x00;
     }
 }
 
