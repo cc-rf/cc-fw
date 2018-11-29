@@ -607,6 +607,7 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
 
                     if ((peer = net_peer_update(net, addr, meta))) {
                         peer->info.bcst = *bcst;
+                        net_evnt_peer(net, peer->info.peer, NET_EVENT_PEER_UPD);
                     }
                 }
 
