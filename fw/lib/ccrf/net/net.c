@@ -688,7 +688,7 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
                 }
                 break;
             }
-            
+
         break;
     }
 }

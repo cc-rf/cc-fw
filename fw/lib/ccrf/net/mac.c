@@ -283,9 +283,7 @@ static mac_size_t mac_send_base(mac_t mac, mac_addr_t dest, u8 flag, mac_size_t 
     };
 
     do {
-        if (!++mac->seq.num) mac->seq.num = 1;
-
-        pkt.seq.num = mac->seq.num;
+        pkt.seq.num = mac->seq.num++;
 
         if (size > MAC_PKT_SIZE_MAX) {
             if (!pkt.seq.msg) {

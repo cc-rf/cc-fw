@@ -103,7 +103,7 @@ typedef struct __packed {
 
 } net_event_peer_t;
 
-typedef void (* net_recv_t)(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf);
+typedef void (* net_recv_t)(net_t net, net_path_t path, net_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
 typedef void (* net_evnt_t)(net_t net, net_event_t event, void *info);
 
 typedef struct {
