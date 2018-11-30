@@ -30,7 +30,7 @@ static void net_recv(net_t net, net_path_t path, net_addr_t dest, mac_seqn_t seq
 static void net_evnt(net_t net, net_event_t event, void *info);
 
 static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
-static void sync_hook(chan_id_t chan) __fast_code;
+static void sync_hook(chan_id_t chan, bool resy) __fast_code;
 
 
 net_t nets[CLOUDCHASER_RDIO_COUNT];
@@ -250,10 +250,11 @@ void cloudchaser_main(void)
     rainbow();
 
     phy_t phy = mac_phy(macs[0]);
+    bool resy;
 
     while (1) {
-        net_sync(nets[0]);
-        sync_hook(phy_chan(phy));
+        net_sync(nets[0], &resy);
+        sync_hook(phy_chan(phy), resy);
     }
 }
 
@@ -324,7 +325,7 @@ static void mac_recv(mac_t mac, mac_flag_t flag __unused, mac_addr_t peer, mac_a
 }
 
 
-static void sync_hook(chan_id_t chan)
+static void sync_hook(chan_id_t chan, bool resy)
 {
     static net_stat_t stat_prev = {{0}};
     static net_stat_t stat;
@@ -340,8 +341,14 @@ static void sync_hook(chan_id_t chan)
         #else
 
         static bool alt = false;
+        static bool resy_prev = false;
 
         if (!chan) {
+            if (resy != resy_prev) {
+                resy_prev = resy;
+                alt = false;
+            } else {
+            }
 
             led_set((alt = !alt) ? LED_3 : LED_2, (u8) 10);
 
