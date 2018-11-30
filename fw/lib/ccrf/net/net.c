@@ -606,8 +606,11 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
                     net_peer_t *peer;
 
                     if ((peer = net_peer_update(net, addr, meta))) {
+                        bool new = !peer->info.bcst.date;
+
                         peer->info.bcst = *bcst;
-                        net_evnt_peer(net, peer->info.peer, NET_EVENT_PEER_UPD);
+
+                        if (!new) net_evnt_peer(net, peer->info.peer, NET_EVENT_PEER_UPD);
                     }
                 }
 
@@ -626,18 +629,18 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
                 break;
 
             }
-            
+
         break;
-        
+
         case NET_CORE_PING_PORT:
-            
+
             switch (mesg->info.type) {
-                
+
                 case NET_CORE_PING_REQ_TYPE: {
-                                        
+
                     net_size_t size_rsp = ((net_ping_req_mesg_t *) (*mbuf)->data)->size_rsp;
                     bool strm = ((net_ping_req_mesg_t *) (*mbuf)->data)->strm;
-                    
+
                     mbuf_used(mbuf, sizeof(net_ping_rsp_mesg_t) + size_rsp);
 
                     net_ping_rsp_mesg_t *ping_rsp = (net_ping_rsp_mesg_t *) (*mbuf)->data;
@@ -660,7 +663,7 @@ static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *
                     net_peer_update(net, addr, meta);
                 }
                 break;
-                
+
                 case NET_CORE_PING_RSP_TYPE: {
 
                     if (net->ping && addr == net->ping->addr) {
@@ -797,7 +800,7 @@ static bool net_peer_delete(net_t net, net_addr_t addr)
     list_for_each_entry_safe(peer, temp, &net->peer, item) {
 
         if (peer->info.peer == addr) {
-            net_peer_remove(net, peer, 0);
+            net_peer_remove(net, peer, NET_EVENT_PEER_NONE);
             return true;
         }
     }
@@ -816,7 +819,7 @@ static void net_peer_remove(net_t net, net_peer_t *peer, net_event_peer_action_t
         list_del(&peer->item);
         vPortFree(peer);
 
-        if (action) net_evnt_peer(net, peer_addr, action);
+        if (action != NET_EVENT_PEER_NONE) net_evnt_peer(net, peer_addr, action);
     }
 }
 

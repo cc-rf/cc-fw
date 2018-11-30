@@ -89,6 +89,7 @@ typedef enum __packed {
 } net_event_t;
 
 typedef enum __packed {
+    NET_EVENT_PEER_NONE,
     NET_EVENT_PEER_SET,
     NET_EVENT_PEER_EXP,
     NET_EVENT_PEER_OUT,
