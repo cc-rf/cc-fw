@@ -710,8 +710,8 @@ static void net_peer_bcast(net_t net)
 
     if (bcst_diff < NET_TIMER_INTERVAL / 2) return;
 
-    if ((now - net->last.recv) < 5 && bcst_diff < (NET_PEER_EXPIRE_TIME - NET_TIMER_INTERVAL)) return;
-    if ((now - net->last.send) < 5 && bcst_diff < (NET_PEER_EXPIRE_TIME - NET_TIMER_INTERVAL)) return;
+    if ((now - net->last.recv) < 3) return;
+    if ((now - net->last.send) < 3) return;
 
     net->peer_bcast_last = now;
 
