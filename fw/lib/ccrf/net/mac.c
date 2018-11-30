@@ -491,7 +491,7 @@ static void mac_task_recv(mac_t mac)
                 ++mac->stat.rx.count;
                 mac->stat.rx.bytes += recv.peer->mbuf->used;
 
-                mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.peer->part.dest, &recv.peer->mbuf, recv.meta);
+                mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.peer->part.dest, recv.peer->part.seq.num, &recv.peer->mbuf, recv.meta);
 
                 mbuf_done(&recv.peer->mbuf);
             }
@@ -504,7 +504,7 @@ static void mac_task_recv(mac_t mac)
         ++mac->stat.rx.count;
         mac->stat.rx.bytes += recv.size;
 
-        mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.dest, &mbuf, recv.meta);
+        mac->recv(mac->recv_param, recv.flag, recv.peer->addr, recv.dest, recv.seq.num, &mbuf, recv.meta);
 
         mbuf_free(&mbuf);
     }

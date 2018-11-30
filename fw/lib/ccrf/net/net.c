@@ -107,7 +107,7 @@ static inline void net_send_base_dgrm(net_t net, net_path_t path, mbuf_t *mbuf) 
 static inline void net_send_base_strm(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code;
 static inline void net_send_base_bcst(net_t net, net_info_t info, mbuf_t *mbuf);
 static void net_evnt_peer(net_t net, net_addr_t addr, net_event_peer_action_t action);
-static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta) __ccrf_code;
+static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta) __ccrf_code;
 static void net_core_recv(net_t net, net_addr_t addr, net_mesg_t *mesg, mbuf_t *mbuf, pkt_meta_t meta) __ccrf_code;
 static void net_peer_bcast(net_t net);
 static void net_peer_bcast_leave(net_t net, net_addr_t addr);
@@ -536,11 +536,11 @@ bool net_ping(net_t net, net_addr_t addr, bool strm, net_size_t size, net_size_t
 }
 
 
-static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta)
+static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta)
 {
     if (flag != NET_MAC_FLAG_NETLAYER) {
         // passthrough
-        return net->mac.recv(net->mac.mac, flag, peer, dest, mbuf, meta);
+        return net->mac.recv(net->mac.mac, flag, peer, dest, seqn, mbuf, meta);
     }
 
     net_mesg_t mesg;
@@ -588,7 +588,7 @@ static void net_mac_recv(net_t net, mac_flag_t flag, mac_addr_t peer, mac_addr_t
             .info = mesg.info
     };
 
-    return net->recv(net, path, dest, mbuf);
+    return net->recv(net, path, dest, seqn, mbuf, meta);
 }
 
 

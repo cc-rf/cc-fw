@@ -715,7 +715,7 @@ static void write_code_usb(u8 port, u8 code, mbuf_t *mbuf)
 }
 
 
-void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mbuf_t *mbuf, pkt_meta_t meta)
+void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta)
 {
     if (usb_attached(SERF_USB_PORT)) {
         code_mac_recv_t code_mac_recv = {
@@ -723,6 +723,7 @@ void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mbuf_t *mbuf, pkt_meta_t 
                 .peer = peer,
                 .dest = dest,
                 .size = (net_size_t) (*mbuf)->used,
+                .seqn = seqn,
                 .meta = meta
         };
 
@@ -733,7 +734,7 @@ void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mbuf_t *mbuf, pkt_meta_t 
 }
 
 
-void write_code_recv(net_path_t path, net_addr_t dest, mbuf_t *mbuf)
+void write_code_recv(net_path_t path, net_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta)
 {
     if (usb_attached(SERF_USB_PORT)) {
 
@@ -741,7 +742,9 @@ void write_code_recv(net_path_t path, net_addr_t dest, mbuf_t *mbuf)
                 .addr = path.addr,
                 .dest = dest,
                 .port = path.info.port,
-                .type = path.info.type
+                .type = path.info.type,
+                .seqn = seqn,
+                .meta = meta
         };
 
         mbuf_push(mbuf, sizeof(code_recv_t), (u8 *) &code_recv);

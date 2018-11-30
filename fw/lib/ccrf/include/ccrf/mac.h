@@ -22,8 +22,9 @@ typedef struct mac *mac_t;
 typedef u16 mac_addr_t;
 typedef u16 mac_size_t;
 typedef u8 mac_flag_t;
+typedef u8 mac_seqn_t;
 
-typedef void (* mac_recv_t)(void *param, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta);
+typedef void (* mac_recv_t)(void *param, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
 
 typedef enum __packed {
     MAC_SEND_DGRM,

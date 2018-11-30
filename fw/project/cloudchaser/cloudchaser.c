@@ -26,10 +26,10 @@ extern bool pflag_set(void);
 extern bool uflag1_set(void);
 extern bool uflag2_set(void);
 
-static void net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf);
+static void net_recv(net_t net, net_path_t path, net_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
 static void net_evnt(net_t net, net_event_t event, void *info);
 
-static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta);
+static void mac_recv(mac_t mac, mac_flag_t flag, mac_addr_t peer, mac_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
 static void sync_hook(chan_id_t chan) __fast_code;
 
 
@@ -285,14 +285,14 @@ void usb_descriptor_serial_update(size_t size, char *serial)
 }
 
 
-static void net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf)
+static void net_recv(net_t net, net_path_t path, net_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta)
 {
     switch (path.info.port) {
         case CCIO_PORT:
             return ccio_net_recv(net, path, dest, mbuf);
     }
 
-    write_code_recv(path, dest, mbuf);
+    write_code_recv(path, dest, seqn, mbuf, meta);
 }
 
 
@@ -318,9 +318,9 @@ static void net_evnt(net_t net __unused, net_event_t event, void *info)
 }
 
 
-static void mac_recv(mac_t mac, mac_flag_t flag __unused, mac_addr_t peer, mac_addr_t dest, mbuf_t *mbuf, pkt_meta_t meta)
+static void mac_recv(mac_t mac, mac_flag_t flag __unused, mac_addr_t peer, mac_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta)
 {
-    write_code_mac_recv(mac_addr(mac), peer, dest, mbuf, meta);
+    write_code_mac_recv(mac_addr(mac), peer, dest, seqn, mbuf, meta);
 }
 
 
@@ -339,9 +339,19 @@ static void sync_hook(chan_id_t chan)
         led_set(LED_3, (u8) ((chan == 17*2) ? 2 : LED_OFF));
         #else
 
-        //sync_step(chan);
+        static bool alt = false;
 
-        led_set(LED_2, (u8) ((chan == 0) ? 10 : LED_OFF));
+        if (!chan) {
+
+            led_set((alt = !alt) ? LED_3 : LED_2, (u8) 10);
+
+        } else if (chan == 1) {
+
+            led_set(alt ? LED_3 : LED_2, LED_OFF);
+        }
+
+
+        //sync_step(chan);
 
         //led_set(LED_0, (u8) ((chan == 0) ? 10 : LED_OFF));
         //led_set(LED_2, (u8) ((chan == 3) ? 10 : LED_OFF));

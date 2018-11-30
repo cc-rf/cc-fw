@@ -158,10 +158,11 @@ typedef struct __packed {
 } code_fota_stat_t;
 
 typedef struct __packed {
-    u16 addr;
-    u16 peer;
-    u16 dest;
-    u16 size;
+    mac_addr_t addr;
+    mac_addr_t peer;
+    mac_addr_t dest;
+    mac_size_t size;
+    mac_seqn_t seqn;
     pkt_meta_t meta;
     u8 data[];
 
@@ -191,6 +192,8 @@ typedef struct __packed {
     net_addr_t dest;
     net_port_t port;
     net_type_t type;
+    mac_seqn_t seqn;
+    pkt_meta_t meta;
     u8 data[];
 
 } code_recv_t;
@@ -277,7 +280,7 @@ void ccio_recv(u8 port, mbuf_t *mbuf) __nonnull_all;
 void ccio_net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf);
 bool ccio_fota(net_t net, net_addr_t addr);
 
-void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mbuf_t *mbuf, pkt_meta_t meta);
-void write_code_recv(net_path_t path, net_addr_t dest, mbuf_t *mbuf);
+void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
+void write_code_recv(net_path_t path, net_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
 void write_code_evnt(mbuf_t *mbuf) __nonnull_all;
 void write_code_uart(mbuf_t *mbuf) __nonnull_all;
