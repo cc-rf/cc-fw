@@ -280,6 +280,8 @@ void ccio_recv(u8 port, mbuf_t *mbuf) __nonnull_all;
 void ccio_net_recv(net_t net, net_path_t path, net_addr_t dest, mbuf_t *mbuf);
 bool ccio_fota(net_t net, net_addr_t addr);
 
+void ccio_usb_echo(const char *mesg);
+void ccio_usb_echo_f(const char *format, ...);
 void write_code_mac_recv(u16 addr, u16 peer, u16 dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
 void write_code_recv(net_path_t path, net_addr_t dest, mac_seqn_t seqn, mbuf_t *mbuf, pkt_meta_t meta);
 void write_code_evnt(mbuf_t *mbuf) __nonnull_all;

@@ -277,9 +277,9 @@ static void net_mesg_init(net_path_t path, mbuf_t *mbuf)
 }
 
 
-void net_sync(net_t net)
+void net_sync(net_t net, bool *resy)
 {
-    phy_sync(net->phy, NULL);
+    phy_sync(net->phy, resy);
 }
 
 

@@ -448,9 +448,12 @@ void usb_write(u8 port, u8 *buf, size_t len)
 {
     if (!usb_attached(port) || !buf) return;
 
-    mbuf_t mbuf = serf_encode(0x00, NULL);
+    mbuf_t mbuf = mbuf_alloc(len, buf);
+    mbuf_t frame = serf_encode(0x00, &mbuf);
 
-    usb_write_direct(port, &mbuf);
+    usb_write_direct(port, &frame);
+
+    mbuf_free(&mbuf);
 }
 
 void usb_write_raw(u8 port, u8 *buf, size_t len)

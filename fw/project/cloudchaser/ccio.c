@@ -6,6 +6,7 @@
 #include <kio/flsh.h>
 #include <fsl_rnga.h>
 #include <umm_malloc_cfg.h>
+#include <stdarg.h>
 
 
 static void handle_code_echo(u8 port, mbuf_t *mbuf);
@@ -46,14 +47,14 @@ void ccio_recv(u8 port, mbuf_t *mbuf)
     serf_t frame;
     
     if ((*mbuf)->used < sizeof(serf_t)) {
-        printf("(frame) too small: size=%u < %u\r\n", (*mbuf)->used, sizeof(serf_t));
+        ccio_usb_echo_f("(frame) too small: size=%u < %u\r\n", (*mbuf)->used, sizeof(serf_t));
         return;
     }
     
     mbuf_popf(mbuf, sizeof(serf_t), (u8 *) &frame);
 
     if ((frame.code & SERF_CODE_PROTO_M) != SERF_CODE_PROTO_VAL) {
-        printf("(frame) invalid proto bits: size=%u code=0x%02x\r\n", (*mbuf)->used, frame.code);
+        ccio_usb_echo_f("(frame) invalid proto bits: size=%u code=0x%02x\r\n", (*mbuf)->used, frame.code);
         return;
     }
 
@@ -117,6 +118,35 @@ static void handle_code_echo(u8 port __unused, mbuf_t *mbuf)
 {
     write_code_usb(port, CODE_ID_ECHO, mbuf);
 }
+
+
+void ccio_usb_echo(const char *mesg)
+{
+    mbuf_t mbuf = mbuf_alloc(strlen(mesg) + 1, (u8 *) mesg);
+
+    write_code_usb(SERF_USB_PORT, CODE_ID_ECHO, &mbuf);
+
+    mbuf_free(&mbuf);
+}
+
+
+void ccio_usb_echo_f(const char *format, ...)
+{
+    va_list va;
+    u8 *output;
+    int result;
+
+    va_start(va, format);
+    result = vasprintf((char **)&output, format, va);
+
+    if (result >= 0) {
+        usb_write(SERF_USB_PORT, output, (size_t) result);
+        free(output);
+    }
+
+    va_end(va);
+}
+
 
 
 static void handle_code_status(u8 port, mbuf_t *mbuf)

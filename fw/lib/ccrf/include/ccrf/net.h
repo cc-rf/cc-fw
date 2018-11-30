@@ -162,7 +162,7 @@ void net_stat(net_t net, net_stat_t *stat) __nonnull_all;
 void net_peers(net_t net, net_peer_list_t **peer) __ccrf_code __nonnull_all;
 void net_peers_wipe(net_t net) __nonnull_all;
 net_size_t net_peers_flat(net_t net, net_size_t extra, net_peer_info_t **list) __ccrf_code __nonnull_all;
-void net_sync(net_t net) __ccrf_code __nonnull_all;
+void net_sync(net_t net, bool *resy) __ccrf_code __nonnull((1));
 net_size_t net_send(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code __nonnull((1));
 
 net_size_t net_mesg(net_t net, net_path_t path, mbuf_t *mbuf) __ccrf_code __nonnull((1));
