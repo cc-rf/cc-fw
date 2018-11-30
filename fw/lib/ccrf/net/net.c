@@ -379,9 +379,11 @@ static void net_send_base_bcst(net_t net, net_info_t info, mbuf_t *mbuf)
 
 size_t net_trxn(net_t net, net_path_t path, mbuf_t *mbuf, net_time_t expiry, net_trxn_rslt_t *rslt)
 {
-    if (!expiry || expiry >= portMAX_DELAY) return 0;
+    size_t sent = 0;
 
     INIT_LIST_HEAD(rslt);
+
+    if (!expiry || expiry >= portMAX_DELAY) return sent;
 
     // TODO: Check that this is not the RX task. Will deadlock!
 
@@ -396,7 +398,7 @@ size_t net_trxn(net_t net, net_path_t path, mbuf_t *mbuf, net_time_t expiry, net
 
     list_add_tail(&txni.list, &net->txni);
 
-    if (!net_send_base_mesg(net, path, mbuf)) {
+    if (!(sent = net_send_base_mesg(net, path, mbuf))) {
         net_trace_warn("trxn send fail");
         goto _fail;
     }
@@ -422,7 +424,7 @@ size_t net_trxn(net_t net, net_path_t path, mbuf_t *mbuf, net_time_t expiry, net
 
     list_del(&txni.list);
 
-    return 1;
+    return sent;
 }
 
 
