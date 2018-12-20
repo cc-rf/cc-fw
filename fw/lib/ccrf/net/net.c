@@ -832,6 +832,7 @@ static void net_timer(TimerHandle_t timer)
 
     if (first) {
         first = false;
+        xTimerStop(timer, 0);
         vTaskDelay(pdMS_TO_TICKS(RNGA_ReadEntropy(RNG) % (1000 * NET_TIMER_INTERVAL + 1)));
         xTimerReset(timer, portMAX_DELAY);
     }
